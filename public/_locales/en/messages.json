@@ -8,6 +8,9 @@
   "popupOpenRehearsal": {
     "message": "Open rehearsal"
   },
+  "popupOpenAvatar": {
+    "message": "Open avatar"
+  },
   "rehearsalTitle": {
     "message": "Fake recruiter"
   },

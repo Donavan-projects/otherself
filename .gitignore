@@ -3,3 +3,7 @@ node_modules
 .wxt
 web-ext.config.ts
 *.log
+
+# Données personnelles de la démo : jamais commitées.
+config.local.json
+local/
