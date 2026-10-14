@@ -1,5 +1,14 @@
 # Contre-Recruteur
 
+## État actuel (14/10/2026)
+
+- **Étape 3 à moitié validée** : injection testée et validée sur `rehearsal` (avatar avec bandeau à 30 i/s, son préenregistré à la place du micro).
+- **Prochaine action** : injection sur la plateforme cible, dès que l'utilisateur en a choisi une. Deux points à régler :
+  - **Permission `scripting`** : nécessaire en plus d'`activeTab` pour exécuter le remplacement de getUserMedia dans le monde MAIN de l'onglet, avant que la page ne l'appelle (reste conforme à la règle 6).
+  - **Transmission de la photo et du son à la page** : le script injecté n'a pas accès aux fichiers de l'extension ; les passer par message, ou les déclarer en `web_accessible_resources` (changement du manifest à valider avec l'utilisateur).
+- **Limite** : une soirée sur la plateforme cible. Sans flux injecté affiché et son entendu à la fin de la soirée, signaler le blocage et proposer la bascule vers la voie B (OBS) ; l'utilisateur décide.
+- Configuration locale : voir `docs/config.md`.
+
 Extension de navigateur open source et satirique. Quand une entreprise fait passer un entretien par un avatar IA, l'utilisateur peut répondre avec son propre avatar IA : sa photo, sa voix, son vrai CV. Le but est symbolique (faire rire et réfléchir), pas utilitaire.
 
 Spec complète : `docs/spec.md`.
@@ -75,7 +84,14 @@ Deux façons d'amener l'avatar dans l'entretien, à départager par un test limi
    - Si la plateforme cible affiche le flux injecté et entend le son : **voie A retenue**.
    - Sinon, à la fin de la soirée : **voie B retenue**, sans insister. L'utilisateur décide de la bascule ; le signaler clairement dès qu'un blocage apparaît.
 4. **Pipeline voix** : son du recruteur → VAD → STT → LLM → Piper, branché selon la voie retenue. Critère : réponses fidèles au CV, révélation dès la première réponse, latence acceptable. Tester d'abord face à `rehearsal`.
-5. **Avatar carton** : bouche animée selon l'amplitude de la voix générée, clignements, bandeau toujours incrusté. C'est ce qui rend la vidéo drôle : soigner le rendu.
+5. **Avatar carton stylisé** : c'est ce qui rend la vidéo drôle, soigner le rendu.
+   - **Stylisation cartoon** de la photo, calculée une seule fois au chargement dans le canvas (pas à chaque image) : couleurs aplaties (posterisation), contours marqués, effet bande dessinée. Style original, sans imiter un studio ou une œuvre connue. Tout en local, aucune photo envoyée à un tiers. Prévoir un réglage simple d'intensité dans `config.local.json`.
+   - **Mâchoire** : la zone sous la bouche descend de quelques pixels selon l'amplitude de la voix générée, avec un trou sombre derrière (effet marionnette en papier découpé).
+   - **Clignements** : paupières couleur peau dessinées sur les yeux pendant une fraction de seconde, à intervalle aléatoire.
+   - **Balancement** : légère rotation ou translation de la photo (1 à 2 degrés) qui suit la voix.
+   - Positions de la bouche et des yeux fournies dans `config.local.json` (coordonnées dans la photo), pas de détection de visage.
+   - Bandeau toujours incrusté, dessiné en dernier, jamais stylisé ni animé.
+   - Le rendu doit rester fluide sur la machine de référence.
 6. **Tournage** : enregistrement de la session avec OBS (simple enregistrement d'écran en voie A).
 
 Ne pas commencer une étape avant que la précédente fonctionne. En voie B, pour le routage audio sous Linux (son de la plateforme vers la page, voix de l'avatar vers la plateforme), donner à l'utilisateur les instructions PipeWire plutôt que de les automatiser.
@@ -86,6 +102,7 @@ Ne pas commencer une étape avant que la précédente fonctionne. En voie B, pou
 - Assistant de setup (options) : pour la démo, clé API, chemin du CV, photo et notes sont lus depuis `config.local.json`, listé dans `.gitignore` et jamais commité. Fournir un `config.example.json`.
 - Popup avec Activer / Pause / Reprendre la main.
 - Firefox, i18n, export intégré, publication dans les boutiques.
+- « Crée ton avatar » : transformation de la photo en vrai cartoon par une IA d'images (API cloud), comme fonctionnalité phare de l'extension. Consentement explicite avant tout envoi de photo, style original uniquement.
 
 Le dépôt est publié avec le post, même au stade prototype. Le README le présente comme tel : prototype satirique, extension open source à venir si le sujet intéresse.
 
