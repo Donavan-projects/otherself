@@ -50,7 +50,13 @@
   "question5": {
     "message": "Où vous voyez-vous dans cinq ans ?"
   },
-  "rehearsalLevel": "Niveau du son reçu",
-  "rehearsalListen": "Écouter le son reçu (casque conseillé)",
-  "popupOpenRehearsalInjected": "Répétition avec injection"
+  "rehearsalLevel": {
+    "message": "Niveau du son reçu"
+  },
+  "rehearsalListen": {
+    "message": "Écouter le son reçu (casque conseillé)"
+  },
+  "popupOpenRehearsalInjected": {
+    "message": "Répétition avec injection"
+  }
 }

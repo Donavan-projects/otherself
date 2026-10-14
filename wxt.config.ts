@@ -1,7 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
 import { defineConfig } from 'wxt';
+import { checkLocales } from './scripts/check-locales';
 
+const DEFAULT_LOCALE = 'fr';
 const LOCAL_CONFIG = 'config.local.json';
 const PHOTO_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
 const AUDIO_EXTENSIONS = ['.mp3', '.ogg', '.wav', '.webm', '.m4a'];
@@ -50,12 +52,13 @@ export default defineConfig({
   manifest: {
     name: '__MSG_extName__',
     description: '__MSG_extDescription__',
-    default_locale: 'fr',
+    default_locale: DEFAULT_LOCALE,
     // Règle 6 : activeTab + injection à la demande, jamais de host_permissions.
     permissions: ['activeTab'],
   },
   hooks: {
     'build:publicAssets': (wxt, files) => {
+      checkLocales(wxt.config.publicDir, DEFAULT_LOCALE);
       const warn: Warn = (message) => wxt.logger.warn(message);
       const config = readLocalConfig(wxt.config.root, warn);
       const copy = (field: string, extensions: string[], name: string) => {
