@@ -49,5 +49,8 @@
   },
   "question5": {
     "message": "Where do you see yourself in five years?"
-  }
+  },
+  "rehearsalLevel": "Received audio level",
+  "rehearsalListen": "Listen to received audio (headphones advised)",
+  "popupOpenRehearsalInjected": "Rehearsal with injection"
 }

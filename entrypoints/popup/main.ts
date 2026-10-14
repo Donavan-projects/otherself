@@ -1,5 +1,6 @@
 const pages = [
   { id: '#open-rehearsal', label: 'popupOpenRehearsal', url: '/rehearsal.html' },
+  { id: '#open-rehearsal-injected', label: 'popupOpenRehearsalInjected', url: '/rehearsal.html?inject' },
   { id: '#open-avatar', label: 'popupOpenAvatar', url: '/avatar.html' },
 ] as const;
 

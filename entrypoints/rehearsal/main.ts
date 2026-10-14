@@ -1,8 +1,15 @@
 // Faux recruteur : banc d'essai du pipeline. Demande caméra + micro comme une
 // plateforme d'entretien, affiche le flux reçu et lit les questions à voix haute.
 
+import { setupInjectionTest } from './inject-test';
+
+// Étape 3 (jetable) : ?inject installe l'avatar à la place de la caméra et du micro.
+const injectionTest = new URLSearchParams(location.search).has('inject');
+if (injectionTest) await setupInjectionTest();
+
 const QUESTION_KEYS = ['question1', 'question2', 'question3', 'question4', 'question5'] as const;
 const VOICES_TIMEOUT_MS = 1000;
+const SOUND_THRESHOLD = 0.02;
 
 type MessageKey = Parameters<typeof browser.i18n.getMessage>[0];
 
@@ -14,6 +21,8 @@ const nextButton = document.querySelector<HTMLButtonElement>('#next')!;
 const progressEl = document.querySelector<HTMLParagraphElement>('#progress')!;
 const questionEl = document.querySelector<HTMLParagraphElement>('#question')!;
 const logsEl = document.querySelector<HTMLPreElement>('#logs')!;
+const levelEl = document.querySelector<HTMLMeterElement>('#level')!;
+const listenEl = document.querySelector<HTMLInputElement>('#listen')!;
 
 const questions = QUESTION_KEYS.map((key) => t(key));
 const speechLang = t('speechLang');
@@ -54,8 +63,30 @@ async function requestMedia() {
   const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
   log('getUserMedia accordé');
   stream.getTracks().forEach(watchTrack);
-  // L'élément <video> est muet : on affiche le flux sans rejouer le micro (larsen).
+  // L'élément <video> est muet par défaut : on affiche le flux sans rejouer le micro (larsen).
   video.srcObject = stream;
+  watchAudioLevel(stream);
+}
+
+/** Vu-mètre du son reçu, et log au premier son détecté. */
+function watchAudioLevel(stream: MediaStream) {
+  if (stream.getAudioTracks().length === 0) return;
+  const context = new AudioContext();
+  const analyser = context.createAnalyser();
+  context.createMediaStreamSource(stream).connect(analyser);
+  const samples = new Float32Array(analyser.fftSize);
+  let heard = false;
+  const tick = () => {
+    analyser.getFloatTimeDomainData(samples);
+    const rms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length);
+    levelEl.value = Math.min(1, rms * 5);
+    if (!heard && rms > SOUND_THRESHOLD) {
+      heard = true;
+      log(`son détecté sur la piste audio reçue (niveau ${rms.toFixed(3)})`);
+    }
+    requestAnimationFrame(tick);
+  };
+  tick();
 }
 
 function loadVoices(): Promise<SpeechSynthesisVoice[]> {
@@ -142,9 +173,14 @@ startButton.addEventListener('click', async () => {
 
 nextButton.addEventListener('click', askNextQuestion);
 
+listenEl.addEventListener('change', () => {
+  video.muted = !listenEl.checked;
+  log(listenEl.checked ? 'écoute du son reçu activée' : 'écoute du son reçu coupée');
+});
+
 video.addEventListener('loadedmetadata', () => {
   log(`vidéo affichée : ${video.videoWidth}x${video.videoHeight}`);
 });
 
 localize();
-log(`page prête (langue des questions : ${speechLang})`);
+log(`page prête (langue des questions : ${speechLang}${injectionTest ? ', injection de test active' : ''})`);

@@ -55,6 +55,16 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.audio {
+  display: grid;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+meter {
+  width: 100%;
+}
+
 .logs {
   height: 260px;
   margin: 0;

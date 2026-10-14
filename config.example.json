@@ -1,3 +1,4 @@
 {
-  "photo": "local/photo.jpg"
+  "photo": "local/photo.jpg",
+  "testAudio": "local/test-audio.ogg"
 }
