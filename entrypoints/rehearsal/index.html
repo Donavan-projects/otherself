@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Contre-Recruteur</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <h1 data-i18n="rehearsalTitle"></h1>
+      <p data-i18n="rehearsalIntro"></p>
+
+      <section class="stage">
+        <video id="candidate" autoplay playsinline muted></video>
+        <div class="panel">
+          <p id="progress" class="progress"></p>
+          <p id="question" class="question"></p>
+          <div class="actions">
+            <button id="start" type="button" data-i18n="rehearsalStart"></button>
+            <button id="next" type="button" data-i18n="rehearsalNext" disabled></button>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 data-i18n="rehearsalLogs"></h2>
+        <pre id="logs" class="logs" aria-live="polite"></pre>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

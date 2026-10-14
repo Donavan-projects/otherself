@@ -1,0 +1,50 @@
+{
+  "extName": {
+    "message": "Contre-Recruteur"
+  },
+  "extDescription": {
+    "message": "Extension satirique : face à un recruteur automatisé, un avatar IA déclaré répond à votre place."
+  },
+  "popupOpenRehearsal": {
+    "message": "Ouvrir la répétition"
+  },
+  "rehearsalTitle": {
+    "message": "Faux recruteur"
+  },
+  "rehearsalIntro": {
+    "message": "Banc d'essai : cette page demande la caméra et le micro, affiche le flux reçu et lit cinq questions à voix haute."
+  },
+  "rehearsalStart": {
+    "message": "Démarrer l'entretien"
+  },
+  "rehearsalNext": {
+    "message": "Question suivante"
+  },
+  "rehearsalLogs": {
+    "message": "Logs"
+  },
+  "rehearsalProgress": {
+    "message": "Question $1 sur $2"
+  },
+  "rehearsalDone": {
+    "message": "Entretien terminé."
+  },
+  "speechLang": {
+    "message": "fr-FR"
+  },
+  "question1": {
+    "message": "Pouvez-vous vous présenter en quelques mots ?"
+  },
+  "question2": {
+    "message": "Pourquoi ce poste vous intéresse-t-il ?"
+  },
+  "question3": {
+    "message": "Parlez-moi d'un projet dont vous êtes particulièrement fier."
+  },
+  "question4": {
+    "message": "Quelle est votre plus grande faiblesse ?"
+  },
+  "question5": {
+    "message": "Où vous voyez-vous dans cinq ans ?"
+  }
+}

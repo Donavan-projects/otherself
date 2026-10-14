@@ -1,0 +1,50 @@
+{
+  "extName": {
+    "message": "Contre-Recruteur"
+  },
+  "extDescription": {
+    "message": "Satirical extension: when the recruiter is automated, a self-declared AI avatar answers on your behalf."
+  },
+  "popupOpenRehearsal": {
+    "message": "Open rehearsal"
+  },
+  "rehearsalTitle": {
+    "message": "Fake recruiter"
+  },
+  "rehearsalIntro": {
+    "message": "Test bench: this page asks for camera and microphone, shows the received stream and reads five questions aloud."
+  },
+  "rehearsalStart": {
+    "message": "Start the interview"
+  },
+  "rehearsalNext": {
+    "message": "Next question"
+  },
+  "rehearsalLogs": {
+    "message": "Logs"
+  },
+  "rehearsalProgress": {
+    "message": "Question $1 of $2"
+  },
+  "rehearsalDone": {
+    "message": "Interview finished."
+  },
+  "speechLang": {
+    "message": "en-US"
+  },
+  "question1": {
+    "message": "Can you introduce yourself in a few words?"
+  },
+  "question2": {
+    "message": "Why are you interested in this position?"
+  },
+  "question3": {
+    "message": "Tell me about a project you are particularly proud of."
+  },
+  "question4": {
+    "message": "What is your greatest weakness?"
+  },
+  "question5": {
+    "message": "Where do you see yourself in five years?"
+  }
+}
