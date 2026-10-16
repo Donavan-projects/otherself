@@ -69,7 +69,7 @@ export default defineConfig({
         return dest;
       };
       const photo = copy('photo', PHOTO_EXTENSIONS, 'photo');
-      // Étape 3 (test d'injection, jetable) : son préenregistré qui remplace le micro.
+      // Son préenregistré qui remplace le micro injecté, en attendant la voix de l'étape 4.
       const testAudio = copy('testAudio', AUDIO_EXTENSIONS, 'test-audio');
       files.push({ relativeDest: 'local/avatar.json', contents: JSON.stringify({ photo, testAudio }) });
     },

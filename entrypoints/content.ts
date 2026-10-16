@@ -1,10 +1,11 @@
-// Étape 3, test d'injection sur la plateforme cible (jetable). Injecté à la demande
-// par le popup dans le monde MAIN de l'onglet (activeTab + scripting), jamais déclaré
-// dans le manifest. Expose un installeur que le popup appelle avec la photo et le son.
+// Injection sur la plateforme (voie A). Injecté à la demande par le popup dans le monde
+// MAIN de l'onglet (activeTab + scripting), jamais déclaré dans le manifest. Expose un
+// installeur que le popup appelle avec la photo et le son.
 
 import { installFakeGetUserMedia } from '@/lib/inject';
 import { fileToBlob, type SerializedSources } from '@/lib/injection-sources';
 import { createLogger } from '@/lib/log';
+import { createTestAudioTrack } from '@/lib/test-audio';
 
 declare global {
   interface Window {
@@ -37,7 +38,7 @@ export default defineContentScript({
           `installation (${frame} ${location.href}) : photo ${photo ? `${photo.width}x${photo.height}` : 'absente'}, ` +
             `son ${audio ? `${Math.round(audio.byteLength / 1024)} Ko` : 'absent (bip)'}`,
         );
-        installFakeGetUserMedia({ photo, audio });
+        installFakeGetUserMedia({ photo, createAudioTrack: () => createTestAudioTrack(audio) });
         return 'actif';
       },
     };

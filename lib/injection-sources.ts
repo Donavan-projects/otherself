@@ -1,5 +1,5 @@
-// Étape 3 (jetable) : photo et son de test sérialisés pour passer de l'extension
-// au monde MAIN de l'onglet, via les arguments de scripting.executeScript.
+// Photo et son sérialisés pour passer de l'extension au monde MAIN de l'onglet,
+// via les arguments de scripting.executeScript (pas de web_accessible_resources).
 
 export interface SerializedFile {
   base64: string;

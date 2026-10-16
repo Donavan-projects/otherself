@@ -3,7 +3,7 @@
 
 import { setupInjectionTest } from './inject-test';
 
-// Étape 3 (jetable) : ?inject installe l'avatar à la place de la caméra et du micro.
+// ?inject installe l'avatar à la place de la caméra et du micro (banc d'essai de l'injection).
 const injectionTest = new URLSearchParams(location.search).has('inject');
 if (injectionTest) await setupInjectionTest();
 

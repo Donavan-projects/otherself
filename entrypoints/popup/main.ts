@@ -15,7 +15,7 @@ for (const page of pages) {
   });
 }
 
-// Étape 3 (jetable) : injection sur l'onglet actif de la plateforme cible.
+// Injection sur l'onglet actif de la plateforme (voie A).
 const log = createLogger('inject');
 const activateButton = document.querySelector<HTMLButtonElement>('#activate')!;
 const statusEl = document.querySelector<HTMLParagraphElement>('#status')!;

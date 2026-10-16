@@ -1,9 +1,10 @@
-// Étape 3, test d'injection (code jetable) : simule l'activation de l'extension sur
-// la page rehearsal (ouverte avec ?inject) avant que la page n'appelle getUserMedia.
+// Banc d'essai de l'injection : simule l'activation de l'extension sur la page rehearsal
+// (ouverte avec ?inject) avant que la page n'appelle getUserMedia.
 
 import { loadConfiguredPhoto } from '@/lib/avatar';
 import { installFakeGetUserMedia } from '@/lib/inject';
 import { createLogger } from '@/lib/log';
+import { createTestAudioTrack } from '@/lib/test-audio';
 
 const log = createLogger('inject');
 
@@ -29,5 +30,5 @@ export async function setupInjectionTest() {
     log(`son indisponible : ${describe(error)}`);
     return null;
   });
-  installFakeGetUserMedia({ photo, audio });
+  installFakeGetUserMedia({ photo, createAudioTrack: () => createTestAudioTrack(audio) });
 }
