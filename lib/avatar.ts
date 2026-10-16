@@ -9,16 +9,27 @@ export const AVATAR_HEIGHT = 720;
 // Règle 1 : texte dessiné dans chaque image, jamais en superposition DOM.
 export const BANNER_TEXT = 'Candidat automatisé, comme vous';
 
-// Zone de sécurité : survit à un recadrage central en 4:3, en carré, et à une coupe
-// du haut et du bas jusqu'à environ 21:9 (vignettes Meet). Le bandeau y tient en entier.
-const SAFE_ZONE = { left: 310, right: 970, top: 110, bottom: 600 };
-const BANNER_FONT_SIZE = 48;
-const BANNER_PADDING_X = 28;
-const BANNER_PADDING_Y = 16;
-const BANNER_LINE_HEIGHT = 1.15;
-const BANNER_BORDER = 4;
-const PHOTO_MARGIN = 32;
-const PHOTO_BORDER = 10;
+// Zone de sécurité : survit à un recadrage central en 4:3, en carré (x 280 à 1000),
+// et à une coupe du haut et du bas jusqu'à environ 21:9 (vignettes Meet).
+// Toute l'image utile y tient : photo en haut, bandeau dessous, sans chevauchement.
+const SAFE_ZONE = { left: 290, right: 990, top: 100, bottom: 610 };
+const BANNER_HEIGHT = 80;
+const BANNER_FONT_SIZE = 50;
+const BANNER_BORDER = 3;
+const BANNER_PADDING_X = 14;
+// Resserrement horizontal maximal du texte avant de réduire la police : garde des
+// lettres hautes, lisibles dans une vignette de 320×180.
+const BANNER_MIN_SQUEEZE = 0.78;
+const BANNER_GAP = 14;
+const PHOTO_BORDER = 8;
+
+// Zone de la photo (bordure comprise), au-dessus du bandeau.
+const PHOTO_AREA = {
+  left: SAFE_ZONE.left,
+  top: SAFE_ZONE.top,
+  width: SAFE_ZONE.right - SAFE_ZONE.left,
+  height: SAFE_ZONE.bottom - BANNER_HEIGHT - BANNER_GAP - SAFE_ZONE.top,
+};
 
 const log = createLogger('avatar');
 
@@ -97,20 +108,20 @@ function drawBlurredBackground(ctx: OffscreenCanvasRenderingContext2D, photo: Im
   ctx.restore();
 }
 
-/** Photo entière, bordée de blanc comme un tirage découpé. */
+/** Photo entière, bordée de blanc comme un tirage découpé, dans la zone de la photo. */
 function drawPhotoCard(ctx: OffscreenCanvasRenderingContext2D, photo: ImageBitmap) {
-  const maxWidth = AVATAR_WIDTH - 2 * (PHOTO_MARGIN + PHOTO_BORDER);
-  const maxHeight = AVATAR_HEIGHT - 2 * (PHOTO_MARGIN + PHOTO_BORDER);
+  const maxWidth = PHOTO_AREA.width - 2 * PHOTO_BORDER;
+  const maxHeight = PHOTO_AREA.height - 2 * PHOTO_BORDER;
   const scale = Math.min(maxWidth / photo.width, maxHeight / photo.height);
   const width = Math.round(photo.width * scale);
   const height = Math.round(photo.height * scale);
-  const x = Math.round((AVATAR_WIDTH - width) / 2);
-  const y = Math.round((AVATAR_HEIGHT - height) / 2);
+  const x = Math.round(PHOTO_AREA.left + (PHOTO_AREA.width - width) / 2);
+  const y = PHOTO_AREA.top + PHOTO_BORDER;
 
   ctx.save();
   ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-  ctx.shadowBlur = 30;
-  ctx.shadowOffsetY = 8;
+  ctx.shadowBlur = 24;
+  ctx.shadowOffsetY = 6;
   ctx.fillStyle = '#fff';
   ctx.fillRect(x - PHOTO_BORDER, y - PHOTO_BORDER, width + 2 * PHOTO_BORDER, height + 2 * PHOTO_BORDER);
   ctx.restore();
@@ -121,50 +132,46 @@ function drawPhotoCard(ctx: OffscreenCanvasRenderingContext2D, photo: ImageBitma
 function drawPlaceholder(ctx: OffscreenCanvasRenderingContext2D) {
   ctx.fillStyle = '#2b2f36';
   ctx.fillRect(0, 0, AVATAR_WIDTH, AVATAR_HEIGHT);
-  const centerX = AVATAR_WIDTH / 2;
-  const centerY = AVATAR_HEIGHT / 2 - 40;
+  const centerX = PHOTO_AREA.left + PHOTO_AREA.width / 2;
+  const bottom = PHOTO_AREA.top + PHOTO_AREA.height;
   ctx.fillStyle = '#4a505a';
   ctx.beginPath();
-  ctx.arc(centerX, centerY - 70, 90, 0, Math.PI * 2);
+  ctx.arc(centerX, PHOTO_AREA.top + 140, 85, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(centerX, centerY + 170, 190, 130, 0, Math.PI, 0);
+  ctx.ellipse(centerX, bottom, 170, 150, 0, Math.PI, 0);
   ctx.fill();
 }
 
 /**
- * Bandeau jaune sur deux lignes, texte noir, posé en bas de la zone de sécurité :
- * au niveau du buste, sous le visage, et visible malgré le recadrage des vignettes.
+ * Bandeau jaune bordé de noir, sur une ligne, sous la photo et sur toute la largeur
+ * de la zone de sécurité. Le texte est resserré horizontalement plutôt que réduit.
  */
 function drawBanner(ctx: CanvasRenderingContext2D) {
-  const lines = BANNER_TEXT.split(/(?<=,)\s+/);
-  const maxTextWidth = SAFE_ZONE.right - SAFE_ZONE.left - 2 * (BANNER_PADDING_X + BANNER_BORDER);
+  const width = SAFE_ZONE.right - SAFE_ZONE.left;
+  const x = SAFE_ZONE.left;
+  const y = SAFE_ZONE.bottom - BANNER_HEIGHT;
+  const maxTextWidth = width - 2 * (BANNER_BORDER + BANNER_PADDING_X);
   ctx.save();
+  ctx.fillStyle = '#111';
+  ctx.fillRect(x, y, width, BANNER_HEIGHT);
+  ctx.fillStyle = '#ffd400';
+  ctx.fillRect(x + BANNER_BORDER, y + BANNER_BORDER, width - 2 * BANNER_BORDER, BANNER_HEIGHT - 2 * BANNER_BORDER);
+
   let fontSize = BANNER_FONT_SIZE;
   ctx.font = bannerFont(fontSize);
-  const widest = () => Math.max(...lines.map((line) => ctx.measureText(line).width));
-  // Réduit la taille si une police de repli rend le texte plus large que prévu.
-  while (fontSize > 24 && widest() > maxTextWidth) {
+  // Réduit la police seulement si le resserrement maximal ne suffit pas (police de repli).
+  while (fontSize > 24 && ctx.measureText(BANNER_TEXT).width * BANNER_MIN_SQUEEZE > maxTextWidth) {
     fontSize -= 2;
     ctx.font = bannerFont(fontSize);
   }
-  const lineHeight = Math.round(fontSize * BANNER_LINE_HEIGHT);
-  const width = Math.ceil(widest()) + 2 * (BANNER_PADDING_X + BANNER_BORDER);
-  const height = lines.length * lineHeight + 2 * (BANNER_PADDING_Y + BANNER_BORDER);
-  const x = Math.round(AVATAR_WIDTH / 2 - width / 2);
-  const y = SAFE_ZONE.bottom - height;
-
-  ctx.fillStyle = '#111';
-  ctx.fillRect(x, y, width, height);
-  ctx.fillStyle = '#ffd400';
-  ctx.fillRect(x + BANNER_BORDER, y + BANNER_BORDER, width - 2 * BANNER_BORDER, height - 2 * BANNER_BORDER);
+  const squeeze = Math.min(1, maxTextWidth / ctx.measureText(BANNER_TEXT).width);
   ctx.fillStyle = '#111';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  lines.forEach((line, index) => {
-    const lineY = y + BANNER_BORDER + BANNER_PADDING_Y + lineHeight * (index + 0.5);
-    ctx.fillText(line, AVATAR_WIDTH / 2, lineY);
-  });
+  ctx.translate(AVATAR_WIDTH / 2, y + BANNER_HEIGHT / 2 + 2);
+  ctx.scale(squeeze, 1);
+  ctx.fillText(BANNER_TEXT, 0, 0);
   ctx.restore();
 }
 
