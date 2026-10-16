@@ -2,9 +2,9 @@
 
 ## État actuel (16/10/2026)
 
-- **Étape 3 à moitié validée** : injection testée et validée sur `rehearsal` (avatar avec bandeau à 30 i/s, son préenregistré à la place du micro).
-- **Injection sur plateforme cible codée, à tester sur Google Meet** (compte A dans Chrome avec l'extension, compte B dans Brave) : bouton « Activer sur cet onglet » du popup, permission `scripting` ajoutée (validée par l'utilisateur), photo et son transmis en base64 par les arguments de `scripting.executeScript` (pas de `web_accessible_resources`), injection dans tous les cadres couverts par `activeTab`, faux périphériques « Avatar IA – Contre-Recruteur ». Si Meet appelle getUserMedia depuis une iframe d'un autre domaine, ne pas ajouter de permission : le signaler (règle 6).
-- **Limite** : une soirée sur la plateforme cible. Sans flux injecté affiché et son entendu à la fin de la soirée, signaler le blocage et proposer la bascule vers la voie B (OBS) ; l'utilisateur décide.
+- **Étape 3 terminée : voie A (injection) retenue.** Testée sur Google Meet (compte A dans Chrome avec l'extension, compte B dans Brave) : image, bandeau et son arrivent chez B.
+- **Prochaine étape : étape 4, pipeline voix**, testé d'abord face à `rehearsal` (ouverte avec `?inject`). La voix générée remplacera le son de test (`lib/test-audio.ts`) comme piste du micro injecté (`createAudioTrack` de `installFakeGetUserMedia`).
+- **Prérequis actuel sur la plateforme** : autoriser caméra et micro pour le site dans les réglages du navigateur (cadenas de la barre d'adresse), puis activer l'extension sur l'onglet (popup → « Activer sur cet onglet »), puis couper et rallumer caméra et micro dans la plateforme pour qu'elle redemande les flux. Recharger l'onglet annule l'injection.
 - Configuration locale : voir `docs/config.md`.
 
 Extension de navigateur open source et satirique. Quand une entreprise fait passer un entretien par un avatar IA, l'utilisateur peut répondre avec son propre avatar IA : sa photo, sa voix, son vrai CV. Le but est symbolique (faire rire et réfléchir), pas utilitaire.
@@ -24,7 +24,7 @@ Ces règles sont le cœur du projet. Ne jamais les assouplir, les rendre optionn
 
 ## Architecture
 
-Pipeline cible de l'extension complète (pour la démo, voir « Priorité actuelle » : injection ou OBS selon le test de l'étape 3) :
+Pipeline cible de l'extension complète (voie A, injection, retenue pour la démo à l'étape 3) :
 
 ```
 son du recruteur (piste audio distante de la page)
@@ -56,11 +56,17 @@ entrypoints/
   popup/               # bouton Activer / Pause / Reprendre la main
   options/             # assistant de setup : clé API, CV, photo, voix
   rehearsal/           # page « faux recruteur » pour tester sans plateforme réelle
-  avatar/              # page de l'avatar (aperçu, et source OBS en voie B)
+  avatar/              # page de l'avatar (aperçu)
 lib/
   vad.ts  stt.ts  llm.ts  tts.ts  avatar.ts  prompt.ts
+  inject.ts            # remplacement getUserMedia / enumerateDevices (monde MAIN)
+  injection-sources.ts # photo et son sérialisés pour le monde MAIN
+  test-audio.ts        # son de test provisoire du micro injecté (remplacé à l'étape 4)
+  log.ts               # logs préfixés et horodatés
+scripts/
+  check-locales.ts     # vérification des fichiers _locales au build
 docs/
-  spec.md
+  spec.md  config.md
 ```
 
 ## Priorité actuelle : la vidéo démo
@@ -71,14 +77,14 @@ Tout le code de la démo est écrit en TypeScript dans l'extension (rendu de l'a
 
 Deux façons d'amener l'avatar dans l'entretien, à départager par un test limité dans le temps :
 
-- **Voie A, injection (préférée)** : l'extension remplace caméra et micro dans l'onglet de l'entretien (`content.ts`, remplacement de getUserMedia) et récupère le son du recruteur depuis la page. Pas de routage audio système, bandeau intouchable.
-- **Voie B, OBS (repli)** : l'avatar est rendu dans une page `avatar` de l'extension, diffusée par la caméra virtuelle d'OBS. Le son passe par un routage audio système (PipeWire sous Linux).
+- **Voie A, injection (retenue)** : l'extension remplace caméra et micro dans l'onglet de l'entretien (`content.ts`, remplacement de getUserMedia) et récupère le son du recruteur depuis la page. Pas de routage audio système, bandeau intouchable.
+- **Voie B, OBS (repli, non retenu)** : l'avatar est rendu dans une page `avatar` de l'extension, diffusée par la caméra virtuelle d'OBS. Le son passe par un routage audio système (PipeWire sous Linux).
 
 ### Étapes (dans cet ordre, une à la fois)
 
 1. **Faux recruteur** : fait. Page `rehearsal` qui demande caméra et micro, affiche le flux reçu et lit des questions à voix haute.
 2. **Rendu avatar statique** : module `lib/avatar.ts` qui dessine dans un canvas la photo et le bandeau incrusté, en 1280×720, et une page `avatar` qui l'affiche. Ce module sert aux deux voies. Critère : image nette, bandeau lisible.
-3. **Test d'injection, limité à une soirée** : remplacer la caméra par le canvas de l'étape 2 et le micro par un son préenregistré, d'abord sur `rehearsal`, puis sur la plateforme cible. Garder ce code minimal et jetable.
+3. **Test d'injection** : fait, voie A retenue (testée sur Google Meet). Description d'origine : remplacer la caméra par le canvas de l'étape 2 et le micro par un son préenregistré, d'abord sur `rehearsal`, puis sur la plateforme cible. Garder ce code minimal et jetable.
    - Si la plateforme cible affiche le flux injecté et entend le son : **voie A retenue**.
    - Sinon, à la fin de la soirée : **voie B retenue**, sans insister. L'utilisateur décide de la bascule ; le signaler clairement dès qu'un blocage apparaît.
 4. **Pipeline voix** : son du recruteur → VAD → STT → LLM → Piper, branché selon la voie retenue. Critère : réponses fidèles au CV, révélation dès la première réponse, latence acceptable. Tester d'abord face à `rehearsal`.
@@ -96,7 +102,8 @@ Ne pas commencer une étape avant que la précédente fonctionne. En voie B, pou
 
 ### Reporté (seulement si la vidéo prend)
 
-- Si la voie B a été retenue : injection directe dans l'onglet, pour supprimer OBS et le routage audio.
+- Permission micro sans réglage manuel du site (solution B) : remplacer aussi `navigator.permissions.query` dans le script injecté pour répondre « granted » à `camera` et `microphone` (Meet ne demande pas le micro tant que la permission réelle n'est pas accordée). Aucune permission d'extension en plus ; Meet peut avoir gardé l'ancienne réponse en mémoire.
+- Vérifier `enumerateDevices` : Meet affichait « Speaker not found » avec la liste injectée (fausse caméra, faux micro, sorties audio réelles).
 - Assistant de setup (options) : pour la démo, clé API, chemin du CV, photo et notes sont lus depuis `config.local.json`, listé dans `.gitignore` et jamais commité. Fournir un `config.example.json`.
 - Popup avec Activer / Pause / Reprendre la main.
 - Firefox, i18n, export intégré, publication dans les boutiques.
