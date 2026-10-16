@@ -58,5 +58,8 @@
   },
   "popupOpenRehearsalInjected": {
     "message": "Rehearsal with injection"
+  },
+  "popupActivate": {
+    "message": "Enable on this tab"
   }
 }

@@ -1,6 +1,6 @@
 // Étape 3, test d'injection (code jetable) : remplace getUserMedia pour que la page
 // reçoive le canvas de l'avatar comme caméra et un son préenregistré comme micro.
-// Ne dépend d'aucune API d'extension : pourra tourner dans le monde MAIN d'un onglet.
+// Ne dépend d'aucune API d'extension : tourne aussi dans le monde MAIN d'un onglet.
 
 import { AvatarRenderer } from './avatar';
 import { createLogger } from './log';
@@ -21,25 +21,70 @@ interface FakeTracks {
   audio: MediaStreamTrack;
 }
 
+// Nom affiché par la plateforme pour la caméra, le micro et les pistes injectées.
+export const DEVICE_LABEL = 'Avatar IA – Contre-Recruteur';
+const DEVICE_IDS = { videoinput: 'contre-recruteur-camera', audioinput: 'contre-recruteur-micro' } as const;
+const GROUP_ID = 'contre-recruteur';
+
 export function installFakeGetUserMedia(sources: FakeMediaSources) {
-  const mediaDevices = navigator.mediaDevices;
-  const original = mediaDevices.getUserMedia.bind(mediaDevices);
+  // Patch du prototype : couvre aussi les appels qui ne passent pas par navigator.mediaDevices.
+  const proto = MediaDevices.prototype;
+  const originalGetUserMedia = proto.getUserMedia;
+  const originalEnumerateDevices = proto.enumerateDevices;
   let fake: Promise<FakeTracks> | null = null;
 
-  mediaDevices.getUserMedia = async (constraints?: MediaStreamConstraints) => {
+  proto.getUserMedia = async function (this: MediaDevices, constraints?: MediaStreamConstraints) {
     log(`getUserMedia intercepté : ${JSON.stringify(constraints ?? {})}`);
-    if (!constraints?.video && !constraints?.audio) return original(constraints);
+    if (!constraints?.video && !constraints?.audio) return originalGetUserMedia.call(this, constraints);
     fake ??= createFakeTracks(sources);
     const { video, audio } = await fake;
     // Des clones : la page peut arrêter ses pistes sans couper les sources.
     const tracks: MediaStreamTrack[] = [];
-    if (constraints.video) tracks.push(video.clone());
-    if (constraints.audio) tracks.push(audio.clone());
-    const stream = new MediaStream(tracks);
-    log(`flux injecté renvoyé : ${tracks.map((track) => track.kind).join(' + ')}`);
-    return stream;
+    if (constraints.video) tracks.push(disguise(video.clone(), 'videoinput'));
+    if (constraints.audio) tracks.push(disguise(audio.clone(), 'audioinput'));
+    log(`flux injecté renvoyé : ${tracks.map((track) => `${track.kind} « ${track.label} »`).join(' + ')}`);
+    return new MediaStream(tracks);
   };
-  log('getUserMedia remplacé');
+
+  // Seuls la fausse caméra et le faux micro sont proposés ; les sorties audio réelles restent.
+  proto.enumerateDevices = async function (this: MediaDevices) {
+    const real = await originalEnumerateDevices.call(this);
+    const outputs = real.filter((device) => device.kind === 'audiooutput');
+    const devices = [fakeDevice('videoinput'), fakeDevice('audioinput'), ...outputs];
+    log(`enumerateDevices intercepté : ${devices.map((device) => `${device.kind} « ${device.label} »`).join(', ')}`);
+    return devices;
+  };
+
+  log('getUserMedia et enumerateDevices remplacés');
+  // Invite la page à relire la liste des périphériques.
+  navigator.mediaDevices.dispatchEvent(new Event('devicechange'));
+}
+
+type InputKind = keyof typeof DEVICE_IDS;
+
+function fakeDevice(kind: InputKind): MediaDeviceInfo {
+  const info = {
+    deviceId: DEVICE_IDS[kind],
+    groupId: GROUP_ID,
+    kind,
+    label: DEVICE_LABEL,
+  };
+  // Hérite du vrai prototype pour passer les tests `instanceof` (InputDeviceInfo absent de Firefox).
+  const proto = typeof InputDeviceInfo === 'undefined' ? MediaDeviceInfo.prototype : InputDeviceInfo.prototype;
+  const device = Object.create(proto) as MediaDeviceInfo;
+  for (const [key, value] of Object.entries(info)) Object.defineProperty(device, key, { value, enumerable: true });
+  Object.defineProperty(device, 'toJSON', { value: () => info });
+  return device;
+}
+
+/** Donne à la piste le libellé et l'identifiant du faux périphérique. */
+function disguise(track: MediaStreamTrack, kind: InputKind): MediaStreamTrack {
+  const getSettings = track.getSettings.bind(track);
+  Object.defineProperty(track, 'label', { value: DEVICE_LABEL });
+  Object.defineProperty(track, 'getSettings', {
+    value: () => ({ ...getSettings(), deviceId: DEVICE_IDS[kind], groupId: GROUP_ID }),
+  });
+  return track;
 }
 
 async function createFakeTracks(sources: FakeMediaSources): Promise<FakeTracks> {

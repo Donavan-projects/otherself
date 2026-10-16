@@ -1,11 +1,9 @@
 # Contre-Recruteur
 
-## État actuel (14/10/2026)
+## État actuel (16/10/2026)
 
 - **Étape 3 à moitié validée** : injection testée et validée sur `rehearsal` (avatar avec bandeau à 30 i/s, son préenregistré à la place du micro).
-- **Prochaine action** : injection sur la plateforme cible, dès que l'utilisateur en a choisi une. Deux points à régler :
-  - **Permission `scripting`** : nécessaire en plus d'`activeTab` pour exécuter le remplacement de getUserMedia dans le monde MAIN de l'onglet, avant que la page ne l'appelle (reste conforme à la règle 6).
-  - **Transmission de la photo et du son à la page** : le script injecté n'a pas accès aux fichiers de l'extension ; les passer par message, ou les déclarer en `web_accessible_resources` (changement du manifest à valider avec l'utilisateur).
+- **Injection sur plateforme cible codée, à tester sur Google Meet** (compte A dans Chrome avec l'extension, compte B dans Brave) : bouton « Activer sur cet onglet » du popup, permission `scripting` ajoutée (validée par l'utilisateur), photo et son transmis en base64 par les arguments de `scripting.executeScript` (pas de `web_accessible_resources`), injection dans tous les cadres couverts par `activeTab`, faux périphériques « Avatar IA – Contre-Recruteur ». Si Meet appelle getUserMedia depuis une iframe d'un autre domaine, ne pas ajouter de permission : le signaler (règle 6).
 - **Limite** : une soirée sur la plateforme cible. Sans flux injecté affiché et son entendu à la fin de la soirée, signaler le blocage et proposer la bascule vers la voie B (OBS) ; l'utilisateur décide.
 - Configuration locale : voir `docs/config.md`.
 

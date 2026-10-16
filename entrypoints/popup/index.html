@@ -4,9 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Contre-Recruteur</title>
+    <style>
+      body { display: grid; gap: 8px; width: 260px; padding: 8px; font-family: system-ui, sans-serif; }
+      #status { margin: 0; font-size: 0.8rem; white-space: pre-wrap; }
+    </style>
   </head>
   <body>
     <!-- Activer / Pause / Reprendre la main : reporté après la vidéo démo. -->
+    <button id="activate" type="button"></button>
+    <p id="status"></p>
     <button id="open-rehearsal" type="button"></button>
     <button id="open-rehearsal-injected" type="button"></button>
     <button id="open-avatar" type="button"></button>

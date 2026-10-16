@@ -54,7 +54,7 @@ export default defineConfig({
     description: '__MSG_extDescription__',
     default_locale: DEFAULT_LOCALE,
     // Règle 6 : activeTab + injection à la demande, jamais de host_permissions.
-    permissions: ['activeTab'],
+    permissions: ['activeTab', 'scripting'],
   },
   hooks: {
     'build:publicAssets': (wxt, files) => {

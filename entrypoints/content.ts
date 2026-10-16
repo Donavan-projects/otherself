@@ -1,7 +1,46 @@
-// Injection getUserMedia et capture audio du recruteur : à venir (étape 4).
-// Enregistrement à la demande uniquement : rien n'est déclaré dans le manifest.
+// Étape 3, test d'injection sur la plateforme cible (jetable). Injecté à la demande
+// par le popup dans le monde MAIN de l'onglet (activeTab + scripting), jamais déclaré
+// dans le manifest. Expose un installeur que le popup appelle avec la photo et le son.
+
+import { installFakeGetUserMedia } from '@/lib/inject';
+import { fileToBlob, type SerializedSources } from '@/lib/injection-sources';
+import { createLogger } from '@/lib/log';
+
+declare global {
+  interface Window {
+    __contreRecruteur?: { install(sources: SerializedSources): Promise<string> };
+  }
+}
+
+const log = createLogger('inject');
+
 export default defineContentScript({
   matches: [],
   registration: 'runtime',
-  main() {},
+  world: 'MAIN',
+  main() {
+    const frame = window === window.top ? 'cadre principal' : 'iframe';
+    if (window.__contreRecruteur) {
+      log(`script déjà présent (${frame} ${location.href})`);
+      return;
+    }
+    let installed = false;
+    window.__contreRecruteur = {
+      async install(sources) {
+        if (installed) return 'déjà actif';
+        installed = true;
+        const photo = sources.photo
+          ? await createImageBitmap(fileToBlob(sources.photo), { imageOrientation: 'from-image' })
+          : null;
+        const audio = sources.audio ? await fileToBlob(sources.audio).arrayBuffer() : null;
+        log(
+          `installation (${frame} ${location.href}) : photo ${photo ? `${photo.width}x${photo.height}` : 'absente'}, ` +
+            `son ${audio ? `${Math.round(audio.byteLength / 1024)} Ko` : 'absent (bip)'}`,
+        );
+        installFakeGetUserMedia({ photo, audio });
+        return 'actif';
+      },
+    };
+    log(`script injecté (${frame} ${location.href})`);
+  },
 });
