@@ -1,15 +1,19 @@
 // Document offscreen : fait tourner le pipeline voix (VAD, transcription, LLM, Piper)
 // pour l'onglet activé. Un seul document offscreen par extension (garanti par Chrome),
-// donc un seul pipeline ; un seul onglet relié à la fois (le dernier activé). Créé par le popup ; reçoit le son du recruteur et renvoie la voix
+// donc un seul pipeline ; un seul onglet relié à la fois (le dernier activé).
+// Le son du recruteur est le son de cet onglet (chrome.tabCapture, tab-audio.ts) ; la
+// voix de l'avatar repart vers la page par le pont. Créé par le popup ; reçoit le son du recruteur et renvoie la voix
 // de l'avatar par le pont (bridge.content.ts). Ses logs sont recopiés dans la console de
 // la page de la plateforme.
 
 import type { Browser } from 'wxt/browser';
-import { PORT_NAME, type FromOffscreen, type FromPage } from '@/lib/bridge-messages';
+import { PORT_NAME, type CaptureReply, type FromOffscreen, type FromPage, type ToOffscreen } from '@/lib/bridge-messages';
 import { loadDemoConfig, loadLocalText } from '@/lib/config';
 import { Conversation } from '@/lib/conversation';
 import { createLogger } from '@/lib/log';
-import { base64ToBuffer, bufferToBase64 } from '@/lib/pcm';
+import { bufferToBase64 } from '@/lib/pcm';
+import { STT_SAMPLE_RATE } from '@/lib/stt';
+import { TabAudioCapture } from '@/lib/tab-audio';
 import { PiperVoice } from '@/lib/tts';
 import { configureOnnxRuntime } from '@/lib/vad';
 
@@ -55,14 +59,6 @@ browser.runtime.onConnect.addListener((connected) => {
         micReady = true;
         conversation?.setMicReady(true);
         break;
-      case 'audio':
-        if (conversation) {
-          conversation.onAudio(new Int16Array(base64ToBuffer(message.pcm)), message.at);
-        } else if (!warnedNotReady) {
-          warnedNotReady = true;
-          log('son du recruteur reçu, mais le pipeline n’est pas encore prêt');
-        }
-        break;
       case 'playback-started':
         conversation?.onPlaybackStarted(message.responseId, message.at);
         break;
@@ -74,6 +70,39 @@ browser.runtime.onConnect.addListener((connected) => {
   connected.onDisconnect.addListener(() => {
     if (port === connected) port = null;
   });
+});
+
+// Capture du son de l'onglet : une seule à la fois, celle de l'onglet activé en dernier.
+let capture: TabAudioCapture | null = null;
+
+function onTabAudio(samples: Int16Array, at: number) {
+  if (conversation) {
+    conversation.onAudio(samples, at);
+  } else if (!warnedNotReady) {
+    warnedNotReady = true;
+    log('son du recruteur reçu, mais le pipeline n’est pas encore prêt');
+  }
+}
+
+async function handle(message: ToOffscreen): Promise<CaptureReply> {
+  const live = capture?.isLive === true && capture.tabId === message.tabId;
+  if (message.type === 'capture-status' || live) return { live };
+  capture?.stop();
+  capture = null;
+  try {
+    capture = await TabAudioCapture.start(message.tabId, message.streamId, STT_SAMPLE_RATE, onTabAudio);
+    return { live: true };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    log(`capture du son de l'onglet impossible : ${reason}`);
+    return { live: false, error: reason };
+  }
+}
+
+browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse: (reply: CaptureReply) => void) => {
+  if ((message as Partial<ToOffscreen> | null)?.target !== 'offscreen') return undefined;
+  void handle(message as ToOffscreen).then(sendResponse);
+  return true;
 });
 
 async function start() {

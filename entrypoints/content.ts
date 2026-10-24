@@ -1,15 +1,13 @@
 // Injection sur la plateforme (voie A). Injecté à la demande par le popup dans le monde
 // MAIN de l'onglet (activeTab + scripting), jamais déclaré dans le manifest. Remplace
-// caméra et micro par l'avatar, capte le son du recruteur et joue la voix de l'avatar.
+// caméra et micro par l'avatar et joue la voix de l'avatar dans le micro injecté.
 // Communique avec l'extension par window.postMessage via le pont (bridge.content.ts).
 
 import { PAGE_TAG, type FromPage, type PageEnvelope } from '@/lib/bridge-messages';
 import { installFakeGetUserMedia } from '@/lib/inject';
 import { fileToBlob, type SerializedSources } from '@/lib/injection-sources';
-import { installLocalTrackHooks } from '@/lib/local-tracks';
 import { createLogger } from '@/lib/log';
 import { createVoiceOutput, type VoiceOutput } from '@/lib/page-audio';
-import { captureRemoteAudio } from '@/lib/remote-audio';
 
 declare global {
   interface Window {
@@ -46,11 +44,6 @@ export default defineContentScript({
         log(`installation (${frame} ${location.href}) : photo ${photo ? `${photo.width}x${photo.height}` : 'absente'}, bandeau « ${sources.bannerText} »`);
         if (sources.debugSafeZone) log('débogage : contour de la zone de sécurité affiché');
 
-        // Avant toute demande de caméra ou de micro : les pistes locales restent reconnaissables.
-        installLocalTrackHooks();
-        // Le pipeline voix n'est relié qu'au cadre principal ; capture installée au plus tôt.
-        if (isTop) captureRemoteAudio((pcm, at) => sendToExtension({ type: 'audio', pcm, at }));
-
         let voice: VoiceOutput | null = null;
         installFakeGetUserMedia({
           photo,
@@ -66,6 +59,8 @@ export default defineContentScript({
           },
         });
 
+        // Le pipeline voix n'est relié qu'au cadre principal (le son du recruteur est capturé
+        // par l'extension, chrome.tabCapture, pas par la page).
         if (isTop) {
           window.addEventListener('message', (event) => {
             if (event.source !== window) return;

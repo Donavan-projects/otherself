@@ -16,6 +16,7 @@ import { Vad, VAD_SAMPLE_RATE } from './vad';
 const log = createLogger('llm');
 const logStt = createLogger('stt');
 const logTts = createLogger('tts');
+const logVad = createLogger('vad');
 
 /** Audio gardé avant le début de parole confirmé, pour ne pas couper le premier mot. */
 const PREROLL_MS = 600;
@@ -57,6 +58,8 @@ export class Conversation {
   /** La plateforme a demandé le micro : sinon la page ignorerait la voix. */
   private micReady = false;
   private waitingForMicLogged = false;
+  /** Début (Date.now) de la voix de l'avatar en cours dans le micro injecté, sinon null. */
+  private avatarSpeakingSince: number | null = null;
   /** Règle 2 : vrai seulement quand la révélation a été entièrement prononcée. */
   private revealed = false;
   /** Question restée sans réponse audible (recruteur qui reprend la parole). */
@@ -133,7 +136,7 @@ export class Conversation {
     return this.connecting;
   }
 
-  /** Son du recruteur (pistes distantes de la page), PCM 16 bits à 24 kHz. */
+  /** Son du recruteur (son de l'onglet capturé), PCM 16 bits à 24 kHz. */
   onAudio(samples: Int16Array, receivedAt: number) {
     if (this.capturing) {
       this.transcriber?.append(samples);
@@ -148,6 +151,14 @@ export class Conversation {
   }
 
   private onSpeechStart(startedAt: number) {
+    // Garde-fou : la voix de l'avatar ne doit jamais revenir dans le son capturé.
+    if (this.avatarSpeakingSince !== null) {
+      logVad(
+        `ALERTE : parole détectée pendant que l'avatar parle (${Date.now() - this.avatarSpeakingSince} ms après le début de sa voix). ` +
+          'Soit le recruteur lui coupe la parole, soit la voix de l’avatar revient dans le son capturé ' +
+          '(micro de B sans casque, ou voix jouée dans l’onglet A). Si cela arrive à chaque réponse, c’est un écho.',
+      );
+    }
     // Ne jamais parler pendant que le recruteur parle : la réponse en cours s'arrête.
     if (this.current) this.interrupt(`le recruteur parle (${Date.now() - startedAt} ms après le début de sa phrase)`);
     void this.ensureTranscriber().then(() => {
@@ -216,6 +227,7 @@ export class Conversation {
     if (!response) return;
     response.controller.abort();
     this.link.stop();
+    this.avatarSpeakingSince = null;
     this.current = null;
     // Pas encore de réponse entendue : la question sera reprise avec la suite du recruteur.
     if (!response.answerSent) this.carried = join(response.question, this.carried);
@@ -334,7 +346,9 @@ export class Conversation {
   /** La page a commencé à jouer la réponse : c'est la latence perçue par le recruteur. */
   onPlaybackStarted(responseId: number, at: number) {
     const response = this.current;
-    if (response?.id !== responseId || response.played) return;
+    if (response?.id !== responseId) return;
+    this.avatarSpeakingSince = at;
+    if (response.played) return;
     response.played = true;
     const { transcript, firstToken, firstAudio } = response.timings;
     logTts(
@@ -349,6 +363,7 @@ export class Conversation {
   onPlaybackIdle(responseId: number) {
     const response = this.current;
     if (response?.id !== responseId) return;
+    this.avatarSpeakingSince = null;
     if (response.includesOpening && response.openingSent && !this.revealed) {
       this.revealed = true;
       logTts('révélation entièrement prononcée (elle ne sera plus jouée dans cet entretien)');

@@ -4,9 +4,9 @@
 
 - **Étape 3 terminée : voie A (injection) retenue.** Testée sur Google Meet (compte A dans Chrome avec l'extension, compte B dans Brave) : image, bandeau et son arrivent chez B.
 - **Étape 4, pipeline voix : codée, à tester sur Meet** (A dans Chrome avec l'extension, B dans Brave joue le recruteur). Choix validés : transcription en flux `gpt-live-transcribe` (session Realtime, clé éphémère créée par l'extension), LLM `gpt-6-luna` en streaming sans raisonnement, Piper en WebAssembly dans un document offscreen, langue `en` pour la démo. Vérifié en headless : capture des pistes WebRTC distantes, VAD Silero, synthèse Piper, lecture dans le micro injecté. **Non vérifié** (pas de clé ici) : appels OpenAI (transcription et LLM) et latence de bout en bout.
-- **Premier test Meet de l'étape 4 (24/10/2026)** : le pipeline démarre, mais le son du recruteur n'arrivait jamais (aucune connexion WebRTC vue par le remplacement de `setRemoteDescription`). Corrigé sans permission en plus : connexions existantes découvertes au premier appel d'une de leurs méthodes (Meet appelle `getStats` en continu), secours par les éléments `<audio>`/`<video>` et les sources Web Audio de la page, pistes locales (micro injecté, voix de l'avatar, partage d'écran, son fabriqué par la page) toujours écartées ; logs de chaque connexion et piste, bilan toutes les 15 s. L'ouverture attend la fin de la première prise de parole du recruteur et que la plateforme ait demandé le micro, puis n'est jouée qu'une fois par entretien (rejouée seulement si elle a été coupée, ou sur une nouvelle page). Vérifié en headless (connexion créée avant l'activation, son lu par un `<audio>`) ; **à revérifier sur Meet**.
+- **Tests Meet de l'étape 4 (24/10/2026)** : le pipeline démarre, mais aucun son du recruteur n'est capté depuis la page : Meet décode l'audio reçu en WebAssembly (`p2p.wasm`, NetEq) et le joue par Web Audio ; ses pistes WebRTC et ses éléments `<audio>` restent silencieux (−85 dBFS). **Capture remplacée par `chrome.tabCapture`** (règle 6 révisée avec l'accord de l'utilisateur) : le document offscreen reçoit le son de l'onglet activé, le rejoue sur la sortie par défaut et le passe au VAD par un AudioWorklet. Garde-fou : alerte `[vad]` si de la parole est détectée pendant que l'avatar parle (écho). L'ouverture attend la fin de la première prise de parole du recruteur et que la plateforme ait demandé le micro, puis n'est jouée qu'une fois par entretien (rejouée seulement si elle a été coupée, ou sur une nouvelle page). Vérifié en headless : AudioWorklet et ouverture ; **capture tabCapture à vérifier sur Meet**.
 - **Voix** : `en_US-ljspeech-high` est trop lente en WebAssembly sur la machine de référence (1,25 à 2,7 × temps réel) ; démo avec `en_US-ljspeech-medium` (féminine) ou `en_US-joe-medium` (masculine). Détails et licences : `docs/config.md`.
-- **Prérequis actuel sur la plateforme** : autoriser caméra et micro pour le site dans les réglages du navigateur (cadenas de la barre d'adresse), désactiver côté A le cadrage automatique de la plateforme (Meet : Paramètres → Vidéo → Cadrage / Framing), puis activer l'extension sur l'onglet, de préférence **avant de rejoindre la réunion** (popup → « Activer sur cet onglet » ; une connexion WebRTC déjà créée est rattrapée, mais plus tard), puis couper et rallumer caméra et micro dans la plateforme pour qu'elle redemande les flux. Recharger l'onglet annule l'injection.
+- **Prérequis actuel sur la plateforme** : autoriser caméra et micro pour le site dans les réglages du navigateur (cadenas de la barre d'adresse), désactiver côté A le cadrage automatique de la plateforme (Meet : Paramètres → Vidéo → Cadrage / Framing), puis activer l'extension sur l'onglet (popup → « Activer sur cet onglet », avant ou après avoir rejoint la réunion ; Chrome signale alors que l'onglet est partagé), puis couper et rallumer caméra et micro dans la plateforme pour qu'elle redemande les flux. Recharger l'onglet annule l'injection.
 - **Cadrage automatique (confirmé sur Meet)** : il zoome sur le visage détecté dans l'image et coupe le bandeau de la zone de sécurité. Sans lui, image et bandeau passent entiers. Pas de correction sur la composition photo, remplacée à l'étape 5 ; la parade prévue (bandeau intégré au personnage) est décrite dans `docs/visuel-otherself.md`, section 3.
 - **Pivot (24/10/2026)** : le projet s'appelle désormais OtherSelf (ex-Contre-Recruteur ; le dossier du projet garde son nom pour ne pas changer l'identifiant de l'extension). Mission, règles 1, 2, 4 et étapes révisées ci-dessous.
 - Configuration locale : voir `docs/config.md`.
@@ -31,14 +31,14 @@ Ces règles sont le cœur du projet. Ne jamais les assouplir, les rendre optionn
 3. **Aucun mode discret** : pas d'écran caché, pas de suggestion de réponses à lire, pas d'option pour tromper un interlocuteur humain.
 4. **Avatar cartoon uniquement** : aucun import de photo, aucun clonage de visage ou de voix. Voix synthétique générique (Piper). Le rendu actuel à partir d'une photo est provisoire et sera remplacé à l'étape 5.
 5. **Pas d'invention** : le prompt système interdit d'inventer expériences, diplômes ou chiffres. Le LLM répond uniquement à partir du CV et des notes de l'utilisateur.
-6. **Permissions minimales** : `activeTab` + `scripting` + `offscreen` (document du pipeline voix), injection à la demande sur l'onglet actif. Jamais de `host_permissions`, et en particulier jamais sur `<all_urls>` : OpenAI et Hugging Face acceptent les requêtes CORS de l'extension sans permission d'hôte.
+6. **Permissions minimales** : `activeTab` + `scripting` + `offscreen` (document du pipeline voix) + `tabCapture` (son de l'onglet activé, uniquement après un clic de l'utilisateur sur cet onglet), injection à la demande sur l'onglet actif. Jamais de `host_permissions`, et en particulier jamais sur `<all_urls>` : OpenAI et Hugging Face acceptent les requêtes CORS de l'extension sans permission d'hôte.
 
 ## Architecture
 
 Pipeline cible de l'extension complète (voie A, injection, retenue pour la démo à l'étape 3) :
 
 ```
-son du recruteur (piste audio distante de la page)
+son du recruteur (son de l'onglet activé, chrome.tabCapture)
   → VAD (Silero, web)
   → STT (API cloud)
   → LLM (API cloud, streaming, prompt système + CV)
@@ -57,7 +57,7 @@ son du recruteur (piste audio distante de la page)
 - TypeScript strict, extension Manifest V3.
 - WXT pour une base de code unique Chromium (Chrome, Edge, Brave, Opera) + Firefox.
 - Pas de backend : les appels partent directement de l'extension (document offscreen). Démo : clé API dans `config.local.json` ; projet : `chrome.storage.local`.
-- Son du recruteur : pistes audio reçues par `RTCPeerConnection` dans la page (monde MAIN), avec en secours les flux lus par la page, jamais le micro de l'utilisateur ni la voix de l'avatar (pistes locales marquées et écartées) ; relayées au document offscreen par un pont en monde isolé (`bridge.content.ts`).
+- Son du recruteur : son de l'onglet activé (`chrome.tabCapture`, reçu par le document offscreen), c'est-à-dire ce que la plateforme joue réellement, quel que soit son décodage. Il ne contient ni le micro de l'utilisateur ni la voix de l'avatar, qui ne sort que par le micro injecté (jamais vers `ctx.destination` dans la page). La voix de l'avatar va du document offscreen à la page par un pont en monde isolé (`bridge.content.ts`).
 - Machine de référence modeste (16 Go RAM, GPU 4 Go ancien) : rien de lourd ne tourne en local dans le navigateur sauf VAD, TTS Piper et le canvas de l'avatar.
 
 ## Structure prévue
@@ -68,6 +68,7 @@ entrypoints/
   content.ts           # monde MAIN : injection getUserMedia, capture du recruteur, voix de l'avatar
   bridge.content.ts    # monde isolé : relais page ↔ document offscreen
   offscreen/           # pipeline voix (VAD, STT, LLM, Piper)
+  capture-worklet.ts   # AudioWorklet de la capture du son de l'onglet
   popup/               # bouton Activer / Pause / Reprendre la main
   options/             # assistant de setup : clé API, CV, photo, voix
   rehearsal/           # page « faux recruteur » pour tester sans plateforme réelle
@@ -76,9 +77,8 @@ lib/
   vad.ts  stt.ts  llm.ts  tts.ts  avatar.ts  prompt.ts
   conversation.ts      # tour de parole, ouverture (révélation + messageText), latence
   config.ts            # lecture de local/config.json (généré depuis config.local.json)
-  page-audio.ts        # monde MAIN : contexte audio, lecture de la voix dans le micro injecté
-  remote-audio.ts      # monde MAIN : capture du son du recruteur (pistes reçues uniquement)
-  local-tracks.ts      # monde MAIN : pistes locales, jamais capturées
+  page-audio.ts        # monde MAIN : lecture de la voix dans le micro injecté
+  tab-audio.ts         # offscreen : son de l'onglet (tabCapture), rejoué, vers le VAD
   bridge-messages.ts  pcm.ts
   inject.ts            # remplacement getUserMedia / enumerateDevices (monde MAIN)
   injection-sources.ts # photo et son sérialisés pour le monde MAIN
@@ -103,7 +103,7 @@ Tout le code de la démo est écrit en TypeScript dans l'extension (rendu de l'a
 1. **Faux recruteur** : fait. Page `rehearsal` qui demande caméra et micro, affiche le flux reçu et lit des questions à voix haute.
 2. **Rendu avatar statique** : fait. `lib/avatar.ts` dessine l'image 1280×720 et le bandeau incrusté ; page `avatar` pour l'aperçu.
 3. **Test d'injection** : fait, voie A retenue (testée sur Google Meet).
-4. **Pipeline voix, avec le mode « message »** : son du recruteur → VAD → STT → LLM → Piper, la voix générée remplaçant le son de test comme piste du micro injecté. Critères : révélation dès la première prise de parole, puis `messageText` s'il est configuré, puis réponses fidèles au CV ; latence acceptable. Test sur Meet : `rehearsal` ne peut pas servir de recruteur (sa voix vient de la synthèse du navigateur, pas d'une piste WebRTC).
+4. **Pipeline voix, avec le mode « message »** : son du recruteur → VAD → STT → LLM → Piper, la voix générée remplaçant le son de test comme piste du micro injecté. Critères : révélation dès la première prise de parole, puis `messageText` s'il est configuré, puis réponses fidèles au CV ; latence acceptable. Test sur Meet : `rehearsal` ne peut pas servir de recruteur (sa voix vient de la synthèse vocale du système, qui ne passe pas par le son de l'onglet).
 5. **Visuel OtherSelf** : selon `docs/visuel-otherself.md` (avatar cartoon original en SVG local à la place de la photo, variantes et fond choisis dans `config.local.json`, `bannerText` configurable, bouche animée par la voix). Le bandeau garde l'emplacement et les contraintes de la règle 1.
 6. **Tournage** : enregistrement de la session (simple enregistrement d'écran) pour la vidéo et le post LinkedIn.
 
@@ -118,6 +118,8 @@ Ne pas commencer une étape avant que la précédente fonctionne.
 - Popup avec Activer / Pause / Reprendre la main.
 - Licence : le phonémiseur de Piper (`piper_phonemize`, espeak-ng) est sous GPL-3.0 et embarqué dans l'extension ; à prendre en compte dans le choix de la licence du dépôt.
 - Performances Piper : synthèse dans un Worker (aujourd'hui sur le fil principal du document offscreen, ce qui retarde le VAD pendant la synthèse) ; multi-thread via COOP/COEP sur les pages d'extension (gain mesuré nul en « medium », ×2 en « high »).
+- Son capturé rejoué sur la sortie choisie dans la plateforme (`setSinkId`) ; aujourd'hui, sortie audio par défaut.
+- Vérifier le texte de l'avertissement que Chrome affiche pour `tabCapture` avant une publication sur le Web Store.
 - Cadrage automatique des plateformes (Framing sur Meet) : il zoome sur le visage et coupe le bandeau ; pour la démo, il est désactivé côté A. Pour le projet, garantir la visibilité du bandeau même avec ce zoom (au minimum la version intégrée au personnage de l'étape 5, et une consigne dans l'assistant).
 - Publication sur le Chrome Web Store, version Firefox, i18n complète, export intégré (enregistrement avec sous-titres).
 - Lien vers une explication des droits des candidats face aux décisions automatisées (RGPD, AI Act), à faire vérifier juridiquement.

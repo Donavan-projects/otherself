@@ -79,9 +79,10 @@ export default defineConfig({
     name: '__MSG_extName__',
     description: '__MSG_extDescription__',
     default_locale: DEFAULT_LOCALE,
-    // Règle 6 : activeTab + scripting + offscreen, injection à la demande, jamais de
+    // Règle 6 : activeTab + scripting + offscreen + tabCapture, injection à la demande, jamais de
     // host_permissions (OpenAI et Hugging Face acceptent les requêtes CORS de l'extension).
-    permissions: ['activeTab', 'scripting', 'offscreen'],
+    // tabCapture : son de l'onglet activé (ce qui est réellement joué), sur clic de l'utilisateur.
+    permissions: ['activeTab', 'scripting', 'offscreen', 'tabCapture'],
     // WebAssembly (ONNX Runtime, phonémiseur Piper) dans les pages de l'extension.
     content_security_policy: {
       extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",

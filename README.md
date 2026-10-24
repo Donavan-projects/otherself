@@ -24,7 +24,7 @@ Ces règles font partie du projet et ne sont pas désactivables :
 - **Aucun mode discret** : OtherSelf ne sert pas à tromper un interlocuteur humain, ni à souffler des réponses.
 - **Avatar cartoon uniquement** : pas d'import de photo, pas de clonage de visage ni de voix ; voix synthétique générique.
 - **Pas d'invention** : l'avatar ne répond qu'à partir de votre CV et de vos notes, sans inventer d'expérience, de diplôme ou de chiffre.
-- **Permissions minimales** : l'extension n'agit que sur l'onglet où vous l'activez (`activeTab` + `scripting`), jamais sur tous les sites.
+- **Permissions minimales** : l'extension n'agit que sur l'onglet où vous l'activez (`activeTab` + `scripting`, `offscreen` pour le pipeline voix, `tabCapture` pour entendre le recruteur dans cet onglet), jamais sur tous les sites.
 
 ## Essayer le prototype (développeurs)
 

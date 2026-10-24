@@ -1,8 +1,8 @@
-// Audio côté page (monde MAIN de l'onglet de la plateforme) : contexte audio partagé et
-// lecture de la voix de l'avatar dans la piste du micro injecté. La capture du son du
-// recruteur est dans remote-audio.ts.
+// Audio côté page (monde MAIN de l'onglet de la plateforme) : lecture de la voix de
+// l'avatar dans la piste du micro injecté. Cette voix ne doit jamais être jouée sur les
+// haut-parleurs de l'onglet (ctx.destination) : le son de l'onglet est capturé comme son
+// du recruteur (tab-audio.ts).
 
-import { markLocal } from './local-tracks';
 import { createLogger } from './log';
 import { base64ToBuffer } from './pcm';
 
@@ -41,10 +41,12 @@ export function createVoiceOutput(
   const destination = ctx.createMediaStreamDestination();
   const track = destination.stream.getAudioTracks()[0];
   if (!track) throw new Error('aucune piste audio créée');
-  markLocal(track);
   let sources: AudioBufferSourceNode[] = [];
   let nextStart = 0;
   let current = -1;
+  const notifyStarted = (responseId: number, startAt: number) => {
+    setTimeout(() => onStarted(responseId, Date.now()), (startAt - ctx.currentTime) * 1000);
+  };
 
   return {
     track,
@@ -58,15 +60,15 @@ export function createVoiceOutput(
       const startAt = Math.max(ctx.currentTime + 0.02, nextStart);
       nextStart = startAt + buffer.duration;
       source.start(startAt);
+      // Reprise après un silence (début de réponse, ou phrase suivante arrivée en retard) :
+      // le document offscreen sait que l'avatar parle de nouveau (garde-fou d'écho).
+      const resumed = sources.length === 0;
       sources.push(source);
       if (responseId !== current) {
         current = responseId;
-        const delay = (startAt - ctx.currentTime) * 1000;
-        setTimeout(() => {
-          logTts(`début de la réponse ${responseId} dans le micro injecté`);
-          onStarted(responseId, Date.now());
-        }, delay);
+        logTts(`début de la réponse ${responseId} dans le micro injecté`);
       }
+      if (resumed) notifyStarted(responseId, startAt);
       source.addEventListener('ended', () => {
         // Source arrêtée par stop() : la réponse a été coupée, pas terminée.
         if (!sources.includes(source)) return;
