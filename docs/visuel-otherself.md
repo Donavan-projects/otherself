@@ -62,6 +62,15 @@ Ne pas le remplacer par « Avatar IA » ou une formulation générique.
 - Placé dans la zone de sécurité centrale qui survit aux recadrages des plateformes (4:3, carré, haut et bas coupés jusqu'à environ 21:9), comme validé sur Meet.
 - Sur une seule ligne, sans chevauchement avec le visage.
 
+### Résistance au zoom sur le visage
+
+Le cadrage automatique des plateformes (Framing sur Meet) zoome sur le visage détecté et coupe le bandeau de la zone de sécurité (constaté sur Meet avec la photo). Le bandeau doit survivre à un zoom centré sur le visage :
+
+- Prévoir une **version intégrée au personnage** : badge ou brassard au niveau du col, juste sous le menton, sans masquer le visage, portant le même texte (`bannerText`). Elle s'ajoute au bandeau de la zone de sécurité, sans le remplacer.
+- Comme le bandeau principal, elle est dessinée dans le canvas à chaque image, jamais en superposition DOM, et n'est pas désactivable.
+- Vérifier sa lisibilité dans une vignette zoomée sur le visage.
+- À l'étape 5, **tester si Meet détecte le visage cartoon et zoome dessus** (cadrage automatique activé côté A), et noter le résultat dans `CLAUDE.md`.
+
 ### Apparence
 
 - Fond jaune, texte noir suffisamment gras, contraste élevé.

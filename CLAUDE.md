@@ -4,7 +4,8 @@
 
 - **Étape 3 terminée : voie A (injection) retenue.** Testée sur Google Meet (compte A dans Chrome avec l'extension, compte B dans Brave) : image, bandeau et son arrivent chez B.
 - **Prochaine étape : étape 4, pipeline voix**, testé d'abord face à `rehearsal` (ouverte avec `?inject`). La voix générée remplacera le son de test (`lib/test-audio.ts`) comme piste du micro injecté (`createAudioTrack` de `installFakeGetUserMedia`).
-- **Prérequis actuel sur la plateforme** : autoriser caméra et micro pour le site dans les réglages du navigateur (cadenas de la barre d'adresse), puis activer l'extension sur l'onglet (popup → « Activer sur cet onglet »), puis couper et rallumer caméra et micro dans la plateforme pour qu'elle redemande les flux. Recharger l'onglet annule l'injection.
+- **Prérequis actuel sur la plateforme** : autoriser caméra et micro pour le site dans les réglages du navigateur (cadenas de la barre d'adresse), désactiver côté A le cadrage automatique de la plateforme (Meet : Paramètres → Vidéo → Cadrage / Framing), puis activer l'extension sur l'onglet (popup → « Activer sur cet onglet »), puis couper et rallumer caméra et micro dans la plateforme pour qu'elle redemande les flux. Recharger l'onglet annule l'injection.
+- **Cadrage automatique (confirmé sur Meet)** : il zoome sur le visage détecté dans l'image et coupe le bandeau de la zone de sécurité. Sans lui, image et bandeau passent entiers. Pas de correction sur la composition photo, remplacée à l'étape 5 ; la parade prévue (bandeau intégré au personnage) est décrite dans `docs/visuel-otherself.md`, section 3.
 - **Pivot (24/10/2026)** : le projet s'appelle désormais OtherSelf (ex-Contre-Recruteur ; le dossier du projet garde son nom pour ne pas changer l'identifiant de l'extension). Mission, règles 1, 2, 4 et étapes révisées ci-dessous.
 - Configuration locale : voir `docs/config.md`.
 
@@ -104,6 +105,7 @@ Ne pas commencer une étape avant que la précédente fonctionne.
 - Permission micro sans réglage manuel du site (solution B) : remplacer aussi `navigator.permissions.query` dans le script injecté pour répondre « granted » à `camera` et `microphone` (Meet ne demande pas le micro tant que la permission réelle n'est pas accordée). Aucune permission d'extension en plus ; Meet peut avoir gardé l'ancienne réponse en mémoire.
 - Vérifier `enumerateDevices` : Meet affichait « Speaker not found » avec la liste injectée (fausse caméra, faux micro, sorties audio réelles).
 - Popup avec Activer / Pause / Reprendre la main.
+- Cadrage automatique des plateformes (Framing sur Meet) : il zoome sur le visage et coupe le bandeau ; pour la démo, il est désactivé côté A. Pour le projet, garantir la visibilité du bandeau même avec ce zoom (au minimum la version intégrée au personnage de l'étape 5, et une consigne dans l'assistant).
 - Publication sur le Chrome Web Store, version Firefox, i18n complète, export intégré (enregistrement avec sous-titres).
 - Lien vers une explication des droits des candidats face aux décisions automatisées (RGPD, AI Act), à faire vérifier juridiquement.
 - Avertissement clair dans le README et l'assistant : utiliser OtherSelf dans une vraie candidature, c'est probablement renoncer au poste.
