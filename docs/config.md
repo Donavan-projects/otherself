@@ -12,6 +12,7 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | Champ | Formats | Rôle | Si absent |
 | --- | --- | --- | --- |
 | `photo` | jpg, png, webp | Photo de l'avatar (au moins 720 px conseillés) | Silhouette neutre, avertissement au build |
+| `debugSafeZone` | `true` / `false` | Débogage : dessine dans l'image le contour pointillé magenta de la zone de sécurité (visible aussi par l'interlocuteur sur la plateforme) | Désactivé |
 | `testAudio` | mp3, ogg, wav, webm, m4a | Son préenregistré joué en boucle par le micro injecté, en attendant la voix générée de l'étape 4 | **Bip de 440 Hz chaque seconde**, sans avertissement au build |
 
 > **Attention** : `testAudio` figure dans `config.example.json`, mais un `config.local.json` créé avant l'étape 3 ne l'a pas. Sans ce champ, l'injection envoie un bip à la place de ton enregistrement. Le log `[inject] aucun son préenregistré (testAudio)` dans la console de la page le signale.

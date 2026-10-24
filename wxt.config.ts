@@ -71,7 +71,9 @@ export default defineConfig({
       const photo = copy('photo', PHOTO_EXTENSIONS, 'photo');
       // Son préenregistré qui remplace le micro injecté, en attendant la voix de l'étape 4.
       const testAudio = copy('testAudio', AUDIO_EXTENSIONS, 'test-audio');
-      files.push({ relativeDest: 'local/avatar.json', contents: JSON.stringify({ photo, testAudio }) });
+      // Débogage : contour de la zone de sécurité dessiné dans l'image.
+      const debugSafeZone = config?.debugSafeZone === true;
+      files.push({ relativeDest: 'local/avatar.json', contents: JSON.stringify({ photo, testAudio, debugSafeZone }) });
     },
   },
 });

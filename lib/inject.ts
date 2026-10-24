@@ -2,7 +2,7 @@
 // le canvas de l'avatar comme caméra et la piste audio fournie comme micro, sous le nom
 // « Avatar IA – OtherSelf ». Sans API d'extension : tourne dans le monde MAIN d'un onglet.
 
-import { AvatarRenderer } from './avatar';
+import { AvatarRenderer, type AvatarOptions } from './avatar';
 import { createLogger } from './log';
 
 const FPS = 30;
@@ -12,6 +12,7 @@ const log = createLogger('inject');
 
 export interface FakeMediaSources {
   photo: ImageBitmap | null;
+  avatarOptions: AvatarOptions;
   /** Crée la piste du micro injecté, au premier appel de getUserMedia. */
   createAudioTrack: () => Promise<MediaStreamTrack>;
 }
@@ -88,12 +89,12 @@ function disguise(track: MediaStreamTrack, kind: InputKind): MediaStreamTrack {
 }
 
 async function createFakeTracks(sources: FakeMediaSources): Promise<FakeTracks> {
-  return { video: createVideoTrack(sources.photo), audio: await sources.createAudioTrack() };
+  return { video: createVideoTrack(sources.photo, sources.avatarOptions), audio: await sources.createAudioTrack() };
 }
 
-function createVideoTrack(photo: ImageBitmap | null): MediaStreamTrack {
+function createVideoTrack(photo: ImageBitmap | null, options: AvatarOptions): MediaStreamTrack {
   // Canvas hors DOM : la page ne voit que le flux, bandeau compris (règle 1).
-  const renderer = new AvatarRenderer(document.createElement('canvas'), photo);
+  const renderer = new AvatarRenderer(document.createElement('canvas'), photo, options);
   renderer.draw();
   const track = renderer.canvas.captureStream(FPS).getVideoTracks()[0];
   if (!track) throw new Error('captureStream n\'a fourni aucune piste vidéo');

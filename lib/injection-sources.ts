@@ -1,4 +1,4 @@
-// Photo et son sérialisés pour passer de l'extension au monde MAIN de l'onglet,
+// Photo, son et options sérialisés pour passer de l'extension au monde MAIN de l'onglet,
 // via les arguments de scripting.executeScript (pas de web_accessible_resources).
 
 export interface SerializedFile {
@@ -9,6 +9,7 @@ export interface SerializedFile {
 export interface SerializedSources {
   photo: SerializedFile | null;
   audio: SerializedFile | null;
+  debugSafeZone: boolean;
 }
 
 export function bytesToBase64(bytes: ArrayBuffer): string {

@@ -1,7 +1,7 @@
 // Banc d'essai de l'injection : simule l'activation de l'extension sur la page rehearsal
 // (ouverte avec ?inject) avant que la page n'appelle getUserMedia.
 
-import { loadConfiguredPhoto } from '@/lib/avatar';
+import { loadAvatarConfig } from '@/lib/avatar';
 import { installFakeGetUserMedia } from '@/lib/inject';
 import { createLogger } from '@/lib/log';
 import { createTestAudioTrack } from '@/lib/test-audio';
@@ -22,13 +22,13 @@ async function loadTestAudio(): Promise<ArrayBuffer | null> {
 
 export async function setupInjectionTest() {
   const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
-  const photo = await loadConfiguredPhoto().catch((error: unknown) => {
+  const { photo, options } = await loadAvatarConfig().catch((error: unknown) => {
     log(`photo indisponible : ${describe(error)}`);
-    return null;
+    return { photo: null, options: {} };
   });
   const audio = await loadTestAudio().catch((error: unknown) => {
     log(`son indisponible : ${describe(error)}`);
     return null;
   });
-  installFakeGetUserMedia({ photo, createAudioTrack: () => createTestAudioTrack(audio) });
+  installFakeGetUserMedia({ photo, avatarOptions: options, createAudioTrack: () => createTestAudioTrack(audio) });
 }

@@ -41,8 +41,13 @@ async function loadSources(): Promise<SerializedSources> {
   const config = (await (await fetch(localUrl('/local/avatar.json'))).json()) as {
     photo?: string | null;
     testAudio?: string | null;
+    debugSafeZone?: boolean;
   };
-  return { photo: await loadFile(config.photo), audio: await loadFile(config.testAudio) };
+  return {
+    photo: await loadFile(config.photo),
+    audio: await loadFile(config.testAudio),
+    debugSafeZone: config.debugSafeZone === true,
+  };
 }
 
 async function activate() {

@@ -38,7 +38,12 @@ export default defineContentScript({
           `installation (${frame} ${location.href}) : photo ${photo ? `${photo.width}x${photo.height}` : 'absente'}, ` +
             `son ${audio ? `${Math.round(audio.byteLength / 1024)} Ko` : 'absent (bip)'}`,
         );
-        installFakeGetUserMedia({ photo, createAudioTrack: () => createTestAudioTrack(audio) });
+        if (sources.debugSafeZone) log('débogage : contour de la zone de sécurité affiché');
+        installFakeGetUserMedia({
+          photo,
+          avatarOptions: { debugSafeZone: sources.debugSafeZone },
+          createAudioTrack: () => createTestAudioTrack(audio),
+        });
         return 'actif';
       },
     };

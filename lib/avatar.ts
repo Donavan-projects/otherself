@@ -10,8 +10,9 @@ export const AVATAR_HEIGHT = 720;
 export const BANNER_TEXT = 'Candidat automatisé, comme vous';
 
 // Zone de sécurité : survit à un recadrage central en 4:3, en carré (x 280 à 1000),
-// et à une coupe du haut et du bas jusqu'à environ 21:9 (vignettes Meet).
-// Toute l'image utile y tient : photo en haut, bandeau dessous, sans chevauchement.
+// et à une coupe du haut et du bas jusqu'à environ 21:9 (vignettes Meet, ~2:1 compris).
+// Le bloc utile (contenu en haut, bandeau dessous, sans chevauchement) y tient en entier,
+// centré verticalement. « Contenu » = la photo aujourd'hui, l'avatar cartoon à l'étape 5.
 const SAFE_ZONE = { left: 290, right: 990, top: 100, bottom: 610 };
 const BANNER_HEIGHT = 80;
 const BANNER_FONT_SIZE = 50;
@@ -21,32 +22,64 @@ const BANNER_PADDING_X = 14;
 // lettres hautes, lisibles dans une vignette de 320×180.
 const BANNER_MIN_SQUEEZE = 0.78;
 const BANNER_GAP = 14;
+// Hauteur maximale du contenu (bordure comprise) : laisse une marge en haut et en bas
+// de la zone de sécurité, au cas où la plateforme recadre plus que prévu.
+const CONTENT_MAX_HEIGHT = 346;
 const PHOTO_BORDER = 8;
+const PLACEHOLDER_ASPECT = 3 / 4;
 
-// Zone de la photo (bordure comprise), au-dessus du bandeau.
-const PHOTO_AREA = {
-  left: SAFE_ZONE.left,
-  top: SAFE_ZONE.top,
-  width: SAFE_ZONE.right - SAFE_ZONE.left,
-  height: SAFE_ZONE.bottom - BANNER_HEIGHT - BANNER_GAP - SAFE_ZONE.top,
-};
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface Composition {
+  /** Emplacement du contenu, bordure comprise. */
+  content: Rect;
+  banner: Rect;
+}
+
+/** Place le contenu (largeur / hauteur = aspect) et le bandeau dans la zone de sécurité. */
+export function composeLayout(aspect: number): Composition {
+  const safeWidth = SAFE_ZONE.right - SAFE_ZONE.left;
+  const safeHeight = SAFE_ZONE.bottom - SAFE_ZONE.top;
+  const maxHeight = Math.min(CONTENT_MAX_HEIGHT, safeHeight - BANNER_GAP - BANNER_HEIGHT);
+  const height = Math.round(Math.min(maxHeight, safeWidth / aspect));
+  const width = Math.round(Math.min(safeWidth, height * aspect));
+  const blockHeight = height + BANNER_GAP + BANNER_HEIGHT;
+  const top = Math.round(SAFE_ZONE.top + (safeHeight - blockHeight) / 2);
+  return {
+    content: { x: Math.round((AVATAR_WIDTH - width) / 2), y: top, width, height },
+    banner: { x: SAFE_ZONE.left, y: top + height + BANNER_GAP, width: safeWidth, height: BANNER_HEIGHT },
+  };
+}
+
+export interface AvatarOptions {
+  /** Dessine le contour de la zone de sécurité (debugSafeZone dans config.local.json). */
+  debugSafeZone?: boolean;
+}
 
 const log = createLogger('avatar');
 
 interface AvatarConfig {
   photo: string | null;
+  debugSafeZone?: boolean;
 }
 
 // Les fichiers de local/ sont générés au build : absents des chemins typés par WXT.
 const localUrl = (path: string) => new URL(path, browser.runtime.getURL('/')).href;
 
-/** Charge la photo déclarée dans config.local.json (copiée dans le build sous local/). */
-export async function loadConfiguredPhoto(): Promise<ImageBitmap | null> {
+/** Charge la photo et les options déclarées dans config.local.json (copiées dans le build sous local/). */
+export async function loadAvatarConfig(): Promise<{ photo: ImageBitmap | null; options: AvatarOptions }> {
   const configResponse = await fetch(localUrl('/local/avatar.json'));
   const config = (await configResponse.json()) as AvatarConfig;
+  const options: AvatarOptions = { debugSafeZone: config.debugSafeZone === true };
+  if (options.debugSafeZone) log('débogage : contour de la zone de sécurité affiché');
   if (!config.photo) {
     log('aucune photo configurée (config.local.json), silhouette affichée');
-    return null;
+    return { photo: null, options };
   }
   const photoResponse = await fetch(localUrl(config.photo));
   if (!photoResponse.ok) throw new Error(`photo introuvable : ${config.photo} (${photoResponse.status})`);
@@ -55,7 +88,7 @@ export async function loadConfiguredPhoto(): Promise<ImageBitmap | null> {
   if (Math.max(photo.width, photo.height) < AVATAR_HEIGHT) {
     log(`photo de petite taille, l'image risque d'être floue (au moins ${AVATAR_HEIGHT} px conseillés)`);
   }
-  return photo;
+  return { photo, options };
 }
 
 export class AvatarRenderer {
@@ -63,25 +96,30 @@ export class AvatarRenderer {
   private readonly ctx: CanvasRenderingContext2D;
   // Fond et photo ne changent pas : rendus une fois, recopiés à chaque image.
   private readonly base: OffscreenCanvas;
+  private readonly layout: Composition;
+  private readonly options: AvatarOptions;
 
-  constructor(canvas: HTMLCanvasElement, photo: ImageBitmap | null) {
+  constructor(canvas: HTMLCanvasElement, photo: ImageBitmap | null, options: AvatarOptions = {}) {
     canvas.width = AVATAR_WIDTH;
     canvas.height = AVATAR_HEIGHT;
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) throw new Error('contexte 2D indisponible');
     this.canvas = canvas;
     this.ctx = ctx;
-    this.base = renderBase(photo);
+    this.options = options;
+    this.layout = composeLayout(photo ? photo.width / photo.height : PLACEHOLDER_ASPECT);
+    this.base = renderBase(photo, this.layout.content);
   }
 
   /** Dessine une image complète. Le bandeau est toujours peint en dernier. */
   draw() {
     this.ctx.drawImage(this.base, 0, 0);
-    drawBanner(this.ctx);
+    if (this.options.debugSafeZone) drawSafeZone(this.ctx);
+    drawBanner(this.ctx, this.layout.banner);
   }
 }
 
-function renderBase(photo: ImageBitmap | null): OffscreenCanvas {
+function renderBase(photo: ImageBitmap | null, content: Rect): OffscreenCanvas {
   const base = new OffscreenCanvas(AVATAR_WIDTH, AVATAR_HEIGHT);
   const ctx = base.getContext('2d', { alpha: false });
   if (!ctx) throw new Error('contexte 2D hors écran indisponible');
@@ -90,9 +128,9 @@ function renderBase(photo: ImageBitmap | null): OffscreenCanvas {
 
   if (photo) {
     drawBlurredBackground(ctx, photo);
-    drawPhotoCard(ctx, photo);
+    drawPhotoCard(ctx, photo, content);
   } else {
-    drawPlaceholder(ctx);
+    drawPlaceholder(ctx, content);
   }
   return base;
 }
@@ -108,49 +146,59 @@ function drawBlurredBackground(ctx: OffscreenCanvasRenderingContext2D, photo: Im
   ctx.restore();
 }
 
-/** Photo entière, bordée de blanc comme un tirage découpé, dans la zone de la photo. */
-function drawPhotoCard(ctx: OffscreenCanvasRenderingContext2D, photo: ImageBitmap) {
-  const maxWidth = PHOTO_AREA.width - 2 * PHOTO_BORDER;
-  const maxHeight = PHOTO_AREA.height - 2 * PHOTO_BORDER;
-  const scale = Math.min(maxWidth / photo.width, maxHeight / photo.height);
-  const width = Math.round(photo.width * scale);
-  const height = Math.round(photo.height * scale);
-  const x = Math.round(PHOTO_AREA.left + (PHOTO_AREA.width - width) / 2);
-  const y = PHOTO_AREA.top + PHOTO_BORDER;
-
+/** Photo entière, bordée de blanc comme un tirage découpé, à l'emplacement du contenu. */
+function drawPhotoCard(ctx: OffscreenCanvasRenderingContext2D, photo: ImageBitmap, content: Rect) {
   ctx.save();
   ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
   ctx.shadowBlur = 24;
   ctx.shadowOffsetY = 6;
   ctx.fillStyle = '#fff';
-  ctx.fillRect(x - PHOTO_BORDER, y - PHOTO_BORDER, width + 2 * PHOTO_BORDER, height + 2 * PHOTO_BORDER);
+  ctx.fillRect(content.x, content.y, content.width, content.height);
   ctx.restore();
-  ctx.drawImage(photo, x, y, width, height);
+  // Photo entière dans le cadre intérieur, sans déformation.
+  const innerWidth = content.width - 2 * PHOTO_BORDER;
+  const innerHeight = content.height - 2 * PHOTO_BORDER;
+  const scale = Math.min(innerWidth / photo.width, innerHeight / photo.height);
+  const width = photo.width * scale;
+  const height = photo.height * scale;
+  ctx.drawImage(photo, content.x + (content.width - width) / 2, content.y + (content.height - height) / 2, width, height);
 }
 
 /** Silhouette neutre quand aucune photo n'est configurée. */
-function drawPlaceholder(ctx: OffscreenCanvasRenderingContext2D) {
+function drawPlaceholder(ctx: OffscreenCanvasRenderingContext2D, content: Rect) {
   ctx.fillStyle = '#2b2f36';
   ctx.fillRect(0, 0, AVATAR_WIDTH, AVATAR_HEIGHT);
-  const centerX = PHOTO_AREA.left + PHOTO_AREA.width / 2;
-  const bottom = PHOTO_AREA.top + PHOTO_AREA.height;
+  const centerX = content.x + content.width / 2;
+  const unit = content.height / 400;
   ctx.fillStyle = '#4a505a';
   ctx.beginPath();
-  ctx.arc(centerX, PHOTO_AREA.top + 140, 85, 0, Math.PI * 2);
+  ctx.arc(centerX, content.y + 140 * unit, 85 * unit, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(centerX, bottom, 170, 150, 0, Math.PI, 0);
+  ctx.ellipse(centerX, content.y + content.height, 170 * unit, 150 * unit, 0, Math.PI, 0);
   ctx.fill();
 }
 
+/** Débogage : contour pointillé de la zone de sécurité, sous le bandeau. */
+function drawSafeZone(ctx: CanvasRenderingContext2D) {
+  ctx.save();
+  ctx.strokeStyle = '#ff00ff';
+  ctx.lineWidth = 4;
+  ctx.setLineDash([16, 10]);
+  ctx.strokeRect(SAFE_ZONE.left, SAFE_ZONE.top, SAFE_ZONE.right - SAFE_ZONE.left, SAFE_ZONE.bottom - SAFE_ZONE.top);
+  ctx.fillStyle = '#ff00ff';
+  ctx.font = bannerFont(18);
+  ctx.textBaseline = 'top';
+  ctx.fillText('zone de sécurité (debugSafeZone)', SAFE_ZONE.left + 10, SAFE_ZONE.top + 8);
+  ctx.restore();
+}
+
 /**
- * Bandeau jaune bordé de noir, sur une ligne, sous la photo et sur toute la largeur
+ * Bandeau jaune bordé de noir, sur une ligne, sous le contenu et sur toute la largeur
  * de la zone de sécurité. Le texte est resserré horizontalement plutôt que réduit.
  */
-function drawBanner(ctx: CanvasRenderingContext2D) {
-  const width = SAFE_ZONE.right - SAFE_ZONE.left;
-  const x = SAFE_ZONE.left;
-  const y = SAFE_ZONE.bottom - BANNER_HEIGHT;
+function drawBanner(ctx: CanvasRenderingContext2D, banner: Rect) {
+  const { x, y, width } = banner;
   const maxTextWidth = width - 2 * (BANNER_BORDER + BANNER_PADDING_X);
   ctx.save();
   ctx.fillStyle = '#111';

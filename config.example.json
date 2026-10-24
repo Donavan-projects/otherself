@@ -1,4 +1,5 @@
 {
   "photo": "local/photo.jpg",
-  "testAudio": "local/test-audio.ogg"
+  "testAudio": "local/test-audio.ogg",
+  "debugSafeZone": false
 }
