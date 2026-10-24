@@ -1,6 +1,6 @@
 // Injection (voie A) : remplace getUserMedia et enumerateDevices pour que la page reçoive
 // le canvas de l'avatar comme caméra et la piste audio fournie comme micro, sous le nom
-// « Avatar IA – Contre-Recruteur ». Sans API d'extension : tourne dans le monde MAIN d'un onglet.
+// « Avatar IA – OtherSelf ». Sans API d'extension : tourne dans le monde MAIN d'un onglet.
 
 import { AvatarRenderer } from './avatar';
 import { createLogger } from './log';
@@ -22,9 +22,9 @@ interface FakeTracks {
 }
 
 // Nom affiché par la plateforme pour la caméra, le micro et les pistes injectées.
-export const DEVICE_LABEL = 'Avatar IA – Contre-Recruteur';
-const DEVICE_IDS = { videoinput: 'contre-recruteur-camera', audioinput: 'contre-recruteur-micro' } as const;
-const GROUP_ID = 'contre-recruteur';
+export const DEVICE_LABEL = 'Avatar IA – OtherSelf';
+const DEVICE_IDS = { videoinput: 'otherself-camera', audioinput: 'otherself-micro' } as const;
+const GROUP_ID = 'otherself';
 
 export function installFakeGetUserMedia(sources: FakeMediaSources) {
   // Patch du prototype : couvre aussi les appels qui ne passent pas par navigator.mediaDevices.

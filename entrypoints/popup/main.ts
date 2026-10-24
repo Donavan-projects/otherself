@@ -55,7 +55,7 @@ async function activate() {
   const results = await browser.scripting.executeScript({
     target,
     world: 'MAIN',
-    func: (serialized: SerializedSources) => window.__contreRecruteur?.install(serialized) ?? 'script absent',
+    func: (serialized: SerializedSources) => window.__otherSelf?.install(serialized) ?? 'script absent',
     args: [sources],
   });
   const frames = results.map((result) => `cadre ${result.frameId} : ${String(result.result)}`);

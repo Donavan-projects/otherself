@@ -9,7 +9,7 @@ import { createTestAudioTrack } from '@/lib/test-audio';
 
 declare global {
   interface Window {
-    __contreRecruteur?: { install(sources: SerializedSources): Promise<string> };
+    __otherSelf?: { install(sources: SerializedSources): Promise<string> };
   }
 }
 
@@ -21,12 +21,12 @@ export default defineContentScript({
   world: 'MAIN',
   main() {
     const frame = window === window.top ? 'cadre principal' : 'iframe';
-    if (window.__contreRecruteur) {
+    if (window.__otherSelf) {
       log(`script déjà présent (${frame} ${location.href})`);
       return;
     }
     let installed = false;
-    window.__contreRecruteur = {
+    window.__otherSelf = {
       async install(sources) {
         if (installed) return 'déjà actif';
         installed = true;
