@@ -2,21 +2,19 @@
 // (ouverte avec ?inject) avant que la page n'appelle getUserMedia.
 
 import { loadAvatarConfig } from '@/lib/avatar';
+import { loadDemoConfig, localUrl } from '@/lib/config';
 import { installFakeGetUserMedia } from '@/lib/inject';
 import { createLogger } from '@/lib/log';
 import { createTestAudioTrack } from '@/lib/test-audio';
 
 const log = createLogger('inject');
 
-// Les fichiers de local/ sont générés au build : absents des chemins typés par WXT.
-const localUrl = (path: string) => new URL(path, browser.runtime.getURL('/')).href;
-
 async function loadTestAudio(): Promise<ArrayBuffer | null> {
-  const config = (await (await fetch(localUrl('/local/avatar.json'))).json()) as { testAudio?: string | null };
-  if (!config.testAudio) return null;
-  const response = await fetch(localUrl(config.testAudio));
-  if (!response.ok) throw new Error(`son introuvable : ${config.testAudio} (${response.status})`);
-  log(`son préenregistré chargé : ${config.testAudio}`);
+  const { testAudio } = await loadDemoConfig();
+  if (!testAudio) return null;
+  const response = await fetch(localUrl(testAudio));
+  if (!response.ok) throw new Error(`son introuvable : ${testAudio} (${response.status})`);
+  log(`son préenregistré chargé : ${testAudio}`);
   return response.arrayBuffer();
 }
 

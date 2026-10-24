@@ -1,5 +1,14 @@
 {
   "photo": "local/photo.jpg",
   "testAudio": "local/test-audio.ogg",
-  "debugSafeZone": false
+  "debugSafeZone": false,
+  "language": "en",
+  "bannerText": "Automated candidate, just like you.",
+  "messageText": "The candidate would prefer to be interviewed by a human, and kindly asks for that option. In the meantime, I will answer your questions.",
+  "cv": "local/cv.md",
+  "openaiApiKey": "sk-proj-REMPLACER-PAR-VOTRE-CLE",
+  "voice": "en_US-ljspeech-medium",
+  "silenceMs": 800,
+  "sttModel": "gpt-live-transcribe",
+  "llmModel": "gpt-6-luna"
 }

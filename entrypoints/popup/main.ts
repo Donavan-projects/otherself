@@ -1,3 +1,4 @@
+import { loadDemoConfig, localUrl } from '@/lib/config';
 import { bytesToBase64, type SerializedFile, type SerializedSources } from '@/lib/injection-sources';
 import { createLogger } from '@/lib/log';
 
@@ -26,9 +27,6 @@ const status = (message: string) => {
   statusEl.textContent = message;
 };
 
-// Les fichiers de local/ sont générés au build : absents des chemins typés par WXT.
-const localUrl = (path: string) => new URL(path, browser.runtime.getURL('/')).href;
-
 async function loadFile(path: string | null | undefined): Promise<SerializedFile | null> {
   if (!path) return null;
   const response = await fetch(localUrl(path));
@@ -38,22 +36,30 @@ async function loadFile(path: string | null | undefined): Promise<SerializedFile
 }
 
 async function loadSources(): Promise<SerializedSources> {
-  const config = (await (await fetch(localUrl('/local/avatar.json'))).json()) as {
-    photo?: string | null;
-    testAudio?: string | null;
-    debugSafeZone?: boolean;
-  };
+  const config = await loadDemoConfig();
   return {
     photo: await loadFile(config.photo),
-    audio: await loadFile(config.testAudio),
-    debugSafeZone: config.debugSafeZone === true,
+    bannerText: config.bannerText,
+    debugSafeZone: config.debugSafeZone,
   };
+}
+
+/** Pipeline voix (VAD, transcription, LLM, Piper) : document offscreen, un seul à la fois. */
+async function ensureOffscreen() {
+  if (await browser.offscreen.hasDocument()) return 'déjà actif';
+  await browser.offscreen.createDocument({
+    url: 'offscreen.html',
+    reasons: [browser.offscreen.Reason.WORKERS],
+    justification: "Pipeline voix local de l'avatar (détection de parole, synthèse Piper en WebAssembly).",
+  });
+  return 'démarré';
 }
 
 async function activate() {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (tab?.id === undefined) throw new Error('aucun onglet actif');
   const sources = await loadSources();
+  const pipeline = await ensureOffscreen();
   // allFrames : seuls les cadres couverts par activeTab (même origine que l'onglet) sont atteints.
   const target = { tabId: tab.id, allFrames: true };
   await browser.scripting.executeScript({ target, world: 'MAIN', files: ['/content-scripts/content.js'] });
@@ -63,8 +69,10 @@ async function activate() {
     func: (serialized: SerializedSources) => window.__otherSelf?.install(serialized) ?? 'script absent',
     args: [sources],
   });
+  // Pont vers le pipeline voix : cadre principal seulement, monde isolé.
+  await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ['/content-scripts/bridge.js'] });
   const frames = results.map((result) => `cadre ${result.frameId} : ${String(result.result)}`);
-  status(`injection sur ${tab.url} (${results.length} cadre(s))\n${frames.join('\n')}`);
+  status(`injection sur ${tab.url} (${results.length} cadre(s))\n${frames.join('\n')}\npipeline voix : ${pipeline}`);
 }
 
 activateButton.addEventListener('click', () => {

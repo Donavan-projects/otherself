@@ -1,13 +1,12 @@
 // Rendu de l'avatar « carton » dans un canvas 1280×720 : photo de l'utilisateur
 // et bandeau incrusté. Sert aux deux voies (injection dans l'onglet ou page OBS).
 
+import { bannerTextOrDefault, loadDemoConfig, localUrl } from './config';
 import { createLogger } from './log';
 
 export const AVATAR_WIDTH = 1280;
 export const AVATAR_HEIGHT = 720;
 
-// Règle 1 : texte dessiné dans chaque image, jamais en superposition DOM.
-export const BANNER_TEXT = 'Candidat automatisé, comme vous';
 
 // Zone de sécurité : survit à un recadrage central en 4:3, en carré (x 280 à 1000),
 // et à une coupe du haut et du bas jusqu'à environ 21:9 (vignettes Meet, ~2:1 compris).
@@ -57,25 +56,19 @@ export function composeLayout(aspect: number): Composition {
 }
 
 export interface AvatarOptions {
+  /** Texte du bandeau (bannerText) ; vide ou absent : texte par défaut (règle 1). */
+  bannerText?: string;
   /** Dessine le contour de la zone de sécurité (debugSafeZone dans config.local.json). */
   debugSafeZone?: boolean;
 }
 
 const log = createLogger('avatar');
 
-interface AvatarConfig {
-  photo: string | null;
-  debugSafeZone?: boolean;
-}
-
-// Les fichiers de local/ sont générés au build : absents des chemins typés par WXT.
-const localUrl = (path: string) => new URL(path, browser.runtime.getURL('/')).href;
-
 /** Charge la photo et les options déclarées dans config.local.json (copiées dans le build sous local/). */
 export async function loadAvatarConfig(): Promise<{ photo: ImageBitmap | null; options: AvatarOptions }> {
-  const configResponse = await fetch(localUrl('/local/avatar.json'));
-  const config = (await configResponse.json()) as AvatarConfig;
-  const options: AvatarOptions = { debugSafeZone: config.debugSafeZone === true };
+  const config = await loadDemoConfig();
+  const options: AvatarOptions = { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone };
+  log(`bandeau : « ${config.bannerText} »`);
   if (options.debugSafeZone) log('débogage : contour de la zone de sécurité affiché');
   if (!config.photo) {
     log('aucune photo configurée (config.local.json), silhouette affichée');
@@ -98,6 +91,7 @@ export class AvatarRenderer {
   private readonly base: OffscreenCanvas;
   private readonly layout: Composition;
   private readonly options: AvatarOptions;
+  private readonly bannerText: string;
 
   constructor(canvas: HTMLCanvasElement, photo: ImageBitmap | null, options: AvatarOptions = {}) {
     canvas.width = AVATAR_WIDTH;
@@ -107,6 +101,7 @@ export class AvatarRenderer {
     this.canvas = canvas;
     this.ctx = ctx;
     this.options = options;
+    this.bannerText = bannerTextOrDefault(options.bannerText);
     this.layout = composeLayout(photo ? photo.width / photo.height : PLACEHOLDER_ASPECT);
     this.base = renderBase(photo, this.layout.content);
   }
@@ -115,7 +110,7 @@ export class AvatarRenderer {
   draw() {
     this.ctx.drawImage(this.base, 0, 0);
     if (this.options.debugSafeZone) drawSafeZone(this.ctx);
-    drawBanner(this.ctx, this.layout.banner);
+    drawBanner(this.ctx, this.layout.banner, this.bannerText);
   }
 }
 
@@ -197,7 +192,7 @@ function drawSafeZone(ctx: CanvasRenderingContext2D) {
  * Bandeau jaune bordé de noir, sur une ligne, sous le contenu et sur toute la largeur
  * de la zone de sécurité. Le texte est resserré horizontalement plutôt que réduit.
  */
-function drawBanner(ctx: CanvasRenderingContext2D, banner: Rect) {
+function drawBanner(ctx: CanvasRenderingContext2D, banner: Rect, text: string) {
   const { x, y, width } = banner;
   const maxTextWidth = width - 2 * (BANNER_BORDER + BANNER_PADDING_X);
   ctx.save();
@@ -209,17 +204,17 @@ function drawBanner(ctx: CanvasRenderingContext2D, banner: Rect) {
   let fontSize = BANNER_FONT_SIZE;
   ctx.font = bannerFont(fontSize);
   // Réduit la police seulement si le resserrement maximal ne suffit pas (police de repli).
-  while (fontSize > 24 && ctx.measureText(BANNER_TEXT).width * BANNER_MIN_SQUEEZE > maxTextWidth) {
+  while (fontSize > 24 && ctx.measureText(text).width * BANNER_MIN_SQUEEZE > maxTextWidth) {
     fontSize -= 2;
     ctx.font = bannerFont(fontSize);
   }
-  const squeeze = Math.min(1, maxTextWidth / ctx.measureText(BANNER_TEXT).width);
+  const squeeze = Math.min(1, maxTextWidth / ctx.measureText(text).width);
   ctx.fillStyle = '#111';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.translate(AVATAR_WIDTH / 2, y + BANNER_HEIGHT / 2 + 2);
   ctx.scale(squeeze, 1);
-  ctx.fillText(BANNER_TEXT, 0, 0);
+  ctx.fillText(text, 0, 0);
   ctx.restore();
 }
 
