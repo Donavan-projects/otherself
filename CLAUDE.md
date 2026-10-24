@@ -4,8 +4,9 @@
 
 - **Étape 3 terminée : voie A (injection) retenue.** Testée sur Google Meet (compte A dans Chrome avec l'extension, compte B dans Brave) : image, bandeau et son arrivent chez B.
 - **Étape 4, pipeline voix : codée, à tester sur Meet** (A dans Chrome avec l'extension, B dans Brave joue le recruteur). Choix validés : transcription en flux `gpt-live-transcribe` (session Realtime, clé éphémère créée par l'extension), LLM `gpt-6-luna` en streaming sans raisonnement, Piper en WebAssembly dans un document offscreen, langue `en` pour la démo. Vérifié en headless : capture des pistes WebRTC distantes, VAD Silero, synthèse Piper, lecture dans le micro injecté. **Non vérifié** (pas de clé ici) : appels OpenAI (transcription et LLM) et latence de bout en bout.
+- **Premier test Meet de l'étape 4 (24/10/2026)** : le pipeline démarre, mais le son du recruteur n'arrivait jamais (aucune connexion WebRTC vue par le remplacement de `setRemoteDescription`). Corrigé sans permission en plus : connexions existantes découvertes au premier appel d'une de leurs méthodes (Meet appelle `getStats` en continu), secours par les éléments `<audio>`/`<video>` et les sources Web Audio de la page, pistes locales (micro injecté, voix de l'avatar, partage d'écran, son fabriqué par la page) toujours écartées ; logs de chaque connexion et piste, bilan toutes les 15 s. L'ouverture attend la fin de la première prise de parole du recruteur et que la plateforme ait demandé le micro, puis n'est jouée qu'une fois par entretien (rejouée seulement si elle a été coupée, ou sur une nouvelle page). Vérifié en headless (connexion créée avant l'activation, son lu par un `<audio>`) ; **à revérifier sur Meet**.
 - **Voix** : `en_US-ljspeech-high` est trop lente en WebAssembly sur la machine de référence (1,25 à 2,7 × temps réel) ; démo avec `en_US-ljspeech-medium` (féminine) ou `en_US-joe-medium` (masculine). Détails et licences : `docs/config.md`.
-- **Prérequis actuel sur la plateforme** : autoriser caméra et micro pour le site dans les réglages du navigateur (cadenas de la barre d'adresse), désactiver côté A le cadrage automatique de la plateforme (Meet : Paramètres → Vidéo → Cadrage / Framing), puis activer l'extension sur l'onglet **avant de rejoindre la réunion** (popup → « Activer sur cet onglet » ; la capture du son du recruteur doit être en place avant que la plateforme ne crée sa connexion WebRTC), puis couper et rallumer caméra et micro dans la plateforme pour qu'elle redemande les flux. Recharger l'onglet annule l'injection.
+- **Prérequis actuel sur la plateforme** : autoriser caméra et micro pour le site dans les réglages du navigateur (cadenas de la barre d'adresse), désactiver côté A le cadrage automatique de la plateforme (Meet : Paramètres → Vidéo → Cadrage / Framing), puis activer l'extension sur l'onglet, de préférence **avant de rejoindre la réunion** (popup → « Activer sur cet onglet » ; une connexion WebRTC déjà créée est rattrapée, mais plus tard), puis couper et rallumer caméra et micro dans la plateforme pour qu'elle redemande les flux. Recharger l'onglet annule l'injection.
 - **Cadrage automatique (confirmé sur Meet)** : il zoome sur le visage détecté dans l'image et coupe le bandeau de la zone de sécurité. Sans lui, image et bandeau passent entiers. Pas de correction sur la composition photo, remplacée à l'étape 5 ; la parade prévue (bandeau intégré au personnage) est décrite dans `docs/visuel-otherself.md`, section 3.
 - **Pivot (24/10/2026)** : le projet s'appelle désormais OtherSelf (ex-Contre-Recruteur ; le dossier du projet garde son nom pour ne pas changer l'identifiant de l'extension). Mission, règles 1, 2, 4 et étapes révisées ci-dessous.
 - Configuration locale : voir `docs/config.md`.
@@ -56,7 +57,7 @@ son du recruteur (piste audio distante de la page)
 - TypeScript strict, extension Manifest V3.
 - WXT pour une base de code unique Chromium (Chrome, Edge, Brave, Opera) + Firefox.
 - Pas de backend : les appels partent directement de l'extension (document offscreen). Démo : clé API dans `config.local.json` ; projet : `chrome.storage.local`.
-- Son du recruteur : pistes audio distantes de `RTCPeerConnection` dans la page (monde MAIN), jamais le micro de l'utilisateur ni la voix de l'avatar ; relayées au document offscreen par un pont en monde isolé (`bridge.content.ts`).
+- Son du recruteur : pistes audio reçues par `RTCPeerConnection` dans la page (monde MAIN), avec en secours les flux lus par la page, jamais le micro de l'utilisateur ni la voix de l'avatar (pistes locales marquées et écartées) ; relayées au document offscreen par un pont en monde isolé (`bridge.content.ts`).
 - Machine de référence modeste (16 Go RAM, GPU 4 Go ancien) : rien de lourd ne tourne en local dans le navigateur sauf VAD, TTS Piper et le canvas de l'avatar.
 
 ## Structure prévue
@@ -75,7 +76,9 @@ lib/
   vad.ts  stt.ts  llm.ts  tts.ts  avatar.ts  prompt.ts
   conversation.ts      # tour de parole, ouverture (révélation + messageText), latence
   config.ts            # lecture de local/config.json (généré depuis config.local.json)
-  page-audio.ts        # monde MAIN : pistes WebRTC distantes, lecture de la voix
+  page-audio.ts        # monde MAIN : contexte audio, lecture de la voix dans le micro injecté
+  remote-audio.ts      # monde MAIN : capture du son du recruteur (pistes reçues uniquement)
+  local-tracks.ts      # monde MAIN : pistes locales, jamais capturées
   bridge-messages.ts  pcm.ts
   inject.ts            # remplacement getUserMedia / enumerateDevices (monde MAIN)
   injection-sources.ts # photo et son sérialisés pour le monde MAIN

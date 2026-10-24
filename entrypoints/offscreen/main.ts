@@ -1,5 +1,6 @@
 // Document offscreen : fait tourner le pipeline voix (VAD, transcription, LLM, Piper)
-// pour l'onglet activé. Créé par le popup ; reçoit le son du recruteur et renvoie la voix
+// pour l'onglet activé. Un seul document offscreen par extension (garanti par Chrome),
+// donc un seul pipeline ; un seul onglet relié à la fois (le dernier activé). Créé par le popup ; reçoit le son du recruteur et renvoie la voix
 // de l'avatar par le pont (bridge.content.ts). Ses logs sont recopiés dans la console de
 // la page de la plateforme.
 
@@ -25,14 +26,35 @@ console.log = (...args: unknown[]) => {
 const log = createLogger('llm');
 let conversation: Conversation | null = null;
 let warnedNotReady = false;
+let micReady = false;
+let connectionCount = 0;
+/** Page (document) de la plateforme reliée en dernier : une autre page = un autre entretien. */
+let currentPage: string | undefined;
 
 browser.runtime.onConnect.addListener((connected) => {
   if (connected.name !== PORT_NAME) return;
-  port?.disconnect();
+  connectionCount += 1;
+  const sender = connected.sender as (Browser.runtime.MessageSender & { documentId?: string }) | undefined;
+  const page = sender?.documentId ?? sender?.url;
+  const samePage = page !== undefined && page === currentPage;
+  const previous = port;
   port = connected;
-  log(`onglet relié au pipeline voix${conversation ? '' : ' (pipeline en cours de chargement)'}`);
+  previous?.disconnect();
+  currentPage = page;
+  log(
+    `onglet ${sender?.tab?.id ?? '?'} relié au pipeline voix (connexion n°${connectionCount}, ` +
+      `${samePage ? 'même page qu’avant' : connectionCount > 1 ? 'nouvelle page ou onglet rechargé' : 'première page'}` +
+      `${previous ? ', connexion précédente fermée' : ''}) ; pipeline unique ${conversation ? 'déjà prêt' : 'en cours de chargement'}`,
+  );
+  micReady = false;
+  conversation?.setMicReady(false);
+  if (!samePage) conversation?.reset('nouvelle page de la plateforme');
   connected.onMessage.addListener((message: FromPage) => {
     switch (message.type) {
+      case 'mic-ready':
+        micReady = true;
+        conversation?.setMicReady(true);
+        break;
       case 'audio':
         if (conversation) {
           conversation.onAudio(new Int16Array(base64ToBuffer(message.pcm)), message.at);
@@ -69,6 +91,7 @@ async function start() {
       post({ type: 'speak', responseId, pcm: bufferToBase64(audio.samples.buffer), sampleRate: audio.sampleRate }),
     stop: () => post({ type: 'stop' }),
   });
+  conversation.setMicReady(micReady);
   log('pipeline voix prêt : en attente du recruteur');
 }
 

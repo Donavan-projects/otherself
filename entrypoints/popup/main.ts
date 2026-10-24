@@ -46,12 +46,18 @@ async function loadSources(): Promise<SerializedSources> {
 
 /** Pipeline voix (VAD, transcription, LLM, Piper) : document offscreen, un seul à la fois. */
 async function ensureOffscreen() {
-  if (await browser.offscreen.hasDocument()) return 'déjà actif';
-  await browser.offscreen.createDocument({
-    url: 'offscreen.html',
-    reasons: [browser.offscreen.Reason.WORKERS],
-    justification: "Pipeline voix local de l'avatar (détection de parole, synthèse Piper en WebAssembly).",
-  });
+  if (await browser.offscreen.hasDocument()) return 'déjà actif (pipeline unique, relié à cet onglet)';
+  try {
+    await browser.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: [browser.offscreen.Reason.WORKERS],
+      justification: "Pipeline voix local de l'avatar (détection de parole, synthèse Piper en WebAssembly).",
+    });
+  } catch (error) {
+    // Chrome refuse un second document offscreen : celui qui existe sert.
+    if (await browser.offscreen.hasDocument()) return 'déjà actif (pipeline unique, relié à cet onglet)';
+    throw error;
+  }
   return 'démarré';
 }
 

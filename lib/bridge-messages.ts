@@ -9,11 +9,15 @@ export const PAGE_TAG = '__otherSelfBridge';
 export type FromPage =
   /** Son du recruteur : PCM 16 bits mono à 24 kHz. */
   | { type: 'audio'; pcm: string; at: number }
+  /** La plateforme a demandé le micro : la voix de l'avatar peut être entendue. */
+  | { type: 'mic-ready' }
   | { type: 'playback-started'; responseId: number; at: number }
   | { type: 'playback-idle'; responseId: number };
 
 /** De l'extension vers la page. */
 export type ToPage =
+  /** Pont tout juste relié : la page renvoie son état (mic-ready). */
+  | { type: 'hello' }
   /** Voix de l'avatar : PCM float 32 bits mono. */
   | { type: 'speak'; responseId: number; pcm: string; sampleRate: number }
   | { type: 'stop' };

@@ -1,6 +1,8 @@
 // Orchestration du tour de parole, dans le document offscreen :
 // son du recruteur → VAD → transcription → LLM en streaming → Piper phrase par phrase
 // → page (micro injecté). Ne parle jamais pendant que le recruteur parle.
+// L'ouverture (révélation puis messageText) part à la fin de la première prise de parole
+// du recruteur, sans attendre la transcription, puis vient la réponse à sa question.
 
 import type { DemoConfig } from './config';
 import { streamReply, type ChatMessage } from './llm';
@@ -37,6 +39,10 @@ interface Response {
   includesOpening: boolean;
   openingSent: boolean;
   played: boolean;
+  /** Au moins une phrase de la réponse elle-même (hors ouverture) est partie. */
+  answerSent: boolean;
+  /** Tout a été envoyé à la page (ou abandonné). */
+  finished: boolean;
   timings: { transcript?: number; firstToken?: number; firstAudio?: number };
 }
 
@@ -48,6 +54,9 @@ export class Conversation {
   private capturing = false;
   private current: Response | null = null;
   private nextId = 0;
+  /** La plateforme a demandé le micro : sinon la page ignorerait la voix. */
+  private micReady = false;
+  private waitingForMicLogged = false;
   /** Règle 2 : vrai seulement quand la révélation a été entièrement prononcée. */
   private revealed = false;
   /** Question restée sans réponse audible (recruteur qui reprend la parole). */
@@ -67,10 +76,12 @@ export class Conversation {
     const opening = openingText(config.language, config.messageText);
     this.opening = opening;
     this.system = systemPrompt(config.language, opening, cv);
-    // Ouverture synthétisée d'avance, phrase après phrase : elle part sans attendre le LLM.
+    // Ouverture synthétisée d'avance, phrase après phrase ; elle n'est jouée qu'une fois le
+    // recruteur présent (fin de sa première prise de parole).
     this.openingAudio = (async () => {
       const audio: SpeechAudio[] = [];
       for (const sentence of splitSentences(opening)) audio.push(await voice.synthesize(sentence));
+      logTts(`ouverture prête (${audio.length} phrase(s)), pas encore jouée : en attente de la première prise de parole du recruteur`);
       return audio;
     })();
   }
@@ -84,6 +95,25 @@ export class Conversation {
     log(`ouverture : « ${conversation.opening} »`);
     void conversation.ensureTranscriber();
     return conversation;
+  }
+
+  setMicReady(ready: boolean) {
+    if (ready === this.micReady) return;
+    this.micReady = ready;
+    log(ready ? 'micro injecté prêt sur la plateforme' : 'en attente du micro injecté (la plateforme ne l’a pas encore demandé)');
+  }
+
+  /** Nouvelle page de la plateforme (autre onglet ou onglet rechargé) : nouvel entretien. */
+  reset(reason: string) {
+    this.interrupt(reason);
+    this.history.length = 0;
+    this.carried = '';
+    this.preroll = [];
+    this.prerollSamples = 0;
+    this.capturing = false;
+    this.transcriber?.clear();
+    if (this.revealed || this.nextId > 0) log(`nouvel entretien (${reason}) : historique effacé, l’ouverture sera rejouée`);
+    this.revealed = false;
   }
 
   private ensureTranscriber(): Promise<void> {
@@ -128,24 +158,57 @@ export class Conversation {
     });
   }
 
-  private async onSpeechEnd(lastVoiceAt: number) {
-    this.capturing = false;
-    const endDetectedAt = Date.now();
+  private async transcribe(endDetectedAt: number): Promise<string> {
+    if (!this.transcriber) {
+      logStt('aucune session de transcription ouverte : prise de parole perdue');
+      return '';
+    }
     let text = '';
     try {
-      text = (await this.transcriber?.commit()) ?? '';
+      text = await this.transcriber.commit();
     } catch (error) {
       logStt(`erreur : ${error instanceof Error ? error.message : String(error)}`);
     }
-    const transcriptAt = Date.now();
-    logStt(`transcription en ${transcriptAt - endDetectedAt} ms après détection de fin : « ${text} »`);
-    const question = [this.carried, text].filter(Boolean).join(' ').trim();
-    if (!question || this.vad.isSpeaking) {
-      this.carried = question;
+    logStt(`transcription en ${Date.now() - endDetectedAt} ms après détection de fin : « ${text} »`);
+    return text;
+  }
+
+  private async onSpeechEnd(lastVoiceAt: number) {
+    this.capturing = false;
+    const endDetectedAt = Date.now();
+    const transcript = this.transcribe(endDetectedAt);
+
+    if (!this.micReady) {
+      if (!this.waitingForMicLogged) {
+        this.waitingForMicLogged = true;
+        log('le recruteur a parlé, mais la plateforme n’a pas encore demandé le micro : ouverture et réponse en attente');
+      }
+      this.carried = join(this.carried, await transcript);
       return;
     }
+
+    const response = this.startResponse(lastVoiceAt);
+    // Règle 2 : l'ouverture part tout de suite (déjà synthétisée), avant toute réponse.
+    const opening = response.includesOpening ? this.sendOpening(response) : Promise.resolve();
+    const text = await transcript;
+    response.timings.transcript = Date.now() - lastVoiceAt;
+    if (response.controller.signal.aborted) {
+      // Le recruteur a repris la parole pendant la transcription : question gardée pour la suite.
+      this.carried = join(this.carried, text);
+      return;
+    }
+    const question = join(this.carried, text);
     this.carried = '';
-    void this.respond(question, lastVoiceAt, transcriptAt);
+    response.question = question;
+    if (!question || this.vad.isSpeaking) {
+      this.carried = question;
+      await opening;
+      response.finished = true;
+      // Rien n'a été envoyé : aucune fin de lecture ne viendra libérer ce tour.
+      if (!response.includesOpening && this.current === response) this.current = null;
+      return;
+    }
+    await this.answer(response, question, opening);
   }
 
   private interrupt(reason: string) {
@@ -154,34 +217,42 @@ export class Conversation {
     response.controller.abort();
     this.link.stop();
     this.current = null;
-    // Rien n'a été entendu : la question sera reprise avec la suite du recruteur.
-    if (!response.played) this.carried = [response.question, this.carried].filter(Boolean).join(' ');
+    // Pas encore de réponse entendue : la question sera reprise avec la suite du recruteur.
+    if (!response.answerSent) this.carried = join(response.question, this.carried);
     log(`réponse ${response.id} interrompue : ${reason}`);
   }
 
-  private async respond(question: string, questionEndAt: number, transcriptAt: number) {
+  private startResponse(questionEndAt: number): Response {
     const response: Response = {
       id: (this.nextId += 1),
       controller: new AbortController(),
       questionEndAt,
-      question,
+      question: '',
       includesOpening: !this.revealed,
       openingSent: false,
       played: false,
-      timings: { transcript: transcriptAt - questionEndAt },
+      answerSent: false,
+      finished: false,
+      timings: {},
     };
     this.current = response;
-    const { signal } = response.controller;
+    return response;
+  }
 
-    // Règle 2 : l'ouverture (révélation puis messageText) passe avant toute réponse.
-    if (response.includesOpening) {
-      for (const audio of await this.openingAudio) {
-        if (signal.aborted) return;
-        this.send(response, audio);
-      }
-      response.openingSent = true;
+  /** Révélation puis messageText, déjà synthétisés. Rejouée en entier si elle a été coupée. */
+  private async sendOpening(response: Response) {
+    const audio = await this.openingAudio;
+    log(`ouverture jouée (réponse ${response.id}) : révélation${this.config.messageText ? ' puis message' : ''}`);
+    for (const chunk of audio) {
+      if (response.controller.signal.aborted) return;
+      this.send(response, chunk);
     }
+    response.openingSent = true;
+  }
 
+  private async answer(response: Response, question: string, opening: Promise<void>) {
+    const { signal } = response.controller;
+    const { questionEndAt } = response;
     const messages: ChatMessage[] = [
       { role: 'system', content: this.system },
       ...this.history.slice(-MAX_HISTORY_MESSAGES),
@@ -190,7 +261,10 @@ export class Conversation {
     log(`question envoyée au LLM (${this.config.llmModel}) : « ${question} »`);
     const sentences: string[] = [];
     const queue: { wake: (() => void) | null; done: boolean } = { wake: null, done: false };
-    const speaker = this.speakSentences(response, sentences, () => queue.done, (resolve) => (queue.wake = resolve));
+    // La réponse ne part qu'après l'ouverture ; le LLM, lui, n'attend pas.
+    const speaker = opening.then(() =>
+      this.speakSentences(response, sentences, () => queue.done, (resolve) => (queue.wake = resolve)),
+    );
 
     let buffer = '';
     let queued = 0;
@@ -223,6 +297,7 @@ export class Conversation {
       queue.wake?.();
     }
     await speaker;
+    response.finished = true;
   }
 
   /** Synthétise et envoie les phrases dans l'ordre, au fur et à mesure qu'elles arrivent. */
@@ -242,17 +317,18 @@ export class Conversation {
       }
       const audio = await this.voice.synthesize(sentence);
       if (signal.aborted) return;
-      this.send(response, audio);
+      if (this.send(response, audio)) response.answerSent = true;
     }
   }
 
-  private send(response: Response, audio: SpeechAudio) {
+  private send(response: Response, audio: SpeechAudio): boolean {
     if (this.vad.isSpeaking) {
       this.interrupt('le recruteur parle');
-      return;
+      return false;
     }
     if (response.timings.firstAudio === undefined) response.timings.firstAudio = Date.now() - response.questionEndAt;
     this.link.speak(response.id, audio);
+    return true;
   }
 
   /** La page a commencé à jouer la réponse : c'est la latence perçue par le recruteur. */
@@ -275,10 +351,13 @@ export class Conversation {
     if (response?.id !== responseId) return;
     if (response.includesOpening && response.openingSent && !this.revealed) {
       this.revealed = true;
-      logTts('révélation entièrement prononcée');
+      logTts('révélation entièrement prononcée (elle ne sera plus jouée dans cet entretien)');
     }
+    if (response.finished) this.current = null;
   }
 }
+
+const join = (...parts: string[]) => parts.filter(Boolean).join(' ').trim();
 
 function splitSentences(text: string): string[] {
   const [sentences, rest] = takeSentences(text, MAX_CHUNK_CHARS);
