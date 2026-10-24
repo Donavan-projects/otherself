@@ -1,9 +1,9 @@
 {
   "extName": {
-    "message": "Contre-Recruteur"
+    "message": "OtherSelf"
   },
   "extDescription": {
-    "message": "Satirical extension: when the recruiter is automated, a self-declared AI avatar answers on your behalf."
+    "message": "Facing an automated interview you find unfair? Answer with your own AI avatar, clearly identified as such."
   },
   "popupOpenRehearsal": {
     "message": "Open rehearsal"

@@ -1,9 +1,9 @@
 {
   "extName": {
-    "message": "Contre-Recruteur"
+    "message": "OtherSelf"
   },
   "extDescription": {
-    "message": "Extension satirique : face à un recruteur automatisé, un avatar IA déclaré répond à votre place."
+    "message": "Face à un entretien automatisé que vous jugez injuste, répondez par votre propre avatar IA, clairement identifié."
   },
   "popupOpenRehearsal": {
     "message": "Ouvrir la répétition"

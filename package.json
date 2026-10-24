@@ -1,6 +1,6 @@
 {
-  "name": "contre-recruteur",
-  "description": "Extension satirique : un avatar IA déclaré répond à un recruteur automatisé.",
+  "name": "otherself",
+  "description": "Extension OtherSelf : répondre à un entretien automatisé par son propre avatar IA, clairement identifié.",
   "private": true,
   "version": "0.0.1",
   "type": "module",
