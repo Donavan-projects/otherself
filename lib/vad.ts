@@ -65,6 +65,11 @@ export class Vad {
     return this.speaking;
   }
 
+  /** Durée de parole de la prise de parole en cours, du premier au dernier son (hors silence d'attente). */
+  get speechMs() {
+    return this.speaking ? this.lastVoiceAt - this.firstVoiceAt : 0;
+  }
+
   /** Ajoute de l'audio à 16 kHz ; traité dans l'ordre, trame par trame. */
   push(samples: Float32Array, receivedAt: number) {
     this.queue = this.queue.then(() => this.process(samples, receivedAt)).catch((error: unknown) => {

@@ -9,6 +9,16 @@ const DISCLOSURE: Record<Language, string> = {
   fr: "Bonjour. Avant de commencer, je tiens à être transparent : je suis un avatar IA, qui répond au nom du candidat, uniquement à partir de son CV et de ses notes.",
 };
 
+// Règle 2 : rappel court quand l'ouverture a déjà été coupée deux fois (écho, interruptions).
+const SHORT_DISCLOSURE: Record<Language, string> = {
+  en: 'As a reminder, I am an AI avatar answering on behalf of the candidate.',
+  fr: 'Pour rappel, je suis un avatar IA qui répond au nom du candidat.',
+};
+
+export function shortDisclosureText(language: Language): string {
+  return SHORT_DISCLOSURE[language];
+}
+
 const LANGUAGE_NAME: Record<Language, string> = { en: 'English', fr: 'French' };
 
 /** Ouverture : révélation, puis la déclaration du candidat (messageText) si elle existe. */

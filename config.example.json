@@ -9,6 +9,7 @@
   "openaiApiKey": "sk-proj-REMPLACER-PAR-VOTRE-CLE",
   "voice": "en_US-ljspeech-medium",
   "silenceMs": 800,
+  "bargeInMs": 600,
   "sttModel": "gpt-live-transcribe",
   "llmModel": "gpt-6-luna"
 }

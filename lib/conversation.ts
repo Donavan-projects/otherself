@@ -8,7 +8,7 @@ import type { DemoConfig } from './config';
 import { streamReply, type ChatMessage } from './llm';
 import { createLogger } from './log';
 import { int16ToFloat, resample } from './pcm';
-import { openingText, systemPrompt } from './prompt';
+import { openingText, shortDisclosureText, systemPrompt } from './prompt';
 import { createTranscriber, STT_SAMPLE_RATE, type Transcriber } from './stt';
 import type { PiperVoice, SpeechAudio } from './tts';
 import { Vad, VAD_SAMPLE_RATE } from './vad';
@@ -25,6 +25,13 @@ const MAX_HISTORY_MESSAGES = 12;
 const MAX_CHUNK_CHARS = 160;
 /** Premier morceau d'une réponse plus court : sa synthèse retarde le début de la réponse. */
 const FIRST_CHUNK_CHARS = 60;
+/** L'ouverture complète est jouée au plus deux fois (rejouée une fois si elle a été coupée). */
+const MAX_OPENING_PLAYS = 2;
+/** Phrases de l'avatar gardées pour reconnaître leur écho dans la transcription. */
+const SPOKEN_MEMORY = 12;
+/** Part des mots d'une transcription déjà prononcés par l'avatar au-delà de laquelle c'est un écho. */
+const ECHO_WORD_RATIO = 0.7;
+const BARGE_IN_CHECK_MS = 50;
 
 /** Vers la page : lecture de la voix dans le micro injecté. */
 export interface PageLink {
@@ -60,6 +67,12 @@ export class Conversation {
   private waitingForMicLogged = false;
   /** Début (Date.now) de la voix de l'avatar en cours dans le micro injecté, sinon null. */
   private avatarSpeakingSince: number | null = null;
+  /** Prise de parole commencée par-dessus l'avatar, pas encore assez longue pour l'interrompre. */
+  private bargeIn: { timer: ReturnType<typeof setInterval>; confirmed: boolean } | null = null;
+  private openingPlays = 0;
+  private shortDisclosureAudio: Promise<SpeechAudio>;
+  /** Dernières phrases prononcées par l'avatar (détection d'écho). */
+  private readonly spoken: string[] = [];
   /** Règle 2 : vrai seulement quand la révélation a été entièrement prononcée. */
   private revealed = false;
   /** Question restée sans réponse audible (recruteur qui reprend la parole). */
@@ -87,13 +100,14 @@ export class Conversation {
       logTts(`ouverture prête (${audio.length} phrase(s)), pas encore jouée : en attente de la première prise de parole du recruteur`);
       return audio;
     })();
+    this.shortDisclosureAudio = this.openingAudio.then(() => voice.synthesize(shortDisclosureText(config.language)));
   }
 
   static async create(config: DemoConfig, voice: PiperVoice, cv: string, link: PageLink): Promise<Conversation> {
     const conversation = new Conversation(config, voice, cv, link);
     conversation.vad = await Vad.create(config.silenceMs, {
       onSpeechStart: (startedAt) => conversation.onSpeechStart(startedAt),
-      onSpeechEnd: (lastVoiceAt) => void conversation.onSpeechEnd(lastVoiceAt),
+      onSpeechEnd: (lastVoiceAt, durationMs) => void conversation.onSpeechEnd(lastVoiceAt, durationMs),
     });
     log(`ouverture : « ${conversation.opening} »`);
     void conversation.ensureTranscriber();
@@ -117,6 +131,10 @@ export class Conversation {
     this.transcriber?.clear();
     if (this.revealed || this.nextId > 0) log(`nouvel entretien (${reason}) : historique effacé, l’ouverture sera rejouée`);
     this.revealed = false;
+    this.openingPlays = 0;
+    this.spoken.length = 0;
+    if (this.bargeIn) clearInterval(this.bargeIn.timer);
+    this.bargeIn = null;
   }
 
   private ensureTranscriber(): Promise<void> {
@@ -151,16 +169,29 @@ export class Conversation {
   }
 
   private onSpeechStart(startedAt: number) {
-    // Garde-fou : la voix de l'avatar ne doit jamais revenir dans le son capturé.
     if (this.avatarSpeakingSince !== null) {
+      // Garde-fou : la voix de l'avatar ne doit jamais revenir dans le son capturé.
       logVad(
         `ALERTE : parole détectée pendant que l'avatar parle (${Date.now() - this.avatarSpeakingSince} ms après le début de sa voix). ` +
           'Soit le recruteur lui coupe la parole, soit la voix de l’avatar revient dans le son capturé ' +
-          '(micro de B sans casque, ou voix jouée dans l’onglet A). Si cela arrive à chaque réponse, c’est un écho.',
+          '(micro de B sans casque, ou haut-parleurs de A et B dans la même pièce). Si cela arrive à chaque réponse, c’est un écho.',
       );
+      // Seuil d'interruption : l'avatar ne s'arrête que si la parole dure vraiment (temps de
+      // parole mesuré par le VAD, hors silence d'attente) ; un écho bref ou un bruit ne le coupe pas.
+      const bargeIn = {
+        confirmed: false,
+        timer: setInterval(() => {
+          if (this.vad.speechMs < this.config.bargeInMs) return;
+          clearInterval(bargeIn.timer);
+          bargeIn.confirmed = true;
+          this.interrupt(`le recruteur parle par-dessus l’avatar depuis ${Math.round(this.vad.speechMs)} ms`);
+        }, BARGE_IN_CHECK_MS),
+      };
+      this.bargeIn = bargeIn;
+    } else if (this.current) {
+      // Ne jamais parler pendant que le recruteur parle : la réponse en préparation s'arrête.
+      this.interrupt(`le recruteur parle (${Date.now() - startedAt} ms après le début de sa phrase)`);
     }
-    // Ne jamais parler pendant que le recruteur parle : la réponse en cours s'arrête.
-    if (this.current) this.interrupt(`le recruteur parle (${Date.now() - startedAt} ms après le début de sa phrase)`);
     void this.ensureTranscriber().then(() => {
       for (const chunk of this.preroll) this.transcriber?.append(chunk);
       this.preroll = [];
@@ -184,10 +215,24 @@ export class Conversation {
     return text;
   }
 
-  private async onSpeechEnd(lastVoiceAt: number) {
+  private async onSpeechEnd(lastVoiceAt: number, durationMs: number) {
     this.capturing = false;
+    const bargeIn = this.bargeIn;
+    this.bargeIn = null;
+    if (bargeIn && !bargeIn.confirmed) {
+      clearInterval(bargeIn.timer);
+      this.transcriber?.clear();
+      logVad(
+        `parole de ${Math.round(durationMs)} ms par-dessus l’avatar, sous le seuil d’interruption (${this.config.bargeInMs} ms) : ignorée (écho ou bruit probable)`,
+      );
+      return;
+    }
     const endDetectedAt = Date.now();
-    const transcript = this.transcribe(endDetectedAt);
+    const transcript = this.transcribe(endDetectedAt).then((text) => {
+      if (!this.isEcho(text)) return text;
+      logStt(`transcription reprenant les mots de l’avatar : écho ignoré (« ${text} »)`);
+      return '';
+    });
 
     if (!this.micReady) {
       if (!this.waitingForMicLogged) {
@@ -234,6 +279,20 @@ export class Conversation {
     log(`réponse ${response.id} interrompue : ${reason}`);
   }
 
+  /** Vrai si la plupart des mots transcrits viennent d'être prononcés par l'avatar. */
+  private isEcho(text: string): boolean {
+    const words = (value: string) => value.toLowerCase().match(/\p{L}[\p{L}'’]*/gu) ?? [];
+    const heard = words(text);
+    if (heard.length < 3) return false;
+    const said = new Set(this.spoken.flatMap(words));
+    return heard.filter((word) => said.has(word)).length / heard.length >= ECHO_WORD_RATIO;
+  }
+
+  private remember(sentence: string) {
+    this.spoken.push(sentence);
+    if (this.spoken.length > SPOKEN_MEMORY) this.spoken.shift();
+  }
+
   private startResponse(questionEndAt: number): Response {
     const response: Response = {
       id: (this.nextId += 1),
@@ -251,10 +310,25 @@ export class Conversation {
     return response;
   }
 
-  /** Révélation puis messageText, déjà synthétisés. Rejouée en entier si elle a été coupée. */
+  /**
+   * Révélation puis messageText, déjà synthétisés. Coupée, elle est rejouée une fois ;
+   * ensuite (écho probable), seul un rappel court de la révélation précède les réponses.
+   */
   private async sendOpening(response: Response) {
-    const audio = await this.openingAudio;
-    log(`ouverture jouée (réponse ${response.id}) : révélation${this.config.messageText ? ' puis message' : ''}`);
+    let audio: SpeechAudio[];
+    if (this.openingPlays < MAX_OPENING_PLAYS) {
+      audio = await this.openingAudio;
+      this.openingPlays += 1;
+      this.remember(this.opening);
+      log(
+        `ouverture jouée (réponse ${response.id}, ${this.openingPlays === 1 ? 'première fois' : 'rejouée une fois, dernière'}) : ` +
+          `révélation${this.config.messageText ? ' puis message' : ''}`,
+      );
+    } else {
+      audio = [await this.shortDisclosureAudio];
+      this.remember(shortDisclosureText(this.config.language));
+      log(`ouverture déjà coupée ${MAX_OPENING_PLAYS} fois : rappel court de la révélation (réponse ${response.id})`);
+    }
     for (const chunk of audio) {
       if (response.controller.signal.aborted) return;
       this.send(response, chunk);
@@ -329,12 +403,16 @@ export class Conversation {
       }
       const audio = await this.voice.synthesize(sentence);
       if (signal.aborted) return;
-      if (this.send(response, audio)) response.answerSent = true;
+      if (this.send(response, audio)) {
+        response.answerSent = true;
+        this.remember(sentence);
+      }
     }
   }
 
   private send(response: Response, audio: SpeechAudio): boolean {
-    if (this.vad.isSpeaking) {
+    // Pendant le seuil d'interruption, l'avatar continue : la parole entendue peut être un écho.
+    if (this.vad.isSpeaking && !this.bargeIn) {
       this.interrupt('le recruteur parle');
       return false;
     }

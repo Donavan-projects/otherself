@@ -18,6 +18,8 @@ export interface DemoConfig {
   voice: string;
   /** Silence (ms) après lequel le recruteur est considéré comme ayant fini de parler. */
   silenceMs: number;
+  /** Parole continue (ms) par-dessus la voix de l'avatar nécessaire pour l'interrompre (anti-écho). */
+  bargeInMs: number;
   openaiApiKey: string;
   sttModel: string;
   llmModel: string;
@@ -36,6 +38,7 @@ const DEFAULTS: DemoConfig = {
   // « high » est trop lent en WebAssembly sur la machine de référence (mesuré : 1,25 à 2,7 × temps réel).
   voice: 'en_US-ljspeech-medium',
   silenceMs: 800,
+  bargeInMs: 600,
   openaiApiKey: '',
   sttModel: 'gpt-live-transcribe',
   llmModel: 'gpt-6-luna',
@@ -55,6 +58,7 @@ export async function loadDemoConfig(): Promise<DemoConfig> {
   config.bannerText = bannerTextOrDefault(raw.bannerText);
   config.language = raw.language === 'fr' ? 'fr' : 'en';
   config.silenceMs = Number(raw.silenceMs) > 0 ? Number(raw.silenceMs) : DEFAULTS.silenceMs;
+  config.bargeInMs = Number(raw.bargeInMs) >= 0 && raw.bargeInMs !== undefined ? Number(raw.bargeInMs) : DEFAULTS.bargeInMs;
   return config;
 }
 

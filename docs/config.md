@@ -21,6 +21,7 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | `openaiApiKey` | `sk-…` | Clé OpenAI (transcription et LLM) | Pipeline voix inactif, avertissement au build |
 | `voice` | identifiant Piper | Voix de l'avatar, téléchargée une seule fois depuis Hugging Face (voir ci-dessous) | `en_US-ljspeech-medium` |
 | `silenceMs` | millisecondes | Silence après lequel le recruteur est considéré comme ayant fini sa question | `800` |
+| `bargeInMs` | millisecondes | Parole continue du recruteur par-dessus la voix de l'avatar nécessaire pour l'interrompre. En dessous, la prise de parole est ignorée (écho ou bruit probable) | `600` |
 | `sttModel` | modèle OpenAI | Transcription en flux (session Realtime) | `gpt-live-transcribe` |
 | `llmModel` | modèle OpenAI | Réponses en streaming, sans raisonnement | `gpt-6-luna` |
 | `debugSafeZone` | `true` / `false` | Débogage : dessine dans l'image le contour pointillé magenta de la zone de sécurité (visible aussi par l'interlocuteur sur la plateforme) | Désactivé |

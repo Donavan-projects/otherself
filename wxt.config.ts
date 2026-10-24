@@ -22,6 +22,7 @@ const VENDOR_FILES: Record<string, string> = {
 // Champs simples recopiés tels quels dans local/config.json (voir lib/config.ts et docs/config.md).
 const PASSTHROUGH_FIELDS = [
   'debugSafeZone',
+  'bargeInMs',
   'bannerText',
   'messageText',
   'language',
