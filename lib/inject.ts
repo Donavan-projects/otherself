@@ -3,6 +3,7 @@
 // « Avatar IA – OtherSelf ». Sans API d'extension : tourne dans le monde MAIN d'un onglet.
 
 import { AvatarRenderer, type AvatarOptions } from './avatar';
+import { markLocal } from './local-tracks';
 import { createLogger } from './log';
 
 const FPS = 30;
@@ -41,8 +42,8 @@ export function installFakeGetUserMedia(sources: FakeMediaSources) {
     const { video, audio } = await fake;
     // Des clones : la page peut arrêter ses pistes sans couper les sources.
     const tracks: MediaStreamTrack[] = [];
-    if (constraints.video) tracks.push(disguise(video.clone(), 'videoinput'));
-    if (constraints.audio) tracks.push(disguise(audio.clone(), 'audioinput'));
+    if (constraints.video) tracks.push(disguise(markLocal(video.clone()), 'videoinput'));
+    if (constraints.audio) tracks.push(disguise(markLocal(audio.clone()), 'audioinput'));
     log(`flux injecté renvoyé : ${tracks.map((track) => `${track.kind} « ${track.label} »`).join(' + ')}`);
     return new MediaStream(tracks);
   };
@@ -89,7 +90,10 @@ function disguise(track: MediaStreamTrack, kind: InputKind): MediaStreamTrack {
 }
 
 async function createFakeTracks(sources: FakeMediaSources): Promise<FakeTracks> {
-  return { video: createVideoTrack(sources.photo, sources.avatarOptions), audio: await sources.createAudioTrack() };
+  return {
+    video: markLocal(createVideoTrack(sources.photo, sources.avatarOptions)),
+    audio: markLocal(await sources.createAudioTrack()),
+  };
 }
 
 function createVideoTrack(photo: ImageBitmap | null, options: AvatarOptions): MediaStreamTrack {

@@ -6,8 +6,10 @@
 import { PAGE_TAG, type FromPage, type PageEnvelope } from '@/lib/bridge-messages';
 import { installFakeGetUserMedia } from '@/lib/inject';
 import { fileToBlob, type SerializedSources } from '@/lib/injection-sources';
+import { installLocalTrackHooks } from '@/lib/local-tracks';
 import { createLogger } from '@/lib/log';
-import { captureRemoteAudio, createVoiceOutput, type VoiceOutput } from '@/lib/page-audio';
+import { createVoiceOutput, type VoiceOutput } from '@/lib/page-audio';
+import { captureRemoteAudio } from '@/lib/remote-audio';
 
 declare global {
   interface Window {
@@ -44,6 +46,11 @@ export default defineContentScript({
         log(`installation (${frame} ${location.href}) : photo ${photo ? `${photo.width}x${photo.height}` : 'absente'}, bandeau « ${sources.bannerText} »`);
         if (sources.debugSafeZone) log('débogage : contour de la zone de sécurité affiché');
 
+        // Avant toute demande de caméra ou de micro : les pistes locales restent reconnaissables.
+        installLocalTrackHooks();
+        // Le pipeline voix n'est relié qu'au cadre principal ; capture installée au plus tôt.
+        if (isTop) captureRemoteAudio((pcm, at) => sendToExtension({ type: 'audio', pcm, at }));
+
         let voice: VoiceOutput | null = null;
         installFakeGetUserMedia({
           photo,
@@ -53,19 +60,21 @@ export default defineContentScript({
               (responseId, at) => sendToExtension({ type: 'playback-started', responseId, at }),
               (responseId) => sendToExtension({ type: 'playback-idle', responseId }),
             );
+            log('micro demandé par la plateforme : la voix de l’avatar peut partir');
+            sendToExtension({ type: 'mic-ready' });
             return voice.track;
           },
         });
 
-        // Le pipeline voix n'est relié qu'au cadre principal.
         if (isTop) {
-          captureRemoteAudio((pcm, at) => sendToExtension({ type: 'audio', pcm, at }));
           window.addEventListener('message', (event) => {
             if (event.source !== window) return;
             const envelope = event.data as Partial<PageEnvelope> | null;
             if (envelope?.[PAGE_TAG] !== 'to-page' || !envelope.message) return;
             const message = envelope.message;
-            if (message.type === 'speak') {
+            if (message.type === 'hello') {
+              if (voice) sendToExtension({ type: 'mic-ready' });
+            } else if (message.type === 'speak') {
               if (voice) voice.speak(message.responseId, message.pcm, message.sampleRate);
               else log('voix reçue avant que la plateforme ait demandé le micro : ignorée');
             } else if (message.type === 'stop') {

@@ -1,16 +1,13 @@
-// Audio côté page (monde MAIN de l'onglet de la plateforme) :
-// - capture du son du recruteur : uniquement les pistes audio distantes reçues par
-//   RTCPeerConnection, jamais le micro de l'utilisateur ni la voix de l'avatar ;
-// - lecture de la voix de l'avatar dans la piste du micro injecté.
+// Audio côté page (monde MAIN de l'onglet de la plateforme) : contexte audio partagé et
+// lecture de la voix de l'avatar dans la piste du micro injecté. La capture du son du
+// recruteur est dans remote-audio.ts.
 
+import { markLocal } from './local-tracks';
 import { createLogger } from './log';
-import { base64ToBuffer, bufferToBase64, floatToInt16, resample } from './pcm';
+import { base64ToBuffer } from './pcm';
 
 const log = createLogger('inject');
 const logTts = createLogger('tts');
-
-export const CAPTURE_SAMPLE_RATE = 24000;
-const PROCESSOR_FRAMES = 2048;
 
 let context: AudioContext | null = null;
 
@@ -44,6 +41,7 @@ export function createVoiceOutput(
   const destination = ctx.createMediaStreamDestination();
   const track = destination.stream.getAudioTracks()[0];
   if (!track) throw new Error('aucune piste audio créée');
+  markLocal(track);
   let sources: AudioBufferSourceNode[] = [];
   let nextStart = 0;
   let current = -1;
@@ -70,6 +68,8 @@ export function createVoiceOutput(
         }, delay);
       }
       source.addEventListener('ended', () => {
+        // Source arrêtée par stop() : la réponse a été coupée, pas terminée.
+        if (!sources.includes(source)) return;
         sources = sources.filter((item) => item !== source);
         if (sources.length === 0) onIdle(responseId);
       });
@@ -82,65 +82,4 @@ export function createVoiceOutput(
       logTts('voix de l’avatar coupée');
     },
   };
-}
-
-/**
- * Capture le son du recruteur. Le remplacement de setRemoteDescription doit être en place
- * avant que la plateforme ne crée sa connexion : activer l'extension avant de rejoindre.
- */
-export function captureRemoteAudio(onChunk: (pcm: string, at: number) => void) {
-  const seen = new Set<string>();
-  let mixer: GainNode | null = null;
-  // Contournement Chrome : une piste WebRTC distante peut rester muette dans Web Audio
-  // si elle n'est pas aussi lue par un élément média (muet ici).
-  const keepAlive: HTMLAudioElement[] = [];
-
-  const ensureMixer = () => {
-    if (mixer) return mixer;
-    const ctx = audioContext();
-    mixer = ctx.createGain();
-    const processor = ctx.createScriptProcessor(PROCESSOR_FRAMES, 1, 1);
-    const silent = ctx.createGain();
-    silent.gain.value = 0;
-    mixer.connect(processor);
-    processor.connect(silent).connect(ctx.destination);
-    processor.addEventListener('audioprocess', (event) => {
-      const input = event.inputBuffer.getChannelData(0);
-      const pcm = floatToInt16(resample(input, ctx.sampleRate, CAPTURE_SAMPLE_RATE));
-      onChunk(bufferToBase64(pcm.buffer), Date.now());
-    });
-    return mixer;
-  };
-
-  const addTrack = (track: MediaStreamTrack) => {
-    if (track.kind !== 'audio' || seen.has(track.id)) return;
-    seen.add(track.id);
-    const stream = new MediaStream([track]);
-    const element = new Audio();
-    element.muted = true;
-    element.srcObject = stream;
-    void element.play().catch(() => undefined);
-    keepAlive.push(element);
-    audioContext().createMediaStreamSource(stream).connect(ensureMixer());
-    log(`son du recruteur : piste distante ${track.id.slice(0, 8)} branchée (${seen.size} au total)`);
-  };
-
-  const scan = (connection: RTCPeerConnection) => {
-    for (const receiver of connection.getReceivers()) addTrack(receiver.track);
-  };
-
-  const proto = RTCPeerConnection.prototype;
-  const originalSetRemoteDescription = proto.setRemoteDescription;
-  const watched = new WeakSet<RTCPeerConnection>();
-  proto.setRemoteDescription = async function (this: RTCPeerConnection, ...args: Parameters<typeof originalSetRemoteDescription>) {
-    if (!watched.has(this)) {
-      watched.add(this);
-      this.addEventListener('track', (event) => addTrack(event.track));
-      log('connexion WebRTC de la plateforme détectée');
-    }
-    const result = await originalSetRemoteDescription.apply(this, args);
-    scan(this);
-    return result;
-  } as typeof originalSetRemoteDescription;
-  log('capture du son du recruteur prête (pistes WebRTC distantes uniquement)');
 }
