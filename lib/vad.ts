@@ -16,6 +16,8 @@ const POSITIVE_THRESHOLD = 0.5;
 const NEGATIVE_THRESHOLD = 0.35;
 /** Parole continue nécessaire pour confirmer un début (évite les bruits brefs). */
 const MIN_SPEECH_MS = 250;
+/** Bilan périodique : trames analysées et probabilité de parole maximale (diagnostic). */
+const REPORT_INTERVAL_MS = 10000;
 
 /** À appeler avant toute session ONNX : fichiers WASM servis par l'extension, un seul thread. */
 export function configureOnnxRuntime() {
@@ -42,6 +44,7 @@ export class Vad {
   private silentMs = 0;
   private firstVoiceAt = 0;
   private lastVoiceAt = 0;
+  private readonly report = { frames: 0, maxProbability: 0, first: true };
 
   private constructor(
     private readonly session: ort.InferenceSession,
@@ -54,7 +57,20 @@ export class Vad {
       executionProviders: ['wasm'],
     });
     log(`Silero VAD v5 prêt (seuil de silence ${silenceMs} ms)`);
-    return new Vad(session, silenceMs, events);
+    const vad = new Vad(session, silenceMs, events);
+    setInterval(() => vad.logReport(), REPORT_INTERVAL_MS);
+    return vad;
+  }
+
+  private logReport() {
+    const { frames, maxProbability } = this.report;
+    if (frames === 0) return;
+    log(
+      `bilan sur ${REPORT_INTERVAL_MS / 1000} s : ${frames} trame(s) analysée(s) à ${VAD_SAMPLE_RATE} Hz, ` +
+        `probabilité de parole max ${maxProbability.toFixed(2)} (début de parole au-dessus de ${POSITIVE_THRESHOLD})`,
+    );
+    this.report.frames = 0;
+    this.report.maxProbability = 0;
   }
 
   private static emptyState() {
@@ -106,6 +122,12 @@ export class Vad {
   }
 
   private update(probability: number, frameAt: number) {
+    if (this.report.first) {
+      this.report.first = false;
+      log(`première trame analysée (${FRAME_SAMPLES} échantillons à ${VAD_SAMPLE_RATE} Hz, probabilité ${probability.toFixed(2)})`);
+    }
+    this.report.frames += 1;
+    this.report.maxProbability = Math.max(this.report.maxProbability, probability);
     if (probability >= POSITIVE_THRESHOLD) {
       if (this.voicedMs === 0) this.firstVoiceAt = frameAt - FRAME_MS;
       this.voicedMs += FRAME_MS;

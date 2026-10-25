@@ -58,7 +58,7 @@ export class TabAudioCapture {
       capture.stop();
     });
     log(
-      `capture du son de l'onglet ${tabId} démarrée (${context.sampleRate} Hz, contexte ${context.state}) ; ` +
+      `capture du son de l'onglet ${tabId} démarrée (${context.sampleRate} Hz rééchantillonnés à ${sampleRate} Hz, contexte ${context.state}) ; ` +
         'son rejoué sur la sortie audio par défaut',
     );
     return capture;

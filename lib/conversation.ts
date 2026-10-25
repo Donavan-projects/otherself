@@ -159,7 +159,16 @@ export class Conversation {
   }
 
   /** Son du recruteur (son de l'onglet capturé), PCM 16 bits à 24 kHz. */
+  private audioLogged = false;
+
   onAudio(samples: Int16Array, receivedAt: number) {
+    if (!this.audioLogged) {
+      this.audioLogged = true;
+      logVad(
+        `premier bloc du recruteur donné au VAD et à la transcription : entrée ${samples.length} échantillons à ${STT_SAMPLE_RATE} Hz, ` +
+          `VAD ${Math.floor(samples.length * (VAD_SAMPLE_RATE / STT_SAMPLE_RATE))} à ${VAD_SAMPLE_RATE} Hz, transcription ${STT_SAMPLE_RATE} Hz`,
+      );
+    }
     if (this.capturing) {
       this.transcriber?.append(samples);
     } else {

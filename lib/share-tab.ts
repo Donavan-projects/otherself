@@ -11,11 +11,102 @@ import { bufferToBase64, floatToInt16, resample } from './pcm';
 const log = createLogger('inject');
 
 export const SHARE_SAMPLE_RATE = 24000;
-// ScriptProcessorNode (obsolète) : un AudioWorklet demanderait un module servi à la page,
-// donc des web_accessible_resources visibles des sites, ou une URL blob que la CSP des
-// plateformes peut refuser. À revoir si l'option C est retenue.
-const PROCESSOR_FRAMES = 2048;
+const BLOCK_SAMPLES = 2048;
 const REPORT_INTERVAL_MS = 15000;
+
+// AudioWorklet chargé depuis une URL blob : un fichier de l'extension devrait être exposé aux
+// sites (web_accessible_resources). Même traitement que entrypoints/capture-worklet.ts
+// (document offscreen), écrit ici en JavaScript pur parce qu'il est passé en texte.
+const WORKLET_NAME = 'otherself-share';
+const WORKLET_SOURCE = `registerProcessor('${WORKLET_NAME}', class extends AudioWorkletProcessor {
+  constructor() { super(); this.block = new Float32Array(${BLOCK_SAMPLES}); this.filled = 0; }
+  process(inputs) {
+    const channels = inputs[0];
+    const first = channels && channels[0];
+    if (!first) return true;
+    for (let i = 0; i < first.length; i += 1) {
+      let sum = 0;
+      for (const channel of channels) sum += channel[i] || 0;
+      this.block[this.filled++] = sum / channels.length;
+      if (this.filled === ${BLOCK_SAMPLES}) {
+        this.port.postMessage(this.block, [this.block.buffer]);
+        this.block = new Float32Array(${BLOCK_SAMPLES});
+        this.filled = 0;
+      }
+    }
+    return true;
+  }
+});`;
+const workletModules = new WeakMap<AudioContext, Promise<void>>();
+
+/** Fournit le son de la piste par blocs mono ; renvoie de quoi arrêter. */
+type BlockSource = (onBlock: (block: Float32Array, sampleRate: number) => void) => Promise<{ kind: string; stop(): void }>;
+
+/** AudioWorklet (URL blob), sinon MediaStreamTrackProcessor si la CSP de la page refuse le blob. */
+function blockSource(track: MediaStreamTrack): BlockSource {
+  return async (onBlock) => {
+    const ctx = audioContext();
+    try {
+      if (!workletModules.has(ctx)) {
+        const url = URL.createObjectURL(new Blob([WORKLET_SOURCE], { type: 'application/javascript' }));
+        workletModules.set(ctx, ctx.audioWorklet.addModule(url).finally(() => URL.revokeObjectURL(url)));
+      }
+      await workletModules.get(ctx);
+      const source = ctx.createMediaStreamSource(new MediaStream([track]));
+      // Aucune sortie : le son de l'onglet reste joué par la page elle-même (suppressLocalAudioPlayback: false).
+      const node = new AudioWorkletNode(ctx, WORKLET_NAME, { numberOfOutputs: 0 });
+      node.port.onmessage = (event: MessageEvent<Float32Array>) => onBlock(event.data, ctx.sampleRate);
+      source.connect(node);
+      return {
+        kind: `AudioWorklet (${ctx.sampleRate} Hz)`,
+        stop() {
+          source.disconnect();
+          node.port.onmessage = null;
+        },
+      };
+    } catch (error) {
+      workletModules.delete(ctx);
+      log(`partage de l’onglet : AudioWorklet refusé par la page (${error instanceof Error ? error.message : String(error)}), essai de MediaStreamTrackProcessor`);
+    }
+    return trackProcessorSource(track, onBlock);
+  };
+}
+
+interface AudioDataLike {
+  numberOfFrames: number;
+  sampleRate: number;
+  copyTo(destination: Float32Array, options: { planeIndex: number; format: 'f32-planar' }): void;
+  close(): void;
+}
+type TrackProcessorConstructor = new (init: { track: MediaStreamTrack }) => { readable: ReadableStream<AudioDataLike> };
+
+async function trackProcessorSource(track: MediaStreamTrack, onBlock: (block: Float32Array, sampleRate: number) => void) {
+  const Processor = (window as unknown as { MediaStreamTrackProcessor?: TrackProcessorConstructor }).MediaStreamTrackProcessor;
+  if (!Processor) throw new Error('ni AudioWorklet ni MediaStreamTrackProcessor disponibles dans cette page');
+  const reader = new Processor({ track }).readable.getReader();
+  let block = new Float32Array(BLOCK_SAMPLES);
+  let filled = 0;
+  let rate = 0;
+  void (async () => {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done || !value) return;
+      rate = value.sampleRate;
+      const frame = new Float32Array(value.numberOfFrames);
+      value.copyTo(frame, { planeIndex: 0, format: 'f32-planar' });
+      value.close();
+      for (const sample of frame) {
+        block[filled++] = sample;
+        if (filled === BLOCK_SAMPLES) {
+          onBlock(block, rate);
+          block = new Float32Array(BLOCK_SAMPLES);
+          filled = 0;
+        }
+      }
+    }
+  })().catch((error: unknown) => log(`partage de l’onglet : lecture interrompue (${error instanceof Error ? error.message : String(error)})`));
+  return { kind: 'MediaStreamTrackProcessor', stop: () => void reader.cancel() };
+}
 
 const BUTTON_TEXT = 'Autoriser OtherSelf à écouter le recruteur : Chrome va vous demander de partager cet onglet, son compris.';
 
@@ -80,7 +171,14 @@ export function offerTabShare(onChunk: (pcm: string, at: number) => void): TabSh
       .call(navigator.mediaDevices, {
         // Chrome refuse un partage sans vidéo : la piste vidéo est arrêtée aussitôt.
         video: true,
-        audio: { suppressLocalAudioPlayback: false } as MediaTrackConstraints,
+        // Son brut : l'annulation d'écho prendrait la sortie de l'onglet comme référence, donc
+        // le son à capter lui-même, et le détruirait ; réduction de bruit et gain auto aussi coupés.
+        audio: {
+          suppressLocalAudioPlayback: false,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        } as MediaTrackConstraints,
         preferCurrentTab: true,
         selfBrowserSurface: 'include',
         surfaceSwitching: 'exclude',
@@ -140,22 +238,21 @@ function listen(track: MediaStreamTrack, onChunk: (pcm: string, at: number) => v
   const settings = track.getSettings() as MediaTrackSettings & { suppressLocalAudioPlayback?: boolean };
   log(
     `partage de l’onglet : contexte audio de la page ${ctx.state} (${ctx.sampleRate} Hz), piste ${track.muted ? 'muette' : 'active'}, ` +
-      `son toujours joué pour vous : ${settings.suppressLocalAudioPlayback === true ? 'NON' : 'oui'}`,
+      `son toujours joué pour vous : ${settings.suppressLocalAudioPlayback === true ? 'NON' : 'oui'} ; traitements : ` +
+      `annulation d'écho ${String(settings.echoCancellation)}, réduction de bruit ${String(settings.noiseSuppression)}, ` +
+      `gain auto ${String(settings.autoGainControl)} (attendu : false partout)`,
   );
-  const source = ctx.createMediaStreamSource(new MediaStream([track]));
-  const processor = ctx.createScriptProcessor(PROCESSOR_FRAMES, 1, 1);
-  const silent = ctx.createGain();
-  silent.gain.value = 0;
-  source.connect(processor);
-  // Sortie muette : le son de l'onglet reste joué par la page elle-même (suppressLocalAudioPlayback: false).
-  processor.connect(silent).connect(ctx.destination);
   const level = { sumSquares: 0, samples: 0, peak: 0, blocks: 0 };
   let firstBlock = true;
-  processor.addEventListener('audioprocess', (event) => {
-    const input = event.inputBuffer.getChannelData(0);
+  let stopBlocks: (() => void) | null = null;
+  let ended = false;
+  void blockSource(track)((input, sampleRate) => {
     if (firstBlock) {
       firstBlock = false;
-      log(`partage de l’onglet : premier bloc audio traité par la page (${input.length} échantillons), envoi vers le pipeline`);
+      log(
+        `partage de l’onglet : premier bloc audio traité par la page (${input.length} échantillons à ${sampleRate} Hz, ` +
+          `envoyés à ${SHARE_SAMPLE_RATE} Hz vers le pipeline)`,
+      );
     }
     level.blocks += 1;
     for (const sample of input) {
@@ -163,8 +260,15 @@ function listen(track: MediaStreamTrack, onChunk: (pcm: string, at: number) => v
       level.peak = Math.max(level.peak, Math.abs(sample));
     }
     level.samples += input.length;
-    onChunk(bufferToBase64(floatToInt16(resample(input, ctx.sampleRate, SHARE_SAMPLE_RATE)).buffer), Date.now());
-  });
+    onChunk(bufferToBase64(floatToInt16(resample(input, sampleRate, SHARE_SAMPLE_RATE)).buffer), Date.now());
+  }).then(
+    ({ kind, stop }) => {
+      if (ended) return stop();
+      stopBlocks = stop;
+      log(`partage de l’onglet : son lu par ${kind}`);
+    },
+    (error: unknown) => log(`partage de l’onglet : ÉCHEC, son illisible dans la page (${error instanceof Error ? error.message : String(error)})`),
+  );
   const report = setInterval(() => {
     const rms = level.samples ? Math.sqrt(level.sumSquares / level.samples) : 0;
     log(
@@ -180,9 +284,9 @@ function listen(track: MediaStreamTrack, onChunk: (pcm: string, at: number) => v
   track.addEventListener('mute', () => log('partage de l’onglet : piste muette (Chrome ne transmet plus de son)'));
   track.addEventListener('unmute', () => log('partage de l’onglet : piste de nouveau active'));
   const cleanUp = () => {
+    ended = true;
     clearInterval(report);
-    processor.disconnect();
-    source.disconnect();
+    stopBlocks?.();
   };
   track.addEventListener(
     'ended',
