@@ -11,6 +11,8 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 
 > **Clé API** : `openaiApiKey` est recopiée dans `.output/…/local/config.json` (ignoré par git, jamais accessible aux pages web ni transmise à la page de la plateforme). Ne partagez pas le dossier `.output` ni un zip du build.
 
+> **Logs du pipeline voix** : ils s'affichent dans la console du document offscreen (`chrome://extensions` → OtherSelf, mode développeur → « Inspecter les vues : offscreen.html »), avec la transcription `Recruteur : …` / `Avatar : …`. Ce document n'existe qu'après l'activation sur un onglet : le lien `offscreen.html` n'apparaît qu'en rechargeant la page `chrome://extensions` après avoir cliqué sur « Activer sur cet onglet ».
+
 | Champ | Valeurs | Rôle | Si absent |
 | --- | --- | --- | --- |
 | `photo` | jpg, png, webp | Photo provisoire de l'avatar (remplacée par l'avatar cartoon à l'étape 5) | Silhouette neutre, avertissement au build |
