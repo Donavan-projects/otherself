@@ -17,6 +17,9 @@ const VENDOR_FILES: Record<string, string> = {
   'vendor/piper/piper_phonemize.wasm': 'node_modules/@diffusionstudio/piper-wasm/build/piper_phonemize.wasm',
   'vendor/piper/piper_phonemize.data': 'node_modules/@diffusionstudio/piper-wasm/build/piper_phonemize.data',
   'vendor/silero_vad_v5.onnx': 'node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx',
+  // Licence (GPL-3.0, imposée par eSpeak NG embarqué) et mentions des composants tiers, dans l'extension distribuée.
+  'LICENSE.txt': 'LICENSE',
+  'THIRD_PARTY_NOTICES.md': 'THIRD_PARTY_NOTICES.md',
 };
 
 // Champs simples recopiés tels quels dans local/config.json (voir lib/config.ts et docs/config.md).

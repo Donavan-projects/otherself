@@ -2,6 +2,7 @@
   "name": "otherself",
   "description": "Extension OtherSelf : répondre à un entretien automatisé par son propre avatar IA, clairement identifié.",
   "private": true,
+  "license": "GPL-3.0-or-later",
   "version": "0.0.1",
   "type": "module",
   "scripts": {

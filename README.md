@@ -28,18 +28,23 @@ Ces règles font partie du projet et ne sont pas désactivables :
 
 ## Essayer le prototype (développeurs)
 
-Prérequis : Node.js 22 et Chrome.
+Prérequis : Node.js 22, Chrome et une clé API OpenAI (transcription et réponses).
 
 ```
 npm install
-cp config.example.json config.local.json   # voir docs/config.md
-npm run dev
+cp config.example.json config.local.json   # clé API, CV, voix… : voir docs/config.md
+npm run build                              # build de production, dans .output/chrome-mv3
 ```
 
-`npm run dev` ouvre un Chrome de développement avec l'extension chargée. Le popup donne accès à une page de répétition (« faux recruteur ») et à l'activation sur l'onglet courant. Sur une plateforme réelle, autorisez d'abord caméra et micro pour le site, activez l'extension, puis coupez et rallumez caméra et micro.
+Chargez `.output/chrome-mv3` dans `chrome://extensions` (mode développeur, « Charger l'extension non empaquetée »). Sur la plateforme d'entretien : autorisez caméra et micro pour le site, cliquez sur « Activer sur cet onglet » dans le popup, puis sur le bouton OtherSelf qui apparaît dans la page pour partager l'onglet avec son son (c'est ainsi que l'avatar entend le recruteur, sans aucune permission d'extension). Choisissez ensuite le micro « Avatar IA – OtherSelf » dans la plateforme si elle ne l'a pas pris d'elle-même. Les appels à OpenAI sont facturés sur votre compte.
 
 ## État d'avancement
 
-- Fait : page de répétition, rendu de l'avatar avec bandeau, injection caméra et micro (testée sur Google Meet).
-- En cours : pipeline voix (écoute, transcription, réponse, synthèse vocale) et déclaration configurable.
-- Ensuite : avatar cartoon OtherSelf, puis tournage de la démo.
+- Fait : page de répétition, rendu de l'avatar avec bandeau, injection caméra et micro, pipeline voix (écoute, transcription, réponse, synthèse vocale, révélation et déclaration configurable), testé sur Google Meet et InterviewCoach.
+- Ensuite : avatar cartoon OtherSelf (le rendu actuel à partir d'une photo est provisoire), puis tournage de la démo.
+
+## Licence et crédits
+
+OtherSelf est un logiciel libre sous licence [GPL-3.0-or-later](LICENSE) : l'extension embarque le phonémiseur eSpeak NG, lui-même sous GPL-3.0. Copyright (C) 2026 Donavan-projects.
+
+Merci aux projets sur lesquels OtherSelf repose : [Piper](https://github.com/rhasspy/piper) et [piper-tts-web](https://github.com/Mintplex-Labs/piper-tts-web) pour la voix de synthèse, [eSpeak NG](https://github.com/espeak-ng/espeak-ng) pour la phonémisation, [Silero VAD](https://github.com/snakers4/silero-vad) pour la détection de parole, [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) et [WXT](https://github.com/wxt-dev/wxt). Voix par défaut : `en_US-ljspeech-medium`, entraînée sur le jeu [LJ Speech](https://keithito.com/LJ-Speech-Dataset/) (domaine public). Détail des licences : [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -39,8 +39,9 @@ Licences vérifiées pour une vidéo publiée. Vitesse mesurée en WebAssembly s
 | Voix | Genre | Licence du jeu de données | Vitesse |
 | --- | --- | --- | --- |
 | `en_US-ljspeech-medium` | féminine | domaine public (LJ Speech) | ≈ 0,35 |
-| `en_US-joe-medium` | masculine | CC0 | ≈ 0,2 |
-| `en_US-john-medium`, `en_US-norman-medium` | masculines | domaine public (LibriVox) | non mesurée (même taille que joe) |
+| `en_US-joe-medium` | masculine | CC0 pour le jeu `joe`, mais voix **affinée à partir de `lessac`** (jeu Lessac, licence Blizzard 2013, recherche) : statut incertain pour une vidéo publiée | ≈ 0,2 |
+| `en_US-norman-medium` | masculine | domaine public (LibriVox), entraînée de zéro : **voix masculine la plus sûre pour une vidéo publiée** | non mesurée (même taille que joe) |
+| `en_US-john-medium` | masculine | domaine public (LibriVox), affinée à partir de `kristin` (LibriVox) | non mesurée (même taille que joe) |
 | `en_US-ljspeech-high` | féminine | domaine public | 1,25 à 2,7 : **trop lente** pour répondre en direct |
 
 À éviter pour une vidéo publiée : `en_US-ryan-*` et `en_US-hfc_*` (CC BY-NC-SA, usage non commercial), `en_US-lessac-*` (licence Blizzard 2013, recherche).
