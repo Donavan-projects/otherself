@@ -6,6 +6,7 @@
 
 import type { DemoConfig } from './config';
 import { takeChunks } from './chunks';
+import { isGreetingOnly } from './greeting';
 import { streamReply, type ChatMessage } from './llm';
 import { clock, createLogger } from './log';
 import { int16ToFloat, resample } from './pcm';
@@ -106,7 +107,8 @@ export class Conversation {
   ) {
     const opening = openingText(config.language, config.messageText, config.candidateName);
     this.opening = opening;
-    this.system = systemPrompt(config.language, opening, cv, config.candidateName);
+    // Le texte de l'ouverture n'est pas donné au LLM : il le recopiait mot pour mot.
+    this.system = systemPrompt(config.language, cv, config.candidateName);
     // Ouverture synthétisée d'avance, phrase après phrase ; elle n'est jouée qu'une fois le
     // recruteur présent (fin de sa première prise de parole).
     // Révélation et message synthétisés à part : on sait ainsi quand la révélation a été entendue.
@@ -304,6 +306,14 @@ export class Conversation {
       response.finished = true;
       // Rien n'a été envoyé : aucune fin de lecture ne viendra libérer ce tour.
       if (!response.includesOpening && this.current === response) this.current = null;
+      return;
+    }
+    // Simple salutation au premier tour : l'ouverture sert de réponse, rien n'est demandé au LLM.
+    if (response.includesOpening && isGreetingOnly(question)) {
+      transcriptLine('Recruteur', question, this.speechStartedAt);
+      log(`salutation seule (« ${question} ») : l’ouverture sert de réponse, tour non envoyé au LLM`);
+      await opening;
+      response.finished = true;
       return;
     }
     await this.answer(response, question, opening);

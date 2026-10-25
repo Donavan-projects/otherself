@@ -187,8 +187,9 @@ class RealtimeTranscriber implements Transcriber {
           });
         }),
     );
-    const timeout = new Promise<string>((resolve) =>
-      setTimeout(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<string>((resolve) => {
+      timer = setTimeout(() => {
         timedOut = true;
         const stage =
           committedId === undefined
@@ -198,9 +199,10 @@ class RealtimeTranscriber implements Transcriber {
               : 'commit confirmé, texte jamais reçu';
         log(`pas de transcription après ${COMMIT_TIMEOUT_MS} ms (${stage}) : segment perdu`);
         resolve('');
-      }, COMMIT_TIMEOUT_MS),
-    );
-    return Promise.race([transcript, timeout]);
+      }, COMMIT_TIMEOUT_MS);
+    });
+    // Texte arrivé à temps : le délai est annulé (sinon il signalait à tort un segment perdu).
+    return Promise.race([transcript.finally(() => clearTimeout(timer)), timeout]);
   }
 
   clear() {
