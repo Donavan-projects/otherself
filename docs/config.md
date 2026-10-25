@@ -16,10 +16,13 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | `photo` | jpg, png, webp | Photo provisoire de l'avatar (remplacée par l'avatar cartoon à l'étape 5) | Silhouette neutre, avertissement au build |
 | `bannerText` | texte | Texte du bandeau incrusté (règle 1). Démo : « Automated candidate, just like you. » | « Candidat automatisé, comme vous. » (un texte vide est aussi remplacé par celui-ci) |
 | `language` | `en`, `fr` | Langue de l'entretien : transcription, réponses du LLM, phrase de révélation | `en` |
+| `candidateName` | texte | Prénom ou nom du candidat : l'avatar parle de lui à la troisième personne (« Alex a travaillé… »), et se présente comme « l'avatar IA qui représente Alex » | « the candidate » / « le candidat » |
 | `messageText` | texte | Mode « message » : déclaration prononcée juste après la révélation, avant de répondre aux questions | Révélation seule |
 | `cv` | md, txt | CV et notes du candidat, seule source des réponses (règle 5) | Avertissement au build ; l'avatar dit ne pas pouvoir répondre |
 | `openaiApiKey` | `sk-…` | Clé OpenAI (transcription et LLM) | Pipeline voix inactif, avertissement au build |
 | `voice` | identifiant Piper | Voix de l'avatar, téléchargée une seule fois depuis Hugging Face (voir ci-dessous) | `en_US-ljspeech-medium` |
+| `monitorAvatar` | `true` / `false` | Retour audio : vous entendez la voix de l'avatar, jouée par l'extension hors de l'onglet de l'entretien (elle n'est donc jamais prise pour le recruteur) | Activé |
+| `monitorVolume` | 0 à 1 | Volume du retour audio | `0.8` |
 | `silenceMs` | millisecondes | Silence après lequel le recruteur est considéré comme ayant fini sa question | `800` |
 | `bargeInMs` | millisecondes | Parole continue du recruteur par-dessus la voix de l'avatar nécessaire pour l'interrompre. En dessous, la prise de parole est ignorée (écho ou bruit probable) | `600` |
 | `sttModel` | modèle OpenAI | Transcription en flux (session Realtime) | `gpt-live-transcribe` |

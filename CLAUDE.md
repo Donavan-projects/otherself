@@ -1,12 +1,16 @@
 # OtherSelf
 
-## État actuel (24/10/2026, étape 4 terminée)
+## État actuel (25/10/2026, étape 4 terminée, ajustements après le test InterviewCoach)
 
 - **Prochaine étape : étape 5, visuel OtherSelf**, selon `docs/visuel-otherself.md`.
 - **Étape 3 terminée : voie A (injection) retenue.** Testée sur Google Meet (compte A dans Chrome avec l'extension, compte B dans Brave) : image, bandeau et son arrivent chez B.
-- **Étape 4 terminée : pipeline voix validé sur Meet** (A dans Chrome avec l'extension, B dans Brave joue le recruteur) : l'avatar entend B, se révèle, répond et parle. Latence mesurée : environ 2 à 3 s par réponse (cible 1,5 s ; pistes dans « Reporté »). Choix : transcription en flux `gpt-live-transcribe` (session Realtime, clé éphémère créée par l'extension), LLM `gpt-6-luna` en streaming sans raisonnement, Piper en WebAssembly dans un document offscreen, langue `en` pour la démo.
+- **Étape 4 terminée : pipeline voix validé sur Meet** (A dans Chrome avec l'extension, B dans Brave joue le recruteur) : l'avatar entend B, se révèle, répond et parle. Latence mesurée : environ 2 à 3 s par réponse (cible 1,5 s ; pistes dans « Reporté »). Choix : transcription en flux `gpt-live-transcribe` (session Realtime, clé éphémère créée par l'extension), LLM `gpt-6-luna` en streaming sans raisonnement, Piper en WebAssembly dans un worker du document offscreen, langue `en` pour la démo.
 - **Son du recruteur par `chrome.tabCapture`** (règle 6 révisée avec l'accord de l'utilisateur) : Meet décode l'audio reçu en WebAssembly (`p2p.wasm`, NetEq) et le joue par Web Audio, ses pistes WebRTC et ses éléments `<audio>` restent silencieux. Le document offscreen reçoit le son de l'onglet activé, le rejoue sur la sortie par défaut et le passe au VAD par un AudioWorklet.
 - **Écho** : avec A et B dans la même pièce, la voix de l'avatar revenait par le micro de B et l'avatar se répondait à lui-même ; résolu en éloignant les deux postes ou en coupant le micro de B (casque recommandé pour B). Protections : seuil d'interruption (`bargeInMs`, 600 ms de parole réelle par-dessus l'avatar ; en dessous, la prise de parole est ignorée), transcription reprenant surtout les mots que l'avatar vient de dire ignorée (non vérifiée en conditions réelles), alerte `[vad]` si de la parole est détectée pendant que l'avatar parle, ouverture complète rejouée une fois au maximum puis remplacée par un rappel court de la révélation (règle 2).
+- **Test InterviewCoach (25/10/2026)** : l'IA recruteuse entend l'avatar et la conversation suit ; latence 6 à 11 s (Piper à 0,6-0,7 × temps réel, machine chargée par la vidéo de la plateforme, première phrase jusqu'à 13 s d'audio) et des lignes « pas de transcription après 8000 ms » (segments perdus : synthèse Piper qui bloquait le fil principal, et décalage des commits après un commit refusé). Corrigé, **à revérifier** : Piper dans un worker (`lib/tts.worker.ts`), début de réponse découpé court (8 à 12 mots, coupe à une virgule ou devant une conjonction ; morceaux suivants de 16 mots au plus, `lib/chunks.ts`), phrases de 15 mots au plus dans le prompt système, commits Realtime robustes (refus et échecs traités, transcription tardive signalée), avertissement « voix trop lente » seulement au-delà de 2 s d'audio.
+- **Retour audio de l'avatar** (`monitorAvatar`, `monitorVolume`) : la voix de l'avatar est rejouée pour l'utilisateur par le document offscreen, jamais dans l'onglet de l'entretien (tabCapture ne la capte donc pas ; le garde-fou `[vad]` doit rester muet quand seul l'avatar parle).
+- **Transcription pour les sous-titres** : console du document offscreen, une ligne horodatée par prise de parole (`HH:MM:SS.mmm Recruteur : …` / `… Avatar : …`).
+- **Troisième personne** : l'avatar parle du candidat par son nom (`candidateName`), « you » du recruteur = le candidat, « I » réservé à l'avatar (« I am an AI avatar representing … »).
 - **Ouverture** : attend la fin de la première prise de parole du recruteur et que la plateforme ait demandé le micro ; une seule fois par entretien (nouvelle page = nouvel entretien).
 - **Voix** : `en_US-ljspeech-high` est trop lente en WebAssembly sur la machine de référence (1,25 à 2,7 × temps réel) ; démo avec `en_US-ljspeech-medium` (féminine) ou `en_US-joe-medium` (masculine). Détails et licences : `docs/config.md`.
 - **Prérequis actuel sur la plateforme** : autoriser caméra et micro pour le site dans les réglages du navigateur (cadenas de la barre d'adresse), désactiver côté A le cadrage automatique de la plateforme (Meet : Paramètres → Vidéo → Cadrage / Framing), puis activer l'extension sur l'onglet (popup → « Activer sur cet onglet », avant ou après avoir rejoint la réunion ; Chrome signale alors que l'onglet est partagé), puis couper et rallumer caméra et micro dans la plateforme pour qu'elle redemande les flux. Recharger l'onglet annule l'injection.
@@ -82,6 +86,9 @@ lib/
   config.ts            # lecture de local/config.json (généré depuis config.local.json)
   page-audio.ts        # monde MAIN : lecture de la voix dans le micro injecté
   tab-audio.ts         # offscreen : son de l'onglet (tabCapture), rejoué, vers le VAD
+  monitor.ts           # offscreen : retour audio de la voix de l'avatar pour l'utilisateur
+  tts.worker.ts        # worker de synthèse Piper
+  chunks.ts            # découpe du texte du LLM en morceaux à synthétiser
   bridge-messages.ts  pcm.ts
   inject.ts            # remplacement getUserMedia / enumerateDevices (monde MAIN)
   injection-sources.ts # photo et son sérialisés pour le monde MAIN
@@ -120,8 +127,8 @@ Ne pas commencer une étape avant que la précédente fonctionne.
 - Vérifier `enumerateDevices` : Meet affichait « Speaker not found » avec la liste injectée (fausse caméra, faux micro, sorties audio réelles).
 - Popup avec Activer / Pause / Reprendre la main.
 - Licence : le phonémiseur de Piper (`piper_phonemize`, espeak-ng) est sous GPL-3.0 et embarqué dans l'extension ; à prendre en compte dans le choix de la licence du dépôt.
-- Latence (mesurée 2 à 3 s, cible 1,5 s) : seuil de silence réduit (`silenceMs`, 800 ms aujourd'hui) ; phrase d'attente préparée à l'avance, jouée dès la fin de la question pendant que le LLM répond (courte, neutre, sans rien affirmer sur le candidat) ; première phrase de réponse plus courte (60 caractères au plus aujourd'hui) ou demandée explicitement courte au LLM.
-- Performances Piper : synthèse dans un Worker (aujourd'hui sur le fil principal du document offscreen, ce qui retarde le VAD pendant la synthèse) ; multi-thread via COOP/COEP sur les pages d'extension (gain mesuré nul en « medium », ×2 en « high »).
+- Latence (mesurée 2 à 3 s sur Meet, 6 à 11 s sur InterviewCoach avant les corrections du 25/10, cible 1,5 s) : seuil de silence réduit (`silenceMs`, 800 ms aujourd'hui) ; phrase d'attente préparée à l'avance, jouée dès la fin de la question pendant que le LLM répond (courte, neutre, sans rien affirmer sur le candidat).
+- Performances Piper : multi-thread via COOP/COEP sur les pages d'extension (gain mesuré nul en « medium », ×2 en « high »).
 - Son capturé rejoué sur la sortie choisie dans la plateforme (`setSinkId`) ; aujourd'hui, sortie audio par défaut.
 - Vérifier le texte de l'avertissement que Chrome affiche pour `tabCapture` avant une publication sur le Web Store.
 - Cadrage automatique des plateformes (Framing sur Meet) : il zoome sur le visage et coupe le bandeau ; pour la démo, il est désactivé côté A. Pour le projet, garantir la visibilité du bandeau même avec ce zoom (au minimum la version intégrée au personnage de l'étape 5, et une consigne dans l'assistant).
