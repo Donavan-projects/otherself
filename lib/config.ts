@@ -3,11 +3,6 @@
 // l'extension : la clé API n'est jamais transmise à la page de la plateforme.
 
 export type Language = 'en' | 'fr';
-/**
- * Source du son du recruteur : `shareTab` (option C, prototype) = partage de l'onglet par la
- * page, sans permission ; `tabCapture` = chrome.tabCapture (avertissement « tous les sites »).
- */
-export type RecruiterAudio = 'shareTab' | 'tabCapture';
 
 export interface DemoConfig {
   photo: string | null;
@@ -27,7 +22,6 @@ export interface DemoConfig {
   silenceMs: number;
   /** Parole continue (ms) par-dessus la voix de l'avatar nécessaire pour l'interrompre (anti-écho). */
   bargeInMs: number;
-  recruiterAudio: RecruiterAudio;
   openaiApiKey: string;
   /** Retour audio de la voix de l'avatar pour l'utilisateur (document offscreen). */
   monitorAvatar: boolean;
@@ -52,7 +46,6 @@ const DEFAULTS: DemoConfig = {
   voice: 'en_US-ljspeech-medium',
   silenceMs: 800,
   bargeInMs: 600,
-  recruiterAudio: 'shareTab',
   openaiApiKey: '',
   monitorAvatar: true,
   monitorVolume: 0.8,
@@ -80,7 +73,6 @@ export async function loadDemoConfig(): Promise<DemoConfig> {
     Number.isFinite(Number(raw.monitorVolume)) && raw.monitorVolume !== undefined
       ? Math.min(1, Math.max(0, Number(raw.monitorVolume)))
       : DEFAULTS.monitorVolume;
-  config.recruiterAudio = raw.recruiterAudio === 'tabCapture' ? 'tabCapture' : 'shareTab';
   config.bargeInMs = Number(raw.bargeInMs) >= 0 && raw.bargeInMs !== undefined ? Number(raw.bargeInMs) : DEFAULTS.bargeInMs;
   return config;
 }

@@ -20,6 +20,11 @@ function disclosure(language: Language, name: string): string {
     : `Hello. Before we begin, I want to be transparent: I am an AI avatar representing ${name}, and I answer only from ${possessive(name)} CV and notes.`;
 }
 
+/** Révélation seule (début de l'ouverture), sans messageText. */
+export function disclosureText(language: Language, candidateName: string): string {
+  return disclosure(language, candidateLabel(language, candidateName));
+}
+
 /** Rappel court quand l'ouverture a déjà été coupée deux fois (écho, interruptions). */
 export function shortDisclosureText(language: Language, candidateName: string): string {
   const name = candidateLabel(language, candidateName);
@@ -32,7 +37,7 @@ const LANGUAGE_NAME: Record<Language, string> = { en: 'English', fr: 'French' };
 
 /** Ouverture : révélation, puis la déclaration du candidat (messageText) si elle existe. */
 export function openingText(language: Language, messageText: string, candidateName: string): string {
-  const first = disclosure(language, candidateLabel(language, candidateName));
+  const first = disclosureText(language, candidateName);
   const message = messageText.trim();
   return message ? `${first} ${message}` : first;
 }

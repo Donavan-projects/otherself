@@ -69,13 +69,13 @@ export default defineContentScript({
           },
         });
 
-        // Le pipeline voix n'est relié qu'au cadre principal. Son du recruteur : partage de
-        // l'onglet par la page (option C), ou chrome.tabCapture côté extension.
         uninstallers.push(() => {
           voice?.stop();
           media.uninstall();
         });
-        if (isTop && sources.shareTab) {
+        // Le pipeline voix n'est relié qu'au cadre principal. Son du recruteur : partage de
+        // l'onglet par la page, son compris (bouton, getDisplayMedia), sans permission d'extension.
+        if (isTop) {
           const share = offerTabShare((pcm, at) => sendToExtension({ type: 'audio', pcm, at }));
           uninstallers.push(() => share.stop());
         }

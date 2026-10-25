@@ -27,7 +27,6 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | `monitorVolume` | 0 à 1 | Volume du retour audio | `0.8` |
 | `silenceMs` | millisecondes | Silence après lequel le recruteur est considéré comme ayant fini sa question | `800` |
 | `bargeInMs` | millisecondes | Parole continue du recruteur par-dessus la voix de l'avatar nécessaire pour l'interrompre. En dessous, la prise de parole est ignorée (écho ou bruit probable) | `600` |
-| `recruiterAudio` | `shareTab`, `tabCapture` | Source du son du recruteur. `shareTab` (prototype, option C) : un bouton OtherSelf apparaît dans la page de l'entretien, puis Chrome demande de partager cet onglet, son compris ; aucune permission d'extension. `tabCapture` : capture par l'extension, sans bouton, mais la permission fait afficher à Chrome « Lire et modifier toutes vos données sur tous les sites Web » | `shareTab` |
 | `sttModel` | modèle OpenAI | Transcription en flux (session Realtime) | `gpt-live-transcribe` |
 | `llmModel` | modèle OpenAI | Réponses en streaming, sans raisonnement | `gpt-6-luna` |
 | `debugSafeZone` | `true` / `false` | Débogage : dessine dans l'image le contour pointillé magenta de la zone de sécurité (visible aussi par l'interlocuteur sur la plateforme) | Désactivé |

@@ -1,7 +1,7 @@
 // Audio côté page (monde MAIN de l'onglet de la plateforme) : lecture de la voix de
 // l'avatar dans la piste du micro injecté. Cette voix ne doit jamais être jouée sur les
-// haut-parleurs de l'onglet (ctx.destination) : le son de l'onglet est capturé comme son
-// du recruteur (tab-audio.ts).
+// haut-parleurs de l'onglet (ctx.destination) : le son de l'onglet est partagé comme son
+// du recruteur (share-tab.ts).
 
 import { createLogger } from './log';
 import { base64ToBuffer } from './pcm';

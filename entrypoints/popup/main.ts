@@ -1,4 +1,3 @@
-import type { CaptureReply, ToOffscreen } from '@/lib/bridge-messages';
 import { loadDemoConfig, localUrl } from '@/lib/config';
 import { bytesToBase64, type SerializedFile, type SerializedSources } from '@/lib/injection-sources';
 import { createLogger } from '@/lib/log';
@@ -44,7 +43,6 @@ async function loadSources(): Promise<SerializedSources> {
     photo: await loadFile(config.photo),
     bannerText: config.bannerText,
     debugSafeZone: config.debugSafeZone,
-    shareTab: config.recruiterAudio === 'shareTab',
   };
 }
 
@@ -54,9 +52,8 @@ async function ensureOffscreen() {
   try {
     await browser.offscreen.createDocument({
       url: 'offscreen.html',
-      reasons: [browser.offscreen.Reason.WORKERS, browser.offscreen.Reason.USER_MEDIA],
-      justification:
-        "Pipeline voix local de l'avatar : son de l'onglet activé (tabCapture), détection de parole, synthèse Piper en WebAssembly.",
+      reasons: [browser.offscreen.Reason.WORKERS],
+      justification: "Pipeline voix local de l'avatar : détection de parole, transcription, synthèse Piper en WebAssembly.",
     });
   } catch (error) {
     // Chrome refuse un second document offscreen : celui qui existe sert.
@@ -64,27 +61,6 @@ async function ensureOffscreen() {
     throw error;
   }
   return 'démarré';
-}
-
-async function sendToOffscreen(message: ToOffscreen): Promise<CaptureReply> {
-  // Document offscreen tout juste créé : son écouteur peut ne pas être encore en place.
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return (await browser.runtime.sendMessage(message)) as CaptureReply;
-    } catch (error) {
-      if (attempt >= 20) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-}
-
-/** Son du recruteur : son de l'onglet (tabCapture), autorisé par ce clic sur l'onglet actif. */
-async function startTabCapture(tabId: number) {
-  if ((await sendToOffscreen({ target: 'offscreen', type: 'capture-status', tabId })).live) return 'déjà en cours';
-  const streamId = await browser.tabCapture.getMediaStreamId({ targetTabId: tabId });
-  const reply = await sendToOffscreen({ target: 'offscreen', type: 'capture-start', tabId, streamId });
-  if (!reply.live) throw new Error(`capture du son de l'onglet impossible : ${reply.error ?? 'raison inconnue'}`);
-  return 'démarrée';
 }
 
 async function activate() {
@@ -103,18 +79,14 @@ async function activate() {
   });
   // Pont vers le pipeline voix : cadre principal seulement, monde isolé.
   await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ['/content-scripts/bridge.js'] });
-  const capture = sources.shareTab
-    ? (await sendToOffscreen({ target: 'offscreen', type: 'capture-stop', tabId: tab.id }),
-      'par le partage de l’onglet : cliquez sur le bouton OtherSelf dans la page')
-    : `tabCapture ${await startTabCapture(tab.id)}`;
   const frames = results.map((result) => `cadre ${result.frameId} : ${String(result.result)}`);
   status(
     `injection sur ${tab.url} (${results.length} cadre(s))\n${frames.join('\n')}\n` +
-      `pipeline voix : ${pipeline}\nson du recruteur : ${capture}`,
+      `pipeline voix : ${pipeline}\nson du recruteur : cliquez sur le bouton OtherSelf dans la page (partage de l'onglet, son compris)`,
   );
 }
 
-/** Arrêt propre : injection retirée de l'onglet, capture et pipeline voix arrêtés. */
+/** Arrêt propre : injection et partage de l'onglet retirés, pipeline voix arrêté. */
 async function deactivate() {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (tab?.id === undefined) throw new Error('aucun onglet actif');
@@ -131,7 +103,6 @@ async function deactivate() {
     lines.push(`onglet : ${error instanceof Error ? error.message : String(error)}`);
   }
   if (await browser.offscreen.hasDocument()) {
-    await sendToOffscreen({ target: 'offscreen', type: 'capture-stop', tabId: tab.id }).catch(() => undefined);
     // Ferme le document offscreen : VAD, transcription, worker Piper et retour audio s'arrêtent.
     await browser.offscreen.closeDocument();
     lines.push('pipeline voix : arrêté');

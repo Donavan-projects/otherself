@@ -9,7 +9,7 @@ import { takeChunks } from './chunks';
 import { streamReply, type ChatMessage } from './llm';
 import { clock, createLogger } from './log';
 import { int16ToFloat, resample } from './pcm';
-import { openingText, shortDisclosureText, systemPrompt } from './prompt';
+import { disclosureText, openingText, shortDisclosureText, systemPrompt } from './prompt';
 import { createTranscriber, STT_SAMPLE_RATE, type Transcriber } from './stt';
 import type { PiperVoice, SpeechAudio } from './tts';
 import { Vad, VAD_SAMPLE_RATE } from './vad';
@@ -29,6 +29,13 @@ const SPOKEN_MEMORY = 12;
 /** Part des mots d'une transcription déjà prononcés par l'avatar au-delà de laquelle c'est un écho. */
 const ECHO_WORD_RATIO = 0.7;
 const BARGE_IN_CHECK_MS = 50;
+/**
+ * Pendant l'ouverture, seuil d'interruption relevé : un « got it » du recruteur ne doit pas
+ * couper la révélation (et donc la faire rejouer).
+ */
+const OPENING_BARGE_IN_MS = 2000;
+/** Marge (latence réseau) avant de considérer la révélation comme entendue. */
+const HEARD_MARGIN_MS = 300;
 
 /** Vers la page : lecture de la voix dans le micro injecté. */
 export interface PageLink {
@@ -53,6 +60,8 @@ interface Response {
   transcriptLogged: boolean;
   /** Envoi du premier morceau de la réponse elle-même (Date.now). */
   answerStartedAt?: number;
+  /** Début de la lecture dans la page (premier playback-started de ce tour). */
+  playbackStartedAt?: number;
   timings: { transcript?: number; firstToken?: number; firstAudio?: number };
 }
 
@@ -72,7 +81,7 @@ export class Conversation {
   /** Début de la dernière prise de parole du recruteur (Date.now), pour la transcription. */
   private speechStartedAt = Date.now();
   /** Prise de parole commencée par-dessus l'avatar, pas encore assez longue pour l'interrompre. */
-  private bargeIn: { timer: ReturnType<typeof setInterval>; confirmed: boolean } | null = null;
+  private bargeIn: { timer: ReturnType<typeof setInterval>; confirmed: boolean; threshold: number } | null = null;
   private openingPlays = 0;
   private shortDisclosureAudio: Promise<SpeechAudio>;
   /** Dernières phrases prononcées par l'avatar (détection d'écho). */
@@ -85,6 +94,8 @@ export class Conversation {
   private readonly opening: string;
   private readonly system: string;
   private openingAudio: Promise<SpeechAudio[]>;
+  /** Durée de la révélation seule (début de l'ouverture), en ms d'audio. */
+  private disclosureMs = Infinity;
   private vad!: Vad;
 
   private constructor(
@@ -98,9 +109,14 @@ export class Conversation {
     this.system = systemPrompt(config.language, opening, cv, config.candidateName);
     // Ouverture synthétisée d'avance, phrase après phrase ; elle n'est jouée qu'une fois le
     // recruteur présent (fin de sa première prise de parole).
+    // Révélation et message synthétisés à part : on sait ainsi quand la révélation a été entendue.
     this.openingAudio = (async () => {
       const audio: SpeechAudio[] = [];
-      for (const sentence of splitSentences(opening)) audio.push(await voice.synthesize(sentence));
+      for (const sentence of splitSentences(disclosureText(config.language, config.candidateName))) {
+        audio.push(await voice.synthesize(sentence));
+      }
+      this.disclosureMs = audio.reduce((sum, chunk) => sum + (chunk.samples.length / chunk.sampleRate) * 1000, 0);
+      for (const sentence of splitSentences(config.messageText.trim())) audio.push(await voice.synthesize(sentence));
       logTts(`ouverture prête (${audio.length} phrase(s)), pas encore jouée : en attente de la première prise de parole du recruteur`);
       return audio;
     })();
@@ -181,21 +197,32 @@ export class Conversation {
     this.vad.push(resample(int16ToFloat(samples), STT_SAMPLE_RATE, VAD_SAMPLE_RATE), receivedAt);
   }
 
+  /** Ouverture envoyée à la page et pas encore entendue en entier (lecture commencée ou imminente). */
+  private get inOpening(): boolean {
+    const response = this.current;
+    return Boolean(response?.includesOpening && response.openingSent && !this.revealed && !response.answerSent);
+  }
+
   private onSpeechStart(startedAt: number) {
     this.speechStartedAt = startedAt;
-    if (this.avatarSpeakingSince !== null) {
+    const opening = this.inOpening;
+    if (this.avatarSpeakingSince !== null || opening) {
       // Garde-fou : la voix de l'avatar ne doit jamais revenir dans le son capturé.
       logVad(
-        `ALERTE : parole détectée pendant que l'avatar parle (${Date.now() - this.avatarSpeakingSince} ms après le début de sa voix). ` +
+        `ALERTE : parole détectée pendant que l'avatar parle (${
+          this.avatarSpeakingSince === null ? 'ouverture envoyée, lecture pas encore signalée' : `${Date.now() - this.avatarSpeakingSince} ms après le début de sa voix`
+        }). ` +
           'Soit le recruteur lui coupe la parole, soit la voix de l’avatar revient dans le son capturé ' +
           '(micro de B sans casque, ou haut-parleurs de A et B dans la même pièce). Si cela arrive à chaque réponse, c’est un écho.',
       );
       // Seuil d'interruption : l'avatar ne s'arrête que si la parole dure vraiment (temps de
       // parole mesuré par le VAD, hors silence d'attente) ; un écho bref ou un bruit ne le coupe pas.
+      const threshold = opening ? Math.max(this.config.bargeInMs, OPENING_BARGE_IN_MS) : this.config.bargeInMs;
       const bargeIn = {
         confirmed: false,
+        threshold,
         timer: setInterval(() => {
-          if (this.vad.speechMs < this.config.bargeInMs) return;
+          if (this.vad.speechMs < threshold) return;
           clearInterval(bargeIn.timer);
           bargeIn.confirmed = true;
           this.interrupt(`le recruteur parle par-dessus l’avatar depuis ${Math.round(this.vad.speechMs)} ms`);
@@ -237,7 +264,8 @@ export class Conversation {
       clearInterval(bargeIn.timer);
       this.transcriber?.clear();
       logVad(
-        `parole de ${Math.round(durationMs)} ms par-dessus l’avatar, sous le seuil d’interruption (${this.config.bargeInMs} ms) : ignorée (écho ou bruit probable)`,
+        `parole de ${Math.round(durationMs)} ms par-dessus l’avatar, sous le seuil d’interruption (${bargeIn.threshold} ms` +
+          `${bargeIn.threshold > this.config.bargeInMs ? ', relevé pendant l’ouverture' : ''}) : ignorée (écho, bruit ou bref acquiescement)`,
       );
       return;
     }
@@ -284,6 +312,19 @@ export class Conversation {
   private interrupt(reason: string) {
     const response = this.current;
     if (!response) return;
+    // Révélation déjà entendue en entier avant la coupure : elle ne sera pas rejouée.
+    if (response.includesOpening && !this.revealed && response.playbackStartedAt !== undefined) {
+      const heardMs = Date.now() - response.playbackStartedAt;
+      if (heardMs >= this.disclosureMs + HEARD_MARGIN_MS) {
+        this.revealed = true;
+        logTts(
+          `révélation entendue en entier avant l’interruption (${Math.round(heardMs)} ms de lecture, révélation ${Math.round(this.disclosureMs)} ms) : ` +
+            'elle ne sera pas rejouée',
+        );
+      } else {
+        logTts(`révélation coupée après ${Math.round(heardMs)} ms sur ${Math.round(this.disclosureMs)} ms : elle sera rejouée au tour suivant`);
+      }
+    }
     response.controller.abort();
     this.link.stop();
     this.avatarSpeakingSince = null;
@@ -328,8 +369,9 @@ export class Conversation {
   }
 
   /**
-   * Révélation puis messageText, déjà synthétisés. Coupée, elle est rejouée une fois ;
-   * ensuite (écho probable), seul un rappel court de la révélation précède les réponses.
+   * Révélation puis messageText, déjà synthétisés. Coupée avant la fin de la révélation, elle
+   * est rejouée une fois ; ensuite seulement (écho probable), un rappel court de la révélation
+   * précède les réponses. Jamais de rappel dans la première réponse.
    */
   private async sendOpening(response: Response) {
     let audio: SpeechAudio[];
@@ -462,6 +504,7 @@ export class Conversation {
     const response = this.current;
     if (response?.id !== responseId) return;
     this.avatarSpeakingSince = at;
+    response.playbackStartedAt ??= at;
     if (response.played) return;
     response.played = true;
     const { transcript, firstToken, firstAudio } = response.timings;

@@ -1,6 +1,6 @@
 // Retour audio de la voix de l'avatar pour l'utilisateur, joué par le document offscreen.
-// Jamais dans l'onglet de l'entretien : le son de cet onglet est capturé comme son du
-// recruteur (tab-audio.ts), alors que la sortie du document offscreen ne l'est pas.
+// Jamais dans l'onglet de l'entretien : le son de cet onglet est partagé comme son du
+// recruteur (share-tab.ts), alors que la sortie du document offscreen ne l'est pas.
 
 import type { SpeechAudio } from './tts';
 import { createLogger } from './log';

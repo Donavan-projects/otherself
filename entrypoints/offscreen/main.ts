@@ -1,20 +1,17 @@
 // Document offscreen : fait tourner le pipeline voix (VAD, transcription, LLM, Piper)
 // pour l'onglet activé. Un seul document offscreen par extension (garanti par Chrome),
-// donc un seul pipeline ; un seul onglet relié à la fois (le dernier activé).
-// Le son du recruteur est le son de cet onglet (chrome.tabCapture, tab-audio.ts) ; la
-// voix de l'avatar repart vers la page par le pont. Créé par le popup ; reçoit le son du recruteur et renvoie la voix
-// de l'avatar par le pont (bridge.content.ts). Ses logs sont recopiés dans la console de
-// la page de la plateforme.
+// donc un seul pipeline ; un seul onglet relié à la fois (le dernier activé). Créé par le
+// popup. Il reçoit par le pont (bridge.content.ts) le son de l'onglet, partagé par la page
+// (share-tab.ts), et renvoie la voix de l'avatar par le même pont. Ses logs sont recopiés
+// dans la console de la page de la plateforme.
 
 import type { Browser } from 'wxt/browser';
-import { PORT_NAME, type CaptureReply, type FromOffscreen, type FromPage, type ToOffscreen } from '@/lib/bridge-messages';
+import { PORT_NAME, type FromOffscreen, type FromPage } from '@/lib/bridge-messages';
 import { loadDemoConfig, loadLocalText } from '@/lib/config';
 import { Conversation } from '@/lib/conversation';
 import { createLogger } from '@/lib/log';
 import { AvatarMonitor } from '@/lib/monitor';
 import { base64ToBuffer, bufferToBase64 } from '@/lib/pcm';
-import { STT_SAMPLE_RATE } from '@/lib/stt';
-import { TabAudioCapture } from '@/lib/tab-audio';
 import { PiperVoice } from '@/lib/tts';
 import { configureOnnxRuntime } from '@/lib/vad';
 
@@ -31,9 +28,9 @@ console.log = (...args: unknown[]) => {
 const log = createLogger('llm');
 const logInject = createLogger('inject');
 
-// Son reçu du pont (option C) : un bilan par seconde, nombre de blocs et niveau, pour voir
+// Son reçu du pont : un bilan par seconde, nombre de blocs et niveau, pour voir
 // tout de suite si le partage de l'onglet alimente le pipeline.
-const bridgeAudio = { blocks: 0, sumSquares: 0, samples: 0, peak: 0, total: 0, ignored: false, silentReported: true };
+const bridgeAudio = { blocks: 0, sumSquares: 0, samples: 0, peak: 0, total: 0, silentReported: true };
 setInterval(() => {
   const { blocks, sumSquares, samples, peak } = bridgeAudio;
   if (blocks === 0) {
@@ -89,12 +86,7 @@ browser.runtime.onConnect.addListener((connected) => {
   connected.onMessage.addListener((message: FromPage) => {
     switch (message.type) {
       case 'audio': {
-        // Option C : son de l'onglet partagé par la page (déjà à 24 kHz).
-        if (capture?.isLive) {
-          if (!bridgeAudio.ignored) logInject('son reçu du pont ignoré : la capture tabCapture est active sur cet onglet');
-          bridgeAudio.ignored = true;
-          break;
-        }
+        // Son de l'onglet partagé par la page, déjà à 24 kHz.
         const samples = new Int16Array(base64ToBuffer(message.pcm));
         measureBridgeAudio(samples);
         onTabAudio(samples, message.at);
@@ -115,19 +107,10 @@ browser.runtime.onConnect.addListener((connected) => {
   connected.onDisconnect.addListener(() => {
     if (port !== connected) return;
     port = null;
-    // Onglet fermé ou rechargé (le pont disparaît avec la page) : la capture s'arrête aussi.
-    if (capture?.isLive) {
-      capture.stop();
-      logInject(`onglet ${capture.tabId} fermé ou rechargé : capture du son arrêtée (réactiver l'extension pour reprendre)`);
-    } else {
-      logInject('onglet fermé ou rechargé : pont déconnecté (réactiver l’extension pour reprendre)');
-    }
-    capture = null;
+    // Onglet fermé ou rechargé : le pont disparaît avec la page, et Chrome arrête le partage.
+    logInject('onglet fermé ou rechargé : pont déconnecté, partage de l’onglet arrêté (réactiver l’extension pour reprendre)');
   });
 });
-
-// Capture du son de l'onglet : une seule à la fois, celle de l'onglet activé en dernier.
-let capture: TabAudioCapture | null = null;
 
 function onTabAudio(samples: Int16Array, at: number) {
   if (conversation) {
@@ -137,33 +120,6 @@ function onTabAudio(samples: Int16Array, at: number) {
     log('son du recruteur reçu, mais le pipeline n’est pas encore prêt');
   }
 }
-
-async function handle(message: ToOffscreen): Promise<CaptureReply> {
-  if (message.type === 'capture-stop') {
-    if (capture?.isLive) log('capture tabCapture arrêtée : le son du recruteur viendra du partage de l’onglet par la page');
-    capture?.stop();
-    capture = null;
-    return { live: false };
-  }
-  const live = capture?.isLive === true && capture.tabId === message.tabId;
-  if (message.type === 'capture-status' || live) return { live };
-  capture?.stop();
-  capture = null;
-  try {
-    capture = await TabAudioCapture.start(message.tabId, message.streamId, STT_SAMPLE_RATE, onTabAudio);
-    return { live: true };
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    log(`capture du son de l'onglet impossible : ${reason}`);
-    return { live: false, error: reason };
-  }
-}
-
-browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse: (reply: CaptureReply) => void) => {
-  if ((message as Partial<ToOffscreen> | null)?.target !== 'offscreen') return undefined;
-  void handle(message as ToOffscreen).then(sendResponse);
-  return true;
-});
 
 async function start() {
   const config = await loadDemoConfig();

@@ -1,8 +1,11 @@
-// Son du recruteur, option C (prototype) : la page de l'entretien partage son propre onglet,
-// son compris, par la fenêtre de partage standard de Chrome (getDisplayMedia). Aucune
-// permission d'extension. Chrome exige un clic dans la page : un bouton est injecté.
-// Le flux n'est jamais remis à la plateforme : seul son son part vers le document offscreen
-// (par le pont), comme avec tabCapture. Monde MAIN, cadre principal.
+// Son du recruteur : la page de l'entretien partage son propre onglet, son compris, par la
+// fenêtre de partage standard de Chrome (getDisplayMedia). Aucune permission d'extension
+// (règle 6). Chrome exige un clic dans la page : un bouton est injecté. Le flux n'est jamais
+// remis à la plateforme : seul son son part vers le document offscreen, par le pont.
+// Ni le micro de l'utilisateur ni la voix de l'avatar n'y sont : la plateforme ne rejoue pas
+// le micro, et la voix de l'avatar ne sort que par le micro injecté (et par le retour audio
+// du document offscreen), jamais par les haut-parleurs de l'onglet.
+// Monde MAIN, cadre principal.
 
 import { createLogger } from './log';
 import { audioContext } from './page-audio';
@@ -15,8 +18,7 @@ const BLOCK_SAMPLES = 2048;
 const REPORT_INTERVAL_MS = 15000;
 
 // AudioWorklet chargé depuis une URL blob : un fichier de l'extension devrait être exposé aux
-// sites (web_accessible_resources). Même traitement que entrypoints/capture-worklet.ts
-// (document offscreen), écrit ici en JavaScript pur parce qu'il est passé en texte.
+// sites (web_accessible_resources). Écrit en JavaScript pur parce qu'il est passé en texte.
 const WORKLET_NAME = 'otherself-share';
 const WORKLET_SOURCE = `registerProcessor('${WORKLET_NAME}', class extends AudioWorkletProcessor {
   constructor() { super(); this.block = new Float32Array(${BLOCK_SAMPLES}); this.filled = 0; }
@@ -171,8 +173,9 @@ export function offerTabShare(onChunk: (pcm: string, at: number) => void): TabSh
       .call(navigator.mediaDevices, {
         // Chrome refuse un partage sans vidéo : la piste vidéo est arrêtée aussitôt.
         video: true,
-        // Son brut : l'annulation d'écho prendrait la sortie de l'onglet comme référence, donc
-        // le son à capter lui-même, et le détruirait ; réduction de bruit et gain auto aussi coupés.
+        // Son brut, à ne jamais réactiver : l'annulation d'écho prend la sortie de l'onglet comme
+        // référence, donc le son à capter lui-même, et le détruisait (VAD muet sur Meet et
+        // InterviewCoach) ; réduction de bruit et gain auto restent coupés aussi.
         audio: {
           suppressLocalAudioPlayback: false,
           echoCancellation: false,

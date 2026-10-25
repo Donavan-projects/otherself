@@ -13,6 +13,63 @@ const log = createLogger('tts');
 const SLOW_WARNING_MIN_AUDIO_MS = 2000;
 const SLOW_RATIO = 0.8;
 
+// Normalisation : la voix de Piper sort nettement plus bas qu'une voix de visio. Niveau de
+// parole visé (RMS des passages parlés, silences exclus) et crête maximale (pas de saturation).
+const TARGET_SPEECH_DBFS = -18;
+const MAX_PEAK = 0.89; // −1 dBFS
+const MAX_GAIN = 10;
+const FRAME_MS = 20;
+/** Trames comptées comme parole : à moins de 30 dB de la plus forte, et au-dessus de −55 dBFS. */
+const ACTIVE_RANGE_DB = 30;
+const ACTIVE_FLOOR_DBFS = -55;
+
+const dbfs = (value: number) => (value > 0 ? 20 * Math.log10(value) : -Infinity);
+const fromDbfs = (db: number) => 10 ** (db / 20);
+
+interface Normalized {
+  samples: Float32Array<ArrayBuffer>;
+  beforeDbfs: number;
+  afterDbfs: number;
+  beforePeak: number;
+  afterPeak: number;
+  gain: number;
+}
+
+/** Ramène la parole au niveau visé, sans dépasser la crête maximale. */
+export function normalizeSpeech(samples: Float32Array<ArrayBuffer>, sampleRate: number): Normalized {
+  const frame = Math.max(1, Math.round((sampleRate * FRAME_MS) / 1000));
+  const frames: number[] = [];
+  let peak = 0;
+  for (let start = 0; start < samples.length; start += frame) {
+    let sum = 0;
+    const end = Math.min(samples.length, start + frame);
+    for (let i = start; i < end; i += 1) {
+      const value = samples[i]!;
+      sum += value * value;
+      peak = Math.max(peak, Math.abs(value));
+    }
+    frames.push(sum / (end - start));
+  }
+  const loudest = Math.max(0, ...frames);
+  const gate = Math.max(loudest * fromDbfs(-ACTIVE_RANGE_DB) ** 2, fromDbfs(ACTIVE_FLOOR_DBFS) ** 2);
+  const active = frames.filter((power) => power >= gate);
+  const speechRms = active.length ? Math.sqrt(active.reduce((sum, power) => sum + power, 0) / active.length) : 0;
+  if (speechRms === 0 || peak === 0) {
+    return { samples, beforeDbfs: -Infinity, afterDbfs: -Infinity, beforePeak: peak, afterPeak: peak, gain: 1 };
+  }
+  const gain = Math.min(fromDbfs(TARGET_SPEECH_DBFS) / speechRms, MAX_PEAK / peak, MAX_GAIN);
+  const output = new Float32Array(samples.length);
+  for (let i = 0; i < samples.length; i += 1) output[i] = samples[i]! * gain;
+  return {
+    samples: output,
+    beforeDbfs: dbfs(speechRms),
+    afterDbfs: dbfs(speechRms * gain),
+    beforePeak: peak,
+    afterPeak: peak * gain,
+    gain,
+  };
+}
+
 export interface SpeechAudio {
   samples: Float32Array<ArrayBuffer>;
   sampleRate: number;
@@ -90,12 +147,16 @@ export class PiperVoice {
       pending.reject(new Error(message.message));
       return;
     }
-    const { samples, sampleRate, elapsedMs } = message;
+    const { sampleRate, elapsedMs } = message;
+    const level = normalizeSpeech(message.samples, sampleRate);
+    const { samples } = level;
     const durationMs = (samples.length / sampleRate) * 1000;
     const ratio = elapsedMs / durationMs;
     const slow = ratio > SLOW_RATIO && durationMs > SLOW_WARNING_MIN_AUDIO_MS;
     log(
-      `phrase synthétisée en ${Math.round(elapsedMs)} ms (${Math.round(durationMs)} ms d'audio, ${ratio.toFixed(2)} × temps réel) : « ${pending.text} »` +
+      `phrase synthétisée en ${Math.round(elapsedMs)} ms (${Math.round(durationMs)} ms d'audio, ${ratio.toFixed(2)} × temps réel ; ` +
+        `niveau de parole ${level.beforeDbfs.toFixed(0)} → ${level.afterDbfs.toFixed(0)} dBFS, crête ${level.beforePeak.toFixed(2)} → ` +
+        `${level.afterPeak.toFixed(2)}, gain ×${level.gain.toFixed(1)}) : « ${pending.text} »` +
         (slow ? ' — voix trop lente pour cette machine, préférer une voix « medium » plus légère' : ''),
     );
     pending.resolve({ samples, sampleRate });
