@@ -61,5 +61,8 @@
   },
   "popupActivate": {
     "message": "Enable on this tab"
+  },
+  "popupDeactivate": {
+    "message": "Disable on this tab"
   }
 }

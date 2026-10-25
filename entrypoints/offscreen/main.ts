@@ -29,6 +29,38 @@ console.log = (...args: unknown[]) => {
 };
 
 const log = createLogger('llm');
+const logInject = createLogger('inject');
+
+// Son reçu du pont (option C) : un bilan par seconde, nombre de blocs et niveau, pour voir
+// tout de suite si le partage de l'onglet alimente le pipeline.
+const bridgeAudio = { blocks: 0, sumSquares: 0, samples: 0, peak: 0, total: 0, ignored: false, silentReported: true };
+setInterval(() => {
+  const { blocks, sumSquares, samples, peak } = bridgeAudio;
+  if (blocks === 0) {
+    if (!bridgeAudio.silentReported && bridgeAudio.total > 0) logInject('son reçu du pont : plus aucun bloc depuis 1 s');
+    bridgeAudio.silentReported = true;
+    return;
+  }
+  bridgeAudio.silentReported = false;
+  const rms = samples ? Math.sqrt(sumSquares / samples) : 0;
+  logInject(
+    `son reçu du pont : ${blocks} bloc(s) en 1 s, niveau ${rms > 0 ? `${(20 * Math.log10(rms)).toFixed(0)} dBFS` : 'silence'} ` +
+      `(crête ${peak.toFixed(2)})`,
+  );
+  Object.assign(bridgeAudio, { blocks: 0, sumSquares: 0, samples: 0, peak: 0 });
+}, 1000);
+
+function measureBridgeAudio(samples: Int16Array) {
+  if (bridgeAudio.total === 0) logInject(`son reçu du pont : premier bloc (${samples.length} échantillons à 24 kHz)`);
+  bridgeAudio.total += 1;
+  bridgeAudio.blocks += 1;
+  for (const value of samples) {
+    const sample = value / 0x8000;
+    bridgeAudio.sumSquares += sample * sample;
+    bridgeAudio.peak = Math.max(bridgeAudio.peak, Math.abs(sample));
+  }
+  bridgeAudio.samples += samples.length;
+}
 let conversation: Conversation | null = null;
 let warnedNotReady = false;
 let micReady = false;
@@ -56,11 +88,18 @@ browser.runtime.onConnect.addListener((connected) => {
   if (!samePage) conversation?.reset('nouvelle page de la plateforme');
   connected.onMessage.addListener((message: FromPage) => {
     switch (message.type) {
-      case 'audio':
+      case 'audio': {
         // Option C : son de l'onglet partagé par la page (déjà à 24 kHz).
-        if (capture?.isLive) break;
-        onTabAudio(new Int16Array(base64ToBuffer(message.pcm)), message.at);
+        if (capture?.isLive) {
+          if (!bridgeAudio.ignored) logInject('son reçu du pont ignoré : la capture tabCapture est active sur cet onglet');
+          bridgeAudio.ignored = true;
+          break;
+        }
+        const samples = new Int16Array(base64ToBuffer(message.pcm));
+        measureBridgeAudio(samples);
+        onTabAudio(samples, message.at);
         break;
+      }
       case 'mic-ready':
         micReady = true;
         conversation?.setMicReady(true);
@@ -74,7 +113,16 @@ browser.runtime.onConnect.addListener((connected) => {
     }
   });
   connected.onDisconnect.addListener(() => {
-    if (port === connected) port = null;
+    if (port !== connected) return;
+    port = null;
+    // Onglet fermé ou rechargé (le pont disparaît avec la page) : la capture s'arrête aussi.
+    if (capture?.isLive) {
+      capture.stop();
+      logInject(`onglet ${capture.tabId} fermé ou rechargé : capture du son arrêtée (réactiver l'extension pour reprendre)`);
+    } else {
+      logInject('onglet fermé ou rechargé : pont déconnecté (réactiver l’extension pour reprendre)');
+    }
+    capture = null;
   });
 });
 

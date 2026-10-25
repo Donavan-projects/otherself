@@ -12,7 +12,7 @@ import { offerTabShare } from '@/lib/share-tab';
 
 declare global {
   interface Window {
-    __otherSelf?: { install(sources: SerializedSources): Promise<string> };
+    __otherSelf?: { install(sources: SerializedSources): Promise<string>; uninstall(): string };
   }
 }
 
@@ -35,7 +35,16 @@ export default defineContentScript({
       return;
     }
     let installed = false;
+    let uninstallers: (() => void)[] = [];
     window.__otherSelf = {
+      uninstall() {
+        if (!installed) return 'déjà inactif';
+        for (const undo of uninstallers.reverse()) undo();
+        uninstallers = [];
+        installed = false;
+        log(`désactivé (${frame} ${location.href})`);
+        return 'désactivé';
+      },
       async install(sources) {
         if (installed) return 'déjà actif';
         installed = true;
@@ -46,7 +55,7 @@ export default defineContentScript({
         if (sources.debugSafeZone) log('débogage : contour de la zone de sécurité affiché');
 
         let voice: VoiceOutput | null = null;
-        installFakeGetUserMedia({
+        const media = installFakeGetUserMedia({
           photo,
           avatarOptions: { bannerText: sources.bannerText, debugSafeZone: sources.debugSafeZone },
           createAudioTrack: async () => {
@@ -62,9 +71,16 @@ export default defineContentScript({
 
         // Le pipeline voix n'est relié qu'au cadre principal. Son du recruteur : partage de
         // l'onglet par la page (option C), ou chrome.tabCapture côté extension.
-        if (isTop && sources.shareTab) offerTabShare((pcm, at) => sendToExtension({ type: 'audio', pcm, at }));
+        uninstallers.push(() => {
+          voice?.stop();
+          media.uninstall();
+        });
+        if (isTop && sources.shareTab) {
+          const share = offerTabShare((pcm, at) => sendToExtension({ type: 'audio', pcm, at }));
+          uninstallers.push(() => share.stop());
+        }
         if (isTop) {
-          window.addEventListener('message', (event) => {
+          const onMessage = (event: MessageEvent) => {
             if (event.source !== window) return;
             const envelope = event.data as Partial<PageEnvelope> | null;
             if (envelope?.[PAGE_TAG] !== 'to-page' || !envelope.message) return;
@@ -77,7 +93,9 @@ export default defineContentScript({
             } else if (message.type === 'stop') {
               voice?.stop();
             }
-          });
+          };
+          window.addEventListener('message', onMessage);
+          uninstallers.push(() => window.removeEventListener('message', onMessage));
         }
         return 'actif';
       },

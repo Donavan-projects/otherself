@@ -44,9 +44,16 @@ function pristineGetDisplayMedia(): GetDisplayMedia {
   return pristine ?? current;
 }
 
+export interface TabShare {
+  /** Retire le bouton et arrête le partage en cours. */
+  stop(): void;
+}
+
 /** Affiche le bouton ; au clic, partage de l'onglet et envoi de son son. */
-export function offerTabShare(onChunk: (pcm: string, at: number) => void) {
+export function offerTabShare(onChunk: (pcm: string, at: number) => void): TabShare {
   const getDisplayMedia = pristineGetDisplayMedia();
+  let stopListening: (() => void) | null = null;
+  let stopped = false;
 
   // Shadow DOM : le style de la page ne touche pas le bouton.
   const host = document.createElement('div');
@@ -60,6 +67,7 @@ export function offerTabShare(onChunk: (pcm: string, at: number) => void) {
   shadow.append(button);
 
   const show = (reason: string) => {
+    if (stopped) return;
     button.disabled = false;
     document.documentElement.append(host);
     log(`partage de l’onglet : bouton affiché (${reason})`);
@@ -81,6 +89,10 @@ export function offerTabShare(onChunk: (pcm: string, at: number) => void) {
       .then((stream) => {
         const [audio] = stream.getAudioTracks();
         const [video] = stream.getVideoTracks();
+        if (stopped) {
+          for (const track of stream.getTracks()) track.stop();
+          return;
+        }
         const surface = (video?.getSettings() as MediaTrackSettings & { displaySurface?: string } | undefined)?.displaySurface;
         log(
           `partage de l’onglet : accepté (surface ${surface ?? 'inconnue'}, ${audio ? 'avec' : 'SANS'} son, ` +
@@ -94,7 +106,10 @@ export function offerTabShare(onChunk: (pcm: string, at: number) => void) {
         }
         if (surface && surface !== 'browser') log(`partage de l’onglet : ATTENTION, surface « ${surface} » au lieu de l’onglet`);
         host.remove();
-        listen(audio, onChunk, () => show('partage arrêté'));
+        stopListening = listen(audio, onChunk, () => {
+          stopListening = null;
+          show('partage arrêté');
+        });
       })
       .catch((error: unknown) => {
         const name = error instanceof DOMException ? error.name : '';
@@ -108,10 +123,25 @@ export function offerTabShare(onChunk: (pcm: string, at: number) => void) {
   });
 
   show('activation');
+  return {
+    stop() {
+      stopped = true;
+      host.remove();
+      stopListening?.();
+      log('partage de l’onglet : bouton retiré et partage arrêté (désactivation)');
+    },
+  };
 }
 
-function listen(track: MediaStreamTrack, onChunk: (pcm: string, at: number) => void, onEnded: () => void) {
+/** Envoie le son de la piste partagée ; renvoie de quoi l'arrêter. */
+function listen(track: MediaStreamTrack, onChunk: (pcm: string, at: number) => void, onEnded: () => void): () => void {
   const ctx = audioContext();
+  if (ctx.state !== 'running') void ctx.resume();
+  const settings = track.getSettings() as MediaTrackSettings & { suppressLocalAudioPlayback?: boolean };
+  log(
+    `partage de l’onglet : contexte audio de la page ${ctx.state} (${ctx.sampleRate} Hz), piste ${track.muted ? 'muette' : 'active'}, ` +
+      `son toujours joué pour vous : ${settings.suppressLocalAudioPlayback === true ? 'NON' : 'oui'}`,
+  );
   const source = ctx.createMediaStreamSource(new MediaStream([track]));
   const processor = ctx.createScriptProcessor(PROCESSOR_FRAMES, 1, 1);
   const silent = ctx.createGain();
@@ -119,9 +149,15 @@ function listen(track: MediaStreamTrack, onChunk: (pcm: string, at: number) => v
   source.connect(processor);
   // Sortie muette : le son de l'onglet reste joué par la page elle-même (suppressLocalAudioPlayback: false).
   processor.connect(silent).connect(ctx.destination);
-  const level = { sumSquares: 0, samples: 0, peak: 0 };
+  const level = { sumSquares: 0, samples: 0, peak: 0, blocks: 0 };
+  let firstBlock = true;
   processor.addEventListener('audioprocess', (event) => {
     const input = event.inputBuffer.getChannelData(0);
+    if (firstBlock) {
+      firstBlock = false;
+      log(`partage de l’onglet : premier bloc audio traité par la page (${input.length} échantillons), envoi vers le pipeline`);
+    }
+    level.blocks += 1;
     for (const sample of input) {
       level.sumSquares += sample * sample;
       level.peak = Math.max(level.peak, Math.abs(sample));
@@ -133,22 +169,32 @@ function listen(track: MediaStreamTrack, onChunk: (pcm: string, at: number) => v
     const rms = level.samples ? Math.sqrt(level.sumSquares / level.samples) : 0;
     log(
       `bilan du partage de l’onglet sur ${REPORT_INTERVAL_MS / 1000} s : niveau ${rms > 0 ? `${(20 * Math.log10(rms)).toFixed(0)} dBFS` : 'silence'} ` +
-        `(crête ${level.peak.toFixed(2)}), contexte audio ${ctx.state}`,
+        `(crête ${level.peak.toFixed(2)}), ${level.blocks} bloc(s) envoyé(s) au pont, contexte audio ${ctx.state}`,
     );
+    level.blocks = 0;
     level.sumSquares = 0;
     level.samples = 0;
     level.peak = 0;
   }, REPORT_INTERVAL_MS);
   log(`partage de l’onglet : piste audio reçue (« ${track.label} », ${track.readyState}), envoyée au pipeline voix`);
+  track.addEventListener('mute', () => log('partage de l’onglet : piste muette (Chrome ne transmet plus de son)'));
+  track.addEventListener('unmute', () => log('partage de l’onglet : piste de nouveau active'));
+  const cleanUp = () => {
+    clearInterval(report);
+    processor.disconnect();
+    source.disconnect();
+  };
   track.addEventListener(
     'ended',
     () => {
-      clearInterval(report);
-      processor.disconnect();
-      source.disconnect();
+      cleanUp();
       log('partage de l’onglet : terminé (« Arrêter le partage » dans Chrome, ou onglet rechargé)');
       onEnded();
     },
     { once: true },
   );
+  return () => {
+    cleanUp();
+    track.stop();
+  };
 }

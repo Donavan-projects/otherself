@@ -22,6 +22,8 @@ const log = createLogger('inject');
 const activateButton = document.querySelector<HTMLButtonElement>('#activate')!;
 const statusEl = document.querySelector<HTMLParagraphElement>('#status')!;
 activateButton.textContent = browser.i18n.getMessage('popupActivate');
+const deactivateButton = document.querySelector<HTMLButtonElement>('#deactivate')!;
+deactivateButton.textContent = browser.i18n.getMessage('popupDeactivate');
 
 const status = (message: string) => {
   log(message);
@@ -111,6 +113,43 @@ async function activate() {
       `pipeline voix : ${pipeline}\nson du recruteur : ${capture}`,
   );
 }
+
+/** Arrêt propre : injection retirée de l'onglet, capture et pipeline voix arrêtés. */
+async function deactivate() {
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id === undefined) throw new Error('aucun onglet actif');
+  const lines: string[] = [];
+  try {
+    const results = await browser.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
+      world: 'MAIN',
+      func: () => window.__otherSelf?.uninstall() ?? 'jamais activé',
+    });
+    lines.push(...results.map((result) => `cadre ${result.frameId} : ${String(result.result)}`));
+  } catch (error) {
+    // Onglet rechargé ou fermé entre-temps : il n'y a plus rien à retirer dans la page.
+    lines.push(`onglet : ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (await browser.offscreen.hasDocument()) {
+    await sendToOffscreen({ target: 'offscreen', type: 'capture-stop', tabId: tab.id }).catch(() => undefined);
+    // Ferme le document offscreen : VAD, transcription, worker Piper et retour audio s'arrêtent.
+    await browser.offscreen.closeDocument();
+    lines.push('pipeline voix : arrêté');
+  } else {
+    lines.push('pipeline voix : déjà arrêté');
+  }
+  status(`désactivation sur ${tab.url}\n${lines.join('\n')}\nRéactivez la vraie caméra et le vrai micro dans les réglages de la plateforme.`);
+}
+
+deactivateButton.addEventListener('click', () => {
+  deactivateButton.disabled = true;
+  status('désactivation en cours…');
+  deactivate()
+    .catch((error: unknown) => status(`échec de la désactivation : ${error instanceof Error ? error.message : String(error)}`))
+    .finally(() => {
+      deactivateButton.disabled = false;
+    });
+});
 
 activateButton.addEventListener('click', () => {
   activateButton.disabled = true;

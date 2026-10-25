@@ -61,5 +61,8 @@
   },
   "popupActivate": {
     "message": "Activer sur cet onglet"
+  },
+  "popupDeactivate": {
+    "message": "Désactiver sur cet onglet"
   }
 }
