@@ -14,6 +14,8 @@ export interface DemoConfig {
   /** Déclaration prononcée après la révélation, avant les réponses (mode « message »). */
   messageText: string;
   language: Language;
+  /** Prénom ou nom du candidat : l'avatar parle de lui à la troisième personne. */
+  candidateName: string;
   /** Identifiant de voix Piper, par exemple en_US-ljspeech-high. */
   voice: string;
   /** Silence (ms) après lequel le recruteur est considéré comme ayant fini de parler. */
@@ -21,6 +23,10 @@ export interface DemoConfig {
   /** Parole continue (ms) par-dessus la voix de l'avatar nécessaire pour l'interrompre (anti-écho). */
   bargeInMs: number;
   openaiApiKey: string;
+  /** Retour audio de la voix de l'avatar pour l'utilisateur (document offscreen). */
+  monitorAvatar: boolean;
+  /** Volume du retour, de 0 à 1. */
+  monitorVolume: number;
   sttModel: string;
   llmModel: string;
 }
@@ -35,11 +41,14 @@ const DEFAULTS: DemoConfig = {
   bannerText: DEFAULT_BANNER_TEXT,
   messageText: '',
   language: 'en',
+  candidateName: '',
   // « high » est trop lent en WebAssembly sur la machine de référence (mesuré : 1,25 à 2,7 × temps réel).
   voice: 'en_US-ljspeech-medium',
   silenceMs: 800,
   bargeInMs: 600,
   openaiApiKey: '',
+  monitorAvatar: true,
+  monitorVolume: 0.8,
   sttModel: 'gpt-live-transcribe',
   llmModel: 'gpt-6-luna',
 };
@@ -58,6 +67,12 @@ export async function loadDemoConfig(): Promise<DemoConfig> {
   config.bannerText = bannerTextOrDefault(raw.bannerText);
   config.language = raw.language === 'fr' ? 'fr' : 'en';
   config.silenceMs = Number(raw.silenceMs) > 0 ? Number(raw.silenceMs) : DEFAULTS.silenceMs;
+  config.candidateName = typeof raw.candidateName === 'string' ? raw.candidateName.trim() : '';
+  config.monitorAvatar = raw.monitorAvatar !== false;
+  config.monitorVolume =
+    Number.isFinite(Number(raw.monitorVolume)) && raw.monitorVolume !== undefined
+      ? Math.min(1, Math.max(0, Number(raw.monitorVolume)))
+      : DEFAULTS.monitorVolume;
   config.bargeInMs = Number(raw.bargeInMs) >= 0 && raw.bargeInMs !== undefined ? Number(raw.bargeInMs) : DEFAULTS.bargeInMs;
   return config;
 }

@@ -44,8 +44,14 @@ export async function createTranscriber(options: SttOptions): Promise<Transcribe
   }
 }
 
+interface PendingCommit {
+  sentAt: number;
+  resolve(itemId: string | null): void;
+}
+
 class RealtimeTranscriber implements Transcriber {
-  private pendingCommits: ((itemId: string) => void)[] = [];
+  /** Commits envoyés, dans l'ordre, en attente de leur confirmation (input_audio_buffer.committed). */
+  private pendingCommits: PendingCommit[] = [];
   private readonly waiting = new Map<string, (text: string) => void>();
   private readonly finished = new Map<string, string>();
   private hasAudio = false;
@@ -97,10 +103,15 @@ class RealtimeTranscriber implements Transcriber {
   }
 
   private onMessage(data: string) {
-    const event = JSON.parse(data) as { type: string; item_id?: string; transcript?: string; error?: { message?: string } };
+    const event = JSON.parse(data) as {
+      type: string;
+      item_id?: string;
+      transcript?: string;
+      error?: { message?: string; code?: string; type?: string };
+    };
     switch (event.type) {
       case 'input_audio_buffer.committed':
-        this.pendingCommits.shift()?.(event.item_id ?? '');
+        this.pendingCommits.shift()?.resolve(event.item_id ?? '');
         break;
       case 'conversation.item.input_audio_transcription.completed': {
         const itemId = event.item_id ?? '';
@@ -114,10 +125,25 @@ class RealtimeTranscriber implements Transcriber {
         }
         break;
       }
-      case 'conversation.item.input_audio_transcription.failed':
-      case 'error':
-        log(`erreur Realtime : ${event.error?.message ?? data}`);
+      case 'conversation.item.input_audio_transcription.failed': {
+        // Sans réponse, la question attendrait jusqu'au délai et serait perdue en silence.
+        log(`échec de transcription d'un segment : ${event.error?.message ?? data}`);
+        const itemId = event.item_id ?? '';
+        const resolve = this.waiting.get(itemId);
+        this.waiting.delete(itemId);
+        if (resolve) resolve('');
+        else this.finished.set(itemId, '');
         break;
+      }
+      case 'error': {
+        log(`erreur Realtime : ${event.error?.message ?? data}${event.error?.code ? ` (${event.error.code})` : ''}`);
+        // Commit refusé (tampon vide ou trop court) : aucun « committed » ne viendra. Sans
+        // cela, les commits suivants seraient décalés d'un cran et leurs questions perdues.
+        if (event.error?.code?.includes('commit') || /commit/i.test(event.error?.message ?? '')) {
+          this.pendingCommits.shift()?.resolve(null);
+        }
+        break;
+      }
       default:
         break;
     }
@@ -131,23 +157,46 @@ class RealtimeTranscriber implements Transcriber {
   async commit(): Promise<string> {
     if (!this.hasAudio) return '';
     this.hasAudio = false;
-    const itemId = new Promise<string>((resolve) => this.pendingCommits.push(resolve));
+    const sentAt = Date.now();
+    let committedId: string | null | undefined;
+    const itemId = new Promise<string | null>((resolve) =>
+      this.pendingCommits.push({
+        sentAt,
+        resolve: (id) => {
+          committedId = id;
+          resolve(id);
+        },
+      }),
+    );
     this.send({ type: 'input_audio_buffer.commit' });
+    let timedOut = false;
     const transcript = itemId.then(
       (id) =>
         new Promise<string>((resolve) => {
+          if (id === null) return resolve('');
           const done = this.finished.get(id);
           if (done !== undefined) {
             this.finished.delete(id);
             resolve(done);
-          } else {
-            this.waiting.set(id, resolve);
+            return;
           }
+          this.waiting.set(id, (text) => {
+            // Arrivée après le délai : le segment a été traité comme vide, on le signale.
+            if (timedOut) log(`transcription arrivée en retard (${Date.now() - sentAt} ms), segment perdu : « ${text} »`);
+            resolve(text);
+          });
         }),
     );
     const timeout = new Promise<string>((resolve) =>
       setTimeout(() => {
-        log(`pas de transcription après ${COMMIT_TIMEOUT_MS} ms`);
+        timedOut = true;
+        const stage =
+          committedId === undefined
+            ? 'commit jamais confirmé par OpenAI'
+            : committedId === null
+              ? 'commit refusé'
+              : 'commit confirmé, texte jamais reçu';
+        log(`pas de transcription après ${COMMIT_TIMEOUT_MS} ms (${stage}) : segment perdu`);
         resolve('');
       }, COMMIT_TIMEOUT_MS),
     );

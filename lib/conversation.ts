@@ -5,8 +5,9 @@
 // du recruteur, sans attendre la transcription, puis vient la réponse à sa question.
 
 import type { DemoConfig } from './config';
+import { takeChunks } from './chunks';
 import { streamReply, type ChatMessage } from './llm';
-import { createLogger } from './log';
+import { clock, createLogger } from './log';
 import { int16ToFloat, resample } from './pcm';
 import { openingText, shortDisclosureText, systemPrompt } from './prompt';
 import { createTranscriber, STT_SAMPLE_RATE, type Transcriber } from './stt';
@@ -21,10 +22,6 @@ const logVad = createLogger('vad');
 /** Audio gardé avant le début de parole confirmé, pour ne pas couper le premier mot. */
 const PREROLL_MS = 600;
 const MAX_HISTORY_MESSAGES = 12;
-/** Au-delà, une phrase trop longue est coupée à la dernière virgule pour parler plus tôt. */
-const MAX_CHUNK_CHARS = 160;
-/** Premier morceau d'une réponse plus court : sa synthèse retarde le début de la réponse. */
-const FIRST_CHUNK_CHARS = 60;
 /** L'ouverture complète est jouée au plus deux fois (rejouée une fois si elle a été coupée). */
 const MAX_OPENING_PLAYS = 2;
 /** Phrases de l'avatar gardées pour reconnaître leur écho dans la transcription. */
@@ -51,6 +48,11 @@ interface Response {
   answerSent: boolean;
   /** Tout a été envoyé à la page (ou abandonné). */
   finished: boolean;
+  /** Morceaux de la réponse envoyés à la page, pour la ligne « Avatar : … ». */
+  spoken: string[];
+  transcriptLogged: boolean;
+  /** Envoi du premier morceau de la réponse elle-même (Date.now). */
+  answerStartedAt?: number;
   timings: { transcript?: number; firstToken?: number; firstAudio?: number };
 }
 
@@ -67,6 +69,8 @@ export class Conversation {
   private waitingForMicLogged = false;
   /** Début (Date.now) de la voix de l'avatar en cours dans le micro injecté, sinon null. */
   private avatarSpeakingSince: number | null = null;
+  /** Début de la dernière prise de parole du recruteur (Date.now), pour la transcription. */
+  private speechStartedAt = Date.now();
   /** Prise de parole commencée par-dessus l'avatar, pas encore assez longue pour l'interrompre. */
   private bargeIn: { timer: ReturnType<typeof setInterval>; confirmed: boolean } | null = null;
   private openingPlays = 0;
@@ -89,9 +93,9 @@ export class Conversation {
     cv: string,
     private readonly link: PageLink,
   ) {
-    const opening = openingText(config.language, config.messageText);
+    const opening = openingText(config.language, config.messageText, config.candidateName);
     this.opening = opening;
-    this.system = systemPrompt(config.language, opening, cv);
+    this.system = systemPrompt(config.language, opening, cv, config.candidateName);
     // Ouverture synthétisée d'avance, phrase après phrase ; elle n'est jouée qu'une fois le
     // recruteur présent (fin de sa première prise de parole).
     this.openingAudio = (async () => {
@@ -100,7 +104,7 @@ export class Conversation {
       logTts(`ouverture prête (${audio.length} phrase(s)), pas encore jouée : en attente de la première prise de parole du recruteur`);
       return audio;
     })();
-    this.shortDisclosureAudio = this.openingAudio.then(() => voice.synthesize(shortDisclosureText(config.language)));
+    this.shortDisclosureAudio = this.openingAudio.then(() => voice.synthesize(shortDisclosureText(config.language, config.candidateName)));
   }
 
   static async create(config: DemoConfig, voice: PiperVoice, cv: string, link: PageLink): Promise<Conversation> {
@@ -169,6 +173,7 @@ export class Conversation {
   }
 
   private onSpeechStart(startedAt: number) {
+    this.speechStartedAt = startedAt;
     if (this.avatarSpeakingSince !== null) {
       // Garde-fou : la voix de l'avatar ne doit jamais revenir dans le son capturé.
       logVad(
@@ -277,6 +282,7 @@ export class Conversation {
     // Pas encore de réponse entendue : la question sera reprise avec la suite du recruteur.
     if (!response.answerSent) this.carried = join(response.question, this.carried);
     log(`réponse ${response.id} interrompue : ${reason}`);
+    this.logAnswer(response, true);
   }
 
   /** Vrai si la plupart des mots transcrits viennent d'être prononcés par l'avatar. */
@@ -304,6 +310,8 @@ export class Conversation {
       played: false,
       answerSent: false,
       finished: false,
+      spoken: [],
+      transcriptLogged: false,
       timings: {},
     };
     this.current = response;
@@ -316,8 +324,10 @@ export class Conversation {
    */
   private async sendOpening(response: Response) {
     let audio: SpeechAudio[];
+    let text: string;
     if (this.openingPlays < MAX_OPENING_PLAYS) {
       audio = await this.openingAudio;
+      text = this.opening;
       this.openingPlays += 1;
       this.remember(this.opening);
       log(
@@ -326,7 +336,8 @@ export class Conversation {
       );
     } else {
       audio = [await this.shortDisclosureAudio];
-      this.remember(shortDisclosureText(this.config.language));
+      text = shortDisclosureText(this.config.language, this.config.candidateName);
+      this.remember(text);
       log(`ouverture déjà coupée ${MAX_OPENING_PLAYS} fois : rappel court de la révélation (réponse ${response.id})`);
     }
     for (const chunk of audio) {
@@ -334,6 +345,7 @@ export class Conversation {
       this.send(response, chunk);
     }
     response.openingSent = true;
+    transcriptLine('Avatar', text);
   }
 
   private async answer(response: Response, question: string, opening: Promise<void>) {
@@ -345,6 +357,7 @@ export class Conversation {
       { role: 'user', content: question },
     ];
     log(`question envoyée au LLM (${this.config.llmModel}) : « ${question} »`);
+    transcriptLine('Recruteur', question, this.speechStartedAt);
     const sentences: string[] = [];
     const queue: { wake: (() => void) | null; done: boolean } = { wake: null, done: false };
     // La réponse ne part qu'après l'ouverture ; le LLM, lui, n'attend pas.
@@ -353,7 +366,13 @@ export class Conversation {
     );
 
     let buffer = '';
-    let queued = 0;
+    let words = 0;
+    const take = (final: boolean) => {
+      const [ready, rest] = takeChunks(buffer, words, final);
+      buffer = rest;
+      words += ready.reduce((sum, chunk) => sum + chunk.split(/\s+/).length, 0);
+      return ready;
+    };
     try {
       const reply = await streamReply(
         { apiKey: this.config.openaiApiKey, model: this.config.llmModel },
@@ -364,9 +383,7 @@ export class Conversation {
             log(`premier mot reçu ${response.timings.firstToken} ms après la fin de la question`);
           }
           buffer += delta;
-          const [ready, rest] = takeSentences(buffer, queued === 0 ? FIRST_CHUNK_CHARS : MAX_CHUNK_CHARS);
-          buffer = rest;
-          queued += ready.length;
+          const ready = take(false);
           if (ready.length) {
             sentences.push(...ready);
             queue.wake?.();
@@ -374,7 +391,7 @@ export class Conversation {
         },
         signal,
       );
-      if (buffer.trim()) sentences.push(buffer.trim());
+      sentences.push(...take(true));
       this.history.push({ role: 'user', content: question }, { role: 'assistant', content: reply });
     } catch (error) {
       if (!signal.aborted) log(`erreur : ${error instanceof Error ? error.message : String(error)}`);
@@ -384,6 +401,14 @@ export class Conversation {
     }
     await speaker;
     response.finished = true;
+    this.logAnswer(response, signal.aborted);
+  }
+
+  /** Ligne « Avatar : … » de la transcription (sous-titres), une fois par réponse. */
+  private logAnswer(response: Response, interrupted: boolean) {
+    if (response.transcriptLogged || response.spoken.length === 0) return;
+    response.transcriptLogged = true;
+    transcriptLine('Avatar', response.spoken.join(' ') + (interrupted ? ' […] (interrompu)' : ''), response.answerStartedAt);
   }
 
   /** Synthétise et envoie les phrases dans l'ordre, au fur et à mesure qu'elles arrivent. */
@@ -405,6 +430,8 @@ export class Conversation {
       if (signal.aborted) return;
       if (this.send(response, audio)) {
         response.answerSent = true;
+        response.answerStartedAt ??= Date.now();
+        response.spoken.push(sentence);
         this.remember(sentence);
       }
     }
@@ -453,30 +480,13 @@ export class Conversation {
 const join = (...parts: string[]) => parts.filter(Boolean).join(' ').trim();
 
 function splitSentences(text: string): string[] {
-  const [sentences, rest] = takeSentences(text, MAX_CHUNK_CHARS);
-  return rest.trim() ? [...sentences, rest.trim()] : sentences;
+  return takeChunks(text, Infinity, true)[0];
 }
 
-/** Sépare les phrases terminées du texte encore en cours d'écriture. */
-function takeSentences(text: string, maxChars: number): [string[], string] {
-  const sentences: string[] = [];
-  let rest = text;
-  for (;;) {
-    const match = /[.!?…](?=\s)/.exec(rest);
-    if (match) {
-      sentences.push(rest.slice(0, match.index + 1).trim());
-      rest = rest.slice(match.index + 1).trimStart();
-      continue;
-    }
-    if (rest.length > maxChars) {
-      const comma = rest.lastIndexOf(', ', maxChars);
-      if (comma > 20) {
-        sentences.push(rest.slice(0, comma + 1).trim());
-        rest = rest.slice(comma + 2);
-        continue;
-      }
-    }
-    return [sentences.filter(Boolean), rest];
-  }
+/**
+ * Transcription lisible de l'entretien (sous-titres), dans la console du document
+ * offscreen seulement : « HH:MM:SS.mmm Recruteur : … » / « … Avatar : … ».
+ */
+function transcriptLine(speaker: 'Recruteur' | 'Avatar', text: string, at = Date.now()) {
+  if (text.trim()) console.log(`${clock(at)} ${speaker} : ${text.trim()}`);
 }
-

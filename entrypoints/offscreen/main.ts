@@ -11,6 +11,7 @@ import { PORT_NAME, type CaptureReply, type FromOffscreen, type FromPage, type T
 import { loadDemoConfig, loadLocalText } from '@/lib/config';
 import { Conversation } from '@/lib/conversation';
 import { createLogger } from '@/lib/log';
+import { AvatarMonitor } from '@/lib/monitor';
 import { bufferToBase64 } from '@/lib/pcm';
 import { STT_SAMPLE_RATE } from '@/lib/stt';
 import { TabAudioCapture } from '@/lib/tab-audio';
@@ -115,10 +116,18 @@ async function start() {
   log(`CV et notes chargés (${cv.length} caractères), langue ${config.language}, voix ${config.voice}`);
   configureOnnxRuntime();
   const voice = await PiperVoice.load(config.voice);
+  // Retour pour l'utilisateur : joué ici, jamais dans l'onglet capturé.
+  const monitor = config.monitorAvatar ? new AvatarMonitor(config.monitorVolume) : null;
+  if (!monitor) log('retour audio de la voix de l’avatar désactivé (monitorAvatar: false)');
   conversation = await Conversation.create(config, voice, cv, {
-    speak: (responseId, audio) =>
-      post({ type: 'speak', responseId, pcm: bufferToBase64(audio.samples.buffer), sampleRate: audio.sampleRate }),
-    stop: () => post({ type: 'stop' }),
+    speak: (responseId, audio) => {
+      post({ type: 'speak', responseId, pcm: bufferToBase64(audio.samples.buffer), sampleRate: audio.sampleRate });
+      monitor?.play(audio);
+    },
+    stop: () => {
+      post({ type: 'stop' });
+      monitor?.stop();
+    },
   });
   conversation.setMicReady(micReady);
   log('pipeline voix prêt : en attente du recruteur');

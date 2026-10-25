@@ -24,7 +24,7 @@ export function floatToInt16(input: Float32Array): Int16Array {
   return output;
 }
 
-export function int16ToFloat(input: Int16Array): Float32Array {
+export function int16ToFloat(input: Int16Array): Float32Array<ArrayBuffer> {
   const output = new Float32Array(input.length);
   for (let i = 0; i < input.length; i += 1) output[i] = input[i]! / 0x8000;
   return output;
@@ -69,7 +69,7 @@ export function encodeWav(samples: Int16Array, sampleRate: number): Blob {
 }
 
 /** Décode un WAV PCM 16 bits mono (sortie de Piper). */
-export function decodeWav(buffer: ArrayBuffer): { samples: Float32Array; sampleRate: number } {
+export function decodeWav(buffer: ArrayBuffer): { samples: Float32Array<ArrayBuffer>; sampleRate: number } {
   const view = new DataView(buffer);
   const sampleRate = view.getUint32(24, true);
   // Cherche le bloc « data » (l'en-tête n'a pas toujours 44 octets).
