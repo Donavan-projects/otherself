@@ -10,6 +10,8 @@ export interface SerializedSources {
   photo: SerializedFile | null;
   bannerText: string;
   debugSafeZone: boolean;
+  /** Option C : la page propose le partage de son onglet (bouton). */
+  shareTab: boolean;
 }
 
 export function bytesToBase64(bytes: ArrayBuffer): string {

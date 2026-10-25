@@ -13,6 +13,7 @@
   "monitorVolume": 0.8,
   "silenceMs": 800,
   "bargeInMs": 600,
+  "recruiterAudio": "shareTab",
   "sttModel": "gpt-live-transcribe",
   "llmModel": "gpt-6-luna"
 }

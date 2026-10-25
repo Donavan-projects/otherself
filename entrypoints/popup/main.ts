@@ -42,6 +42,7 @@ async function loadSources(): Promise<SerializedSources> {
     photo: await loadFile(config.photo),
     bannerText: config.bannerText,
     debugSafeZone: config.debugSafeZone,
+    shareTab: config.recruiterAudio === 'shareTab',
   };
 }
 
@@ -100,11 +101,14 @@ async function activate() {
   });
   // Pont vers le pipeline voix : cadre principal seulement, monde isolé.
   await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ['/content-scripts/bridge.js'] });
-  const capture = await startTabCapture(tab.id);
+  const capture = sources.shareTab
+    ? (await sendToOffscreen({ target: 'offscreen', type: 'capture-stop', tabId: tab.id }),
+      'par le partage de l’onglet : cliquez sur le bouton OtherSelf dans la page')
+    : `tabCapture ${await startTabCapture(tab.id)}`;
   const frames = results.map((result) => `cadre ${result.frameId} : ${String(result.result)}`);
   status(
     `injection sur ${tab.url} (${results.length} cadre(s))\n${frames.join('\n')}\n` +
-      `pipeline voix : ${pipeline}\nson de l'onglet : capture ${capture}`,
+      `pipeline voix : ${pipeline}\nson du recruteur : ${capture}`,
   );
 }
 

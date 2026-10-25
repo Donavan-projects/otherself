@@ -8,6 +8,7 @@ import { installFakeGetUserMedia } from '@/lib/inject';
 import { fileToBlob, type SerializedSources } from '@/lib/injection-sources';
 import { createLogger } from '@/lib/log';
 import { createVoiceOutput, type VoiceOutput } from '@/lib/page-audio';
+import { offerTabShare } from '@/lib/share-tab';
 
 declare global {
   interface Window {
@@ -59,8 +60,9 @@ export default defineContentScript({
           },
         });
 
-        // Le pipeline voix n'est relié qu'au cadre principal (le son du recruteur est capturé
-        // par l'extension, chrome.tabCapture, pas par la page).
+        // Le pipeline voix n'est relié qu'au cadre principal. Son du recruteur : partage de
+        // l'onglet par la page (option C), ou chrome.tabCapture côté extension.
+        if (isTop && sources.shareTab) offerTabShare((pcm, at) => sendToExtension({ type: 'audio', pcm, at }));
         if (isTop) {
           window.addEventListener('message', (event) => {
             if (event.source !== window) return;

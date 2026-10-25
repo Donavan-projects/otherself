@@ -8,6 +8,8 @@ export const PAGE_TAG = '__otherSelfBridge';
 
 /** De la page vers l'extension. */
 export type FromPage =
+  /** Son du recruteur partagé par la page (option C) : PCM 16 bits mono à 24 kHz. */
+  | { type: 'audio'; pcm: string; at: number }
   /** La plateforme a demandé le micro : la voix de l'avatar peut être entendue. */
   | { type: 'mic-ready' }
   /** La voix de l'avatar (re)commence à sortir dans le micro injecté. */
@@ -33,7 +35,9 @@ export interface PageEnvelope {
 /** Du popup vers le document offscreen (runtime.sendMessage) : capture du son de l'onglet. */
 export type ToOffscreen =
   | { target: 'offscreen'; type: 'capture-status'; tabId: number }
-  | { target: 'offscreen'; type: 'capture-start'; tabId: number; streamId: string };
+  | { target: 'offscreen'; type: 'capture-start'; tabId: number; streamId: string }
+  /** Option C : le son vient de la page, la capture tabCapture éventuelle s'arrête. */
+  | { target: 'offscreen'; type: 'capture-stop'; tabId: number };
 
 export interface CaptureReply {
   live: boolean;

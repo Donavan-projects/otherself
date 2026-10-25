@@ -23,6 +23,7 @@ const VENDOR_FILES: Record<string, string> = {
 const PASSTHROUGH_FIELDS = [
   'debugSafeZone',
   'bargeInMs',
+  'recruiterAudio',
   'candidateName',
   'monitorAvatar',
   'monitorVolume',

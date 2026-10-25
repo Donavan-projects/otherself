@@ -12,7 +12,7 @@ import { loadDemoConfig, loadLocalText } from '@/lib/config';
 import { Conversation } from '@/lib/conversation';
 import { createLogger } from '@/lib/log';
 import { AvatarMonitor } from '@/lib/monitor';
-import { bufferToBase64 } from '@/lib/pcm';
+import { base64ToBuffer, bufferToBase64 } from '@/lib/pcm';
 import { STT_SAMPLE_RATE } from '@/lib/stt';
 import { TabAudioCapture } from '@/lib/tab-audio';
 import { PiperVoice } from '@/lib/tts';
@@ -56,6 +56,11 @@ browser.runtime.onConnect.addListener((connected) => {
   if (!samePage) conversation?.reset('nouvelle page de la plateforme');
   connected.onMessage.addListener((message: FromPage) => {
     switch (message.type) {
+      case 'audio':
+        // Option C : son de l'onglet partagé par la page (déjà à 24 kHz).
+        if (capture?.isLive) break;
+        onTabAudio(new Int16Array(base64ToBuffer(message.pcm)), message.at);
+        break;
       case 'mic-ready':
         micReady = true;
         conversation?.setMicReady(true);
@@ -86,6 +91,12 @@ function onTabAudio(samples: Int16Array, at: number) {
 }
 
 async function handle(message: ToOffscreen): Promise<CaptureReply> {
+  if (message.type === 'capture-stop') {
+    if (capture?.isLive) log('capture tabCapture arrêtée : le son du recruteur viendra du partage de l’onglet par la page');
+    capture?.stop();
+    capture = null;
+    return { live: false };
+  }
   const live = capture?.isLive === true && capture.tabId === message.tabId;
   if (message.type === 'capture-status' || live) return { live };
   capture?.stop();
