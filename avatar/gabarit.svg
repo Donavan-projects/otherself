@@ -16,6 +16,8 @@
   - Coiffures et accessoires : sous-groupes coiffure_<nom> (dans cheveux_arriere et cheveux_avant)
     et accessoire_<nom> (dans accessoires), choisis dans config.local.json.
   - Fond : fichiers séparés dans avatar/fonds/, jamais dans ce fichier.
+  - Voix par défaut du personnage : attributs data-voix (voix Piper, ex. en_US-norman-medium) et
+    data-voix-openai (voix OpenAI, ex. ash) sur la racine <svg> ; le champ voice de config.local.json l'emporte.
   - Repères (calque caché) : lus par le code, jamais affichés.
 
   Cadrage : 800 × 1000, axe vertical x = 400, cadrage de webcam (buste coupé par le bas du cadre).

@@ -3,7 +3,8 @@
 <svg xmlns="http://www.w3.org/2000/svg"
      xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
      xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
-     width="800" height="1000" viewBox="0 0 800 1000" id="otherself-avatar">
+     width="800" height="1000" viewBox="0 0 800 1000" id="otherself-avatar"
+     data-voix="en_US-norman-medium" data-voix-openai="ash">
   <sodipodi:namedview id="vue" pagecolor="#ffffff" bordercolor="#666666" showguides="true" inkscape:document-units="px">
     <!-- Positions des guides en repère Inkscape (origine en bas à gauche : y = 1000 − y du SVG). -->
     <sodipodi:guide id="guide_axe" position="400,1000" orientation="1,0" inkscape:label="axe (x = 400)"/>

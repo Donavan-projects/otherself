@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OtherSelf · Voix</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 24px; max-width: 1100px; }
+      table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+      th, td { border-bottom: 1px solid #ddd; padding: 6px 8px; text-align: left; vertical-align: middle; }
+      td.num { text-align: right; font-variant-numeric: tabular-nums; }
+      #status { white-space: pre-wrap; color: #555; }
+    </style>
+  </head>
+  <body>
+    <h1>Banc d'essai des voix</h1>
+    <p>
+      Mêmes phrases pour chaque voix et chaque réglage. Paramètres de l'adresse : <code>?voix=en_US-joe-medium,…</code>,
+      <code>&amp;openai=ash,onyx</code> (synthèse OpenAI, payante), <code>&amp;reglages=1/0.667/0.8,0.95/0.75/0.9</code>
+      (length_scale / noise_scale / noise_w).
+    </p>
+    <p id="status"></p>
+    <table>
+      <thead>
+        <tr><th>Moteur et voix</th><th>Réglages</th><th>Phrase</th><th>Premier son</th><th>Fin</th><th>Audio</th><th>× temps réel</th><th>Hauteur médiane</th><th>Variation (demi-tons)</th><th>Écoute</th></tr>
+      </thead>
+      <tbody id="results"></tbody>
+    </table>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

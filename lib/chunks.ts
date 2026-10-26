@@ -1,41 +1,43 @@
-// Découpe du texte du LLM en morceaux à synthétiser au fil du streaming. Le début d'une
-// réponse est court (une proposition, 8 à 12 mots) : sa synthèse retarde le début de la
-// voix. Les morceaux suivants restent bornés (16 mots) : chacun doit être synthétisé avant
-// la fin du précédent, même quand Piper tombe à 0,7 × temps réel.
+// Découpe du texte du LLM en morceaux à synthétiser au fil du streaming, uniquement à la
+// ponctuation : fin de phrase (. ! ? …), ou virgule, point-virgule, deux-points pour scinder une
+// phrase longue. Jamais devant une conjonction ou une préposition (« … pipelines, | and … » ou
+// « … | for a logistics company » coupent l'intonation). Le premier morceau reste court : sa
+// synthèse retarde le début de la voix.
 
-interface ChunkLimits {
-  minWords: number;
-  maxWords: number;
-}
+/** Début de réponse : coupé à la première ponctuation après au moins 3 mots (fin de phrase : 1 mot). */
+const FIRST_SOFT_MIN_WORDS = 3;
+/** Tant que la réponse a moins de mots que cela, on est encore « au début ». */
+const FIRST_PART_WORDS = 4;
+/** Ensuite : phrases entières jusqu'à 22 mots ; au-delà, coupe à la dernière virgule possible. */
+const MAX_WORDS = 22;
+const NEXT_SOFT_MIN_WORDS = 5;
+/** Garde-fou : aucune ponctuation pendant 40 mots (rare, le prompt demande des phrases courtes). */
+const SAFETY_WORDS = 40;
 
-const FIRST_CHUNK: ChunkLimits = { minWords: 8, maxWords: 12 };
-const NEXT_CHUNK: ChunkLimits = { minWords: 6, maxWords: 16 };
-
-/** Mots devant lesquels une coupure sonne naturelle, faute de virgule. */
-const CLAUSE_STARTS = new Set([
-  'and', 'but', 'or', 'so', 'because', 'which', 'who', 'where', 'while', 'with', 'including', 'then',
-  'et', 'mais', 'ou', 'donc', 'car', 'qui', 'où', 'dont', 'avec', 'notamment', 'puis', 'parce',
+/** Mots devant lesquels on ne coupe jamais. */
+const NO_CUT_BEFORE = new Set([
+  'and', 'but', 'or', 'nor', 'so', 'because', 'which', 'who', 'whom', 'whose', 'where', 'when', 'while', 'that', 'than',
+  'with', 'including', 'then', 'if', 'although', 'though', 'as',
+  'for', 'in', 'at', 'to', 'on', 'of', 'from', 'by', 'about', 'into', 'during', 'since', 'after', 'before', 'over', 'under',
+  'et', 'mais', 'ou', 'donc', 'car', 'ni', 'que', 'qui', 'où', 'dont', 'quand', 'lorsque', 'si', 'avec', 'notamment',
+  'puis', 'parce', 'pour', 'dans', 'chez', 'à', 'au', 'aux', 'en', 'sur', 'de', 'des', 'du', 'par', 'depuis', 'pendant', 'comme',
 ]);
-/** À défaut, devant une préposition (« … pipelines | for a logistics company »). */
-const PHRASE_STARTS = new Set([
-  'for', 'in', 'at', 'to', 'on', 'from', 'during', 'since', 'as',
-  'pour', 'dans', 'chez', 'à', 'en', 'sur', 'depuis', 'pendant', 'comme',
-]);
+
+const SENTENCE_END = /[.!?…]["')\]»]*$/;
+const SOFT_END = /[,;:]["')\]»]*$/;
 
 const wordCount = (text: string) => text.split(/\s+/).filter(Boolean).length;
 
 /**
- * Sépare les morceaux prêts à dire du texte encore en cours d'écriture. `wordsSoFar` :
- * mots de la réponse déjà découpés (limites courtes tant que le début de la réponse fait
- * moins de 8 mots, « Yes. » compris). À la fin du flux, passer `final` pour tout rendre.
+ * Sépare les morceaux prêts à dire du texte encore en cours d'écriture. `wordsSoFar` : mots de
+ * la réponse déjà découpés. À la fin du flux, passer `final` pour tout rendre.
  */
 export function takeChunks(text: string, wordsSoFar: number, final = false): [string[], string] {
   const chunks: string[] = [];
   let rest = text.trimStart();
   let words = wordsSoFar;
   for (;;) {
-    const limits = words < FIRST_CHUNK.minWords ? FIRST_CHUNK : NEXT_CHUNK;
-    const chunk = nextChunk(final ? `${rest} ` : rest, limits);
+    const chunk = nextChunk(final ? `${rest} ` : rest, words < FIRST_PART_WORDS);
     if (chunk === null) break;
     const trimmed = chunk.trim();
     if (trimmed) chunks.push(trimmed);
@@ -50,29 +52,28 @@ export function takeChunks(text: string, wordsSoFar: number, final = false): [st
 }
 
 /** Début de `text` à dire maintenant, ou null s'il faut attendre la suite du flux. */
-function nextChunk(text: string, { minWords, maxWords }: ChunkLimits): string | null {
+function nextChunk(text: string, first: boolean): string | null {
   const words = [...text.matchAll(/\S+/g)];
-  const end = /[.!?…](?=\s)/.exec(text);
-  if (end) {
-    const endIndex = end.index + 1;
-    const count = words.filter((word) => word.index < endIndex).length;
-    if (count <= maxWords) return text.slice(0, endIndex);
-  }
-  // Le mot n° maxWords n'est sûr d'être complet que si un autre le suit.
-  if (words.length <= maxWords) return null;
+  // Le dernier mot n'est complet que si un blanc le suit.
+  const complete = /\s$/.test(text) ? words.length : words.length - 1;
   const until = (index: number) => {
     const word = words[index]!;
     return text.slice(0, word.index + word[0].length);
   };
-  // Fin de proposition : virgule, point-virgule, deux-points, tiret.
-  for (let i = maxWords - 1; i >= minWords - 1; i -= 1) {
-    if (/[,;:—–]$/.test(words[i]![0])) return until(i);
-  }
-  // Sinon, juste avant une conjonction ou un relatif, puis avant une préposition.
-  for (const starts of [CLAUSE_STARTS, PHRASE_STARTS]) {
-    for (let i = maxWords; i >= minWords; i -= 1) {
-      if (starts.has(words[i]![0].toLowerCase())) return until(i - 1);
+  /** Coupe permise après le mot n° index : le mot suivant est complet et n'est ni une conjonction ni une préposition. */
+  const canCutAfter = (index: number) =>
+    index + 1 < complete && !NO_CUT_BEFORE.has(words[index + 1]![0].toLowerCase().replace(/^["'(«]+/, ''));
+  let lastSoft = -1;
+  for (let i = 0; i < complete; i += 1) {
+    const word = words[i]![0];
+    const count = i + 1;
+    if (SENTENCE_END.test(word)) return count <= MAX_WORDS || lastSoft < 0 ? until(i) : until(lastSoft);
+    if (SOFT_END.test(word) && canCutAfter(i)) {
+      if (first && count >= FIRST_SOFT_MIN_WORDS) return until(i);
+      if (count >= NEXT_SOFT_MIN_WORDS && count <= MAX_WORDS) lastSoft = i;
     }
+    if (count > MAX_WORDS && lastSoft >= 0) return until(lastSoft);
+    if (count >= SAFETY_WORDS && canCutAfter(i)) return until(i);
   }
-  return until(maxWords - 1);
+  return null;
 }

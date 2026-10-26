@@ -5,7 +5,15 @@
 
 import { localUrl } from './config';
 import { createLogger } from './log';
-import type { FromTtsWorker, ToTtsWorker } from './tts.worker';
+import type { FromTtsWorker, PiperScales, ToTtsWorker } from './tts.worker';
+
+export type { PiperScales } from './tts.worker';
+
+/**
+ * Réglages Piper retenus (26/10/2026, banc d'essai des voix) : débit un peu plus vif et intonation plus
+ * variée que les valeurs des fichiers de voix (length_scale 1, noise_scale 0,667, noise_w 0,8).
+ */
+export const DEFAULT_PIPER_SCALES: PiperScales = { lengthScale: 0.92, noiseScale: 0.8, noiseW: 1 };
 
 const log = createLogger('tts');
 
@@ -75,28 +83,43 @@ export interface SpeechAudio {
   sampleRate: number;
 }
 
+/** Synthèse vocale : Piper (local, par défaut) ou OpenAI (en streaming). */
+export interface TtsEngine {
+  readonly description: string;
+  /** Phrase entière (ouverture préparée d'avance). */
+  synthesize(text: string): Promise<SpeechAudio>;
+  /** Phrase rendue par morceaux, dès qu'ils arrivent (une seule fois pour Piper). */
+  stream(text: string, onAudio: (audio: SpeechAudio) => void, signal?: AbortSignal): Promise<void>;
+}
+
 interface Pending {
   text: string;
-  resolve(audio: SpeechAudio): void;
+  resolve(audio: SpeechAudio & { elapsedMs: number }): void;
   reject(error: Error): void;
 }
 
-export class PiperVoice {
+export class PiperVoice implements TtsEngine {
   private nextId = 0;
   private readonly pending = new Map<number, Pending>();
 
   private constructor(
     private readonly worker: Worker,
     readonly voice: string,
+    readonly scales: PiperScales,
   ) {
     worker.addEventListener('message', (event: MessageEvent<FromTtsWorker>) => this.onMessage(event.data));
   }
 
-  static async load(voice: string): Promise<PiperVoice> {
+  get description() {
+    const { lengthScale, noiseScale, noiseW } = this.scales;
+    return `Piper ${this.voice} (length_scale ${lengthScale}, noise_scale ${noiseScale}, noise_w ${noiseW})`;
+  }
+
+  static async load(voice: string, scales: Partial<PiperScales> = DEFAULT_PIPER_SCALES): Promise<PiperVoice> {
     const started = performance.now();
     const worker = new Worker(new URL('./tts.worker.ts', import.meta.url));
     let lastPercent = -10;
-    await new Promise<void>((resolve, reject) => {
+    const applied = await new Promise<PiperScales>((resolve, reject) => {
       const onMessage = ({ data }: MessageEvent<FromTtsWorker>) => {
         if (data.type === 'progress') {
           if (!data.total || !data.url.endsWith('.onnx')) return;
@@ -107,7 +130,7 @@ export class PiperVoice {
           }
         } else if (data.type === 'ready' || data.type === 'error') {
           worker.removeEventListener('message', onMessage);
-          if (data.type === 'ready') resolve();
+          if (data.type === 'ready') resolve(data.scales);
           else reject(new Error(data.message));
         }
       };
@@ -116,6 +139,7 @@ export class PiperVoice {
       const init: ToTtsWorker = {
         type: 'init',
         voiceId: voice,
+        scales,
         wasmPaths: {
           onnxWasm: localUrl('/vendor/ort/'),
           piperData: localUrl('/vendor/piper/piper_phonemize.data'),
@@ -124,15 +148,26 @@ export class PiperVoice {
       };
       worker.postMessage(init);
     });
-    log(`voix ${voice} prête dans un worker (${Math.round(performance.now() - started)} ms)`);
-    return new PiperVoice(worker, voice);
+    const piper = new PiperVoice(worker, voice, applied);
+    log(`voix ${piper.description} prête dans un worker (${Math.round(performance.now() - started)} ms)`);
+    return piper;
   }
 
-  synthesize(text: string): Promise<SpeechAudio> {
+  /** Arrête le worker (banc d'essai : une voix après l'autre). */
+  dispose() {
+    this.worker.terminate();
+  }
+
+  async stream(text: string, onAudio: (audio: SpeechAudio) => void): Promise<void> {
+    onAudio(await this.synthesize(text));
+  }
+
+  /** `scales` : réglages pour cette phrase (banc d'essai), gardés pour les suivantes. */
+  synthesize(text: string, scales?: Partial<PiperScales>): Promise<SpeechAudio & { elapsedMs: number }> {
     const id = (this.nextId += 1);
-    return new Promise<SpeechAudio>((resolve, reject) => {
+    return new Promise((resolve, reject) => {
       this.pending.set(id, { text, resolve, reject });
-      const message: ToTtsWorker = { type: 'synth', id, text };
+      const message: ToTtsWorker = { type: 'synth', id, text, scales };
       this.worker.postMessage(message);
     });
   }
@@ -159,6 +194,6 @@ export class PiperVoice {
         `${level.afterPeak.toFixed(2)}, gain ×${level.gain.toFixed(1)}) : « ${pending.text} »` +
         (slow ? ' — voix trop lente pour cette machine, préférer une voix « medium » plus légère' : ''),
     );
-    pending.resolve({ samples, sampleRate });
+    pending.resolve({ samples, sampleRate, elapsedMs });
   }
 }

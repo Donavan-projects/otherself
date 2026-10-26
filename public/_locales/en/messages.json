@@ -11,6 +11,9 @@
   "popupOpenAvatar": {
     "message": "Open avatar"
   },
+  "popupOpenVoices": {
+    "message": "Voice test bench"
+  },
   "rehearsalTitle": {
     "message": "Fake recruiter"
   },

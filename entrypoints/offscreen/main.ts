@@ -7,12 +7,13 @@
 
 import type { Browser } from 'wxt/browser';
 import { PORT_NAME, type FromOffscreen, type FromPage } from '@/lib/bridge-messages';
-import { loadDemoConfig, loadLocalText } from '@/lib/config';
+import { avatarVoices, loadDemoConfig, loadLocalText } from '@/lib/config';
 import { Conversation } from '@/lib/conversation';
 import { createLogger } from '@/lib/log';
 import { AvatarMonitor } from '@/lib/monitor';
 import { base64ToBuffer, bufferToBase64 } from '@/lib/pcm';
-import { PiperVoice } from '@/lib/tts';
+import { DEFAULT_PIPER_SCALES, PiperVoice, type TtsEngine } from '@/lib/tts';
+import { OpenAiVoice } from '@/lib/tts-openai';
 import { configureOnnxRuntime } from '@/lib/vad';
 
 let port: Browser.runtime.Port | null = null;
@@ -128,9 +129,17 @@ async function start() {
     return;
   }
   const cv = await loadLocalText(config.cv);
-  log(`CV et notes chargés (${cv.length} caractères), langue ${config.language}, voix ${config.voice}`);
+  log(`CV et notes chargés (${cv.length} caractères), langue ${config.language}`);
   configureOnnxRuntime();
-  const voice = await PiperVoice.load(config.voice);
+  // Voix : champ voice / openaiVoice de config.local.json, sinon celle du personnage (SVG).
+  const defaults = await avatarVoices(config.avatar);
+  let voice: TtsEngine;
+  if (config.ttsProvider === 'openai') {
+    voice = new OpenAiVoice({ apiKey: config.openaiApiKey, model: config.openaiTtsModel, voice: config.openaiVoice || defaults.openai || 'ash' });
+  } else {
+    voice = await PiperVoice.load(config.voice || defaults.piper || 'en_US-ljspeech-medium', { ...DEFAULT_PIPER_SCALES, ...config.piperScales });
+  }
+  log(`synthèse vocale : ${voice.description}${config.voice || config.openaiVoice ? '' : ` (voix du personnage ${config.avatar})`}`);
   // Retour pour l'utilisateur : joué ici, jamais dans l'onglet capturé.
   const monitor = config.monitorAvatar ? new AvatarMonitor(config.monitorVolume) : null;
   if (!monitor) log('retour audio de la voix de l’avatar désactivé (monitorAvatar: false)');

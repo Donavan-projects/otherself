@@ -27,7 +27,11 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | `messageText` | texte | Mode « message » : déclaration prononcée juste après la révélation, avant de répondre aux questions | Révélation seule |
 | `cv` | md, txt | CV et notes du candidat, seule source des réponses (règle 5) | Avertissement au build ; l'avatar dit ne pas pouvoir répondre |
 | `openaiApiKey` | `sk-…` | Clé OpenAI (transcription et LLM) | Pipeline voix inactif, avertissement au build |
-| `voice` | identifiant Piper | Voix de l'avatar, téléchargée une seule fois depuis Hugging Face (voir ci-dessous) | `en_US-ljspeech-medium` |
+| `voice` | identifiant Piper | Voix Piper de l'avatar, téléchargée une seule fois depuis Hugging Face (voir ci-dessous) | Voix du personnage : attribut `data-voix` du SVG (`en_US-norman-medium` pour `otherself`) |
+| `ttsProvider` | `piper`, `openai` | Synthèse vocale : Piper (local, gratuit) ou OpenAI (même clé, payante, en streaming) | `piper` |
+| `openaiVoice` | voix OpenAI | Voix de la synthèse OpenAI (`ash`, `onyx`…) | Voix du personnage : attribut `data-voix-openai` du SVG (`ash`) |
+| `openaiTtsModel` | modèle OpenAI | Modèle de synthèse OpenAI | `gpt-4o-mini-tts` |
+| `piperScales` | objet | Réglages Piper : `lengthScale` (débit, plus petit = plus rapide), `noiseScale` (variation de l'intonation), `noiseW` (variation du rythme). Comparer au banc d'essai des voix (popup) | `{ "lengthScale": 0.92, "noiseScale": 0.8, "noiseW": 1 }` |
 | `monitorAvatar` | `true` / `false` | Retour audio : vous entendez la voix de l'avatar, jouée par l'extension hors de l'onglet de l'entretien (elle n'est donc jamais prise pour le recruteur) | Activé |
 | `monitorVolume` | 0 à 1 | Volume du retour audio | `0.8` |
 | `silenceMs` | millisecondes | Silence après lequel le recruteur est considéré comme ayant fini sa question | `800` |
@@ -44,7 +48,7 @@ Licences vérifiées pour une vidéo publiée. Vitesse mesurée en WebAssembly s
 | Voix | Genre | Licence du jeu de données | Vitesse |
 | --- | --- | --- | --- |
 | `en_US-ljspeech-medium` | féminine | domaine public (LJ Speech) | ≈ 0,35 |
-| `en_US-joe-medium` | masculine | CC0 pour le jeu `joe`, mais voix **affinée à partir de `lessac`** (jeu Lessac, licence Blizzard 2013, recherche) : statut incertain pour une vidéo publiée | ≈ 0,2 |
+| `en_US-joe-medium` | masculine | CC0 pour le jeu `joe`, mais voix **affinée à partir de `lessac`** (jeu Lessac, licence Blizzard 2013, recherche) : **à éviter pour toute publication** | ≈ 0,2 |
 | `en_US-norman-medium` | masculine | domaine public (LibriVox), entraînée de zéro : **voix masculine la plus sûre pour une vidéo publiée** | non mesurée (même taille que joe) |
 | `en_US-john-medium` | masculine | domaine public (LibriVox), affinée à partir de `kristin` (LibriVox) | non mesurée (même taille que joe) |
 | `en_US-ljspeech-high` | féminine | domaine public | 1,25 à 2,7 : **trop lente** pour répondre en direct |

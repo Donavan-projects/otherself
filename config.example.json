@@ -13,7 +13,7 @@
   "messageText": "Alex would prefer to be interviewed by a human, and kindly asks for that option. In the meantime, I will answer your questions about Alex.",
   "cv": "local/cv.md",
   "openaiApiKey": "sk-proj-REMPLACER-PAR-VOTRE-CLE",
-  "voice": "en_US-ljspeech-medium",
+  "ttsProvider": "piper",
   "monitorAvatar": true,
   "monitorVolume": 0.8,
   "silenceMs": 800,

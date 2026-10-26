@@ -12,7 +12,7 @@ import { clock, createLogger } from './log';
 import { int16ToFloat, resample } from './pcm';
 import { disclosureText, openingText, shortDisclosureText, systemPrompt } from './prompt';
 import { createTranscriber, STT_SAMPLE_RATE, type Transcriber } from './stt';
-import type { PiperVoice, SpeechAudio } from './tts';
+import type { SpeechAudio, TtsEngine } from './tts';
 import { Vad, VAD_SAMPLE_RATE } from './vad';
 
 const log = createLogger('llm');
@@ -101,7 +101,7 @@ export class Conversation {
 
   private constructor(
     private readonly config: DemoConfig,
-    private readonly voice: PiperVoice,
+    private readonly voice: TtsEngine,
     cv: string,
     private readonly link: PageLink,
   ) {
@@ -125,7 +125,7 @@ export class Conversation {
     this.shortDisclosureAudio = this.openingAudio.then(() => voice.synthesize(shortDisclosureText(config.language, config.candidateName)));
   }
 
-  static async create(config: DemoConfig, voice: PiperVoice, cv: string, link: PageLink): Promise<Conversation> {
+  static async create(config: DemoConfig, voice: TtsEngine, cv: string, link: PageLink): Promise<Conversation> {
     const conversation = new Conversation(config, voice, cv, link);
     conversation.vad = await Vad.create(config.silenceMs, {
       onSpeechStart: (startedAt) => conversation.onSpeechStart(startedAt),
@@ -487,14 +487,31 @@ export class Conversation {
         await new Promise<void>((resolve) => setWake(resolve));
         continue;
       }
-      const audio = await this.voice.synthesize(sentence);
-      if (signal.aborted) return;
-      if (this.send(response, audio)) {
-        response.answerSent = true;
-        response.answerStartedAt ??= Date.now();
-        response.spoken.push(sentence);
-        this.remember(sentence);
+      // Piper rend la phrase d'un bloc ; OpenAI la rend par morceaux, envoyés dès qu'ils arrivent.
+      let started = false;
+      let refused = false;
+      try {
+        await this.voice.stream(
+          sentence,
+          (audio) => {
+            if (signal.aborted || refused) return;
+            if (!this.send(response, audio)) {
+              refused = true;
+              return;
+            }
+            if (started) return;
+            started = true;
+            response.answerSent = true;
+            response.answerStartedAt ??= Date.now();
+            response.spoken.push(sentence);
+            this.remember(sentence);
+          },
+          signal,
+        );
+      } catch (error) {
+        if (!signal.aborted) log(`synthèse impossible : ${error instanceof Error ? error.message : String(error)} (« ${sentence} »)`);
       }
+      if (signal.aborted) return;
     }
   }
 
