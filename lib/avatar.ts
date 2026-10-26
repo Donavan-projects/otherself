@@ -5,11 +5,14 @@
 export const AVATAR_WIDTH = 1280;
 export const AVATAR_HEIGHT = 720;
 
-// Zone de sécurité : survit à un recadrage central en 4:3, en carré (x 280 à 1000),
-// et à une coupe du haut et du bas jusqu'à environ 21:9 (vignettes Meet, ~2:1 compris).
-// Le bandeau y tient en entier (règle 1).
-export const SAFE_ZONE = { left: 290, right: 990, top: 100, bottom: 610 };
+// Zone de sécurité (règle 1) : survit à un recadrage central en 4:3 et en carré (x 280 à 1000) et,
+// en haut et en bas, à la coupe 2:1 mesurée sur Meet sans cadrage automatique (36 px), avec 14 px
+// de marge. Décision du 26/10/2026 : la coupe 21:9 (86 px) n'est plus couverte.
+export const SAFE_ZONE = { left: 290, right: 990, top: 50, bottom: 670 };
 export const BANNER_HEIGHT = 80;
+// Bandeau centré et moins large que la zone : le nom affiché par Meet en bas à gauche de la
+// vignette ne masque pas le début du texte.
+const BANNER_WIDTH = 580;
 const BANNER_FONT_SIZE = 50;
 const BANNER_BORDER = 3;
 const BANNER_PADDING_X = 14;
@@ -17,12 +20,13 @@ const BANNER_PADDING_X = 14;
 // lettres hautes, lisibles dans une vignette de 320×180.
 const BANNER_MIN_SQUEEZE = 0.78;
 
-// Cadrage de webcam : haut de la tête vers 13 % du cadre, slogan du t-shirt entièrement
-// au-dessus du bandeau, bandeau en bas de la zone de sécurité (réglable par bannerOffsetY).
+// Cadrage de webcam : haut de la tête vers 13 % du cadre, slogan du t-shirt au milieu de la
+// poitrine (bas du slogan à y = 517). Bandeau en bas du cadre, au bas de la zone de sécurité
+// (réglable par bannerOffsetY, sans jamais remonter sur le slogan).
 const HEAD_TOP = 94;
+const SLOGAN_BOTTOM = 517;
 const SLOGAN_GAP = 12;
-const DEFAULT_BANNER_TOP = SAFE_ZONE.bottom - BANNER_HEIGHT - 1;
-const MIN_BANNER_TOP = 400;
+const DEFAULT_BANNER_TOP = SAFE_ZONE.bottom - BANNER_HEIGHT;
 
 export interface Rect {
   x: number;
@@ -37,24 +41,24 @@ export interface FrameLayout {
   left: number;
   top: number;
   banner: Rect;
-  /** Décalage demandé hors des limites (zone de sécurité, taille minimale du personnage) : ramené dedans. */
+  /** Décalage demandé hors des limites (zone de sécurité, slogan) : ramené dedans. */
   clamped: boolean;
 }
 
 /**
- * Compose personnage, slogan et bandeau : le bandeau est placé (décalage bannerOffsetY, en pixels,
- * négatif vers le haut), puis le personnage est mis à l'échelle pour que le haut de sa tête reste
- * à HEAD_TOP et que le bas du slogan arrive juste au-dessus du bandeau.
+ * Compose personnage, slogan et bandeau : le personnage est mis à l'échelle pour que le haut de sa
+ * tête soit à HEAD_TOP et le bas du slogan à SLOGAN_BOTTOM ; le bandeau est en bas de la zone de
+ * sécurité, décalé de bannerOffsetY (pixels, négatif vers le haut), jamais sur le slogan.
  */
 export function composeFrame(svg: { width: number; hairTop: number; sloganBottom: number }, bannerOffsetY = 0): FrameLayout {
+  const scale = (SLOGAN_BOTTOM - HEAD_TOP) / (svg.sloganBottom - svg.hairTop);
   const wanted = DEFAULT_BANNER_TOP + Math.round(bannerOffsetY);
-  const bannerTop = Math.min(SAFE_ZONE.bottom - BANNER_HEIGHT, Math.max(MIN_BANNER_TOP, wanted));
-  const scale = (bannerTop - SLOGAN_GAP - HEAD_TOP) / (svg.sloganBottom - svg.hairTop);
+  const bannerTop = Math.min(SAFE_ZONE.bottom - BANNER_HEIGHT, Math.max(SLOGAN_BOTTOM + SLOGAN_GAP, wanted));
   return {
     scale,
     left: Math.round(AVATAR_WIDTH / 2 - (svg.width / 2) * scale),
     top: Math.round(HEAD_TOP - svg.hairTop * scale),
-    banner: { x: SAFE_ZONE.left, y: bannerTop, width: SAFE_ZONE.right - SAFE_ZONE.left, height: BANNER_HEIGHT },
+    banner: { x: Math.round((AVATAR_WIDTH - BANNER_WIDTH) / 2), y: bannerTop, width: BANNER_WIDTH, height: BANNER_HEIGHT },
     clamped: bannerTop !== wanted,
   };
 }

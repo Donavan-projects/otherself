@@ -59,7 +59,7 @@ Ne pas le remplacer par « Avatar IA » ou une formulation générique.
 ### Emplacement (inchangé)
 
 - Dessiné **dans le canvas du flux vidéo injecté**, à chaque image et en dernier (règle 1), jamais en superposition DOM.
-- Placé dans la zone de sécurité centrale qui survit aux recadrages des plateformes (4:3, carré, haut et bas coupés jusqu'à environ 21:9), comme validé sur Meet.
+- Placé dans la zone de sécurité qui survit aux recadrages des plateformes : 4:3 et carré sur les côtés ; en haut et en bas, la coupe 2:1 mesurée sur Meet sans cadrage automatique (36 px) plus une marge (décision du 26/10/2026 : la coupe 21:9 n'est plus couverte). Bandeau en bas du cadre, centré, 580 px de large. Avec le cadrage automatique, il peut être coupé : le slogan du t-shirt et la révélation vocale prennent le relais.
 - Sur une seule ligne, sans chevauchement avec le visage.
 
 ### Résistance au zoom sur le visage

@@ -77,7 +77,7 @@ export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ asset
   ctx.drawImage(await rasterize(backgroundSource, AVATAR_WIDTH, AVATAR_HEIGHT), 0, 0);
   const body = await layer(UNDER_LAYERS);
   ctx.drawImage(body, layout.left, layout.top);
-  // Personnage plus petit que prévu (bandeau remonté) : le bas du buste est prolongé jusqu'au bas du cadre.
+  // Buste plus court que le cadre (autre personnage ou coiffure plus haute) : prolongé jusqu'en bas.
   const bottom = layout.top + height;
   if (bottom < AVATAR_HEIGHT) ctx.drawImage(body, 0, height - 1, width, 1, layout.left, bottom, width, AVATAR_HEIGHT - bottom);
   const ink = paletteColor(character, 'badge-fond') ?? '#f2c62e';
