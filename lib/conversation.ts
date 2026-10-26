@@ -537,7 +537,7 @@ export class Conversation {
     const { transcript, firstToken, firstAudio } = response.timings;
     logTts(
       `LATENCE fin de question → début de réponse : ${at - response.questionEndAt} ms ` +
-        `(seuil de silence ${this.config.silenceMs} ms inclus ; transcription ${transcript} ms, ` +
+        `(seuil de silence ${this.config.silenceMs} ms inclus ; transcription ${transcript ?? '-'} ms, ` +
         `premier mot ${firstToken ?? '-'} ms, première phrase prête ${firstAudio} ms)` +
         (response.includesOpening ? ' — ouverture avec révélation' : ''),
     );

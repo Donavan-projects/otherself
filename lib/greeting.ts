@@ -6,9 +6,13 @@ const GREETING_WORDS = new Set([
   'hello', 'hi', 'hey', 'hiya', 'howdy', 'greetings', 'welcome', 'good', 'morning', 'afternoon', 'evening', 'day',
   'there', 'everyone', 'everybody', 'all', 'and', 'nice', 'to', 'meet', 'you', 'thanks', 'thank', 'for', 'joining',
   'okay', 'ok', 'so',
+  // « how are you (doing) today? », « how's it going? »
+  'how', 'are', "how's", 'it', 'going', 'doing', 'today',
   // fr
   'bonjour', 'bonsoir', 'salut', 'coucou', 'allô', 'allo', 'bienvenue', 'à', 'a', 'tous', 'toutes', 'et', 'merci',
   "d'être", 'être', 'là', 'enchanté', 'enchantée', 'madame', 'monsieur',
+  // « comment allez-vous ? », « ça va ? »
+  'comment', 'allez', 'vous', 'ça', 'ca', 'va',
 ]);
 /** Au moins un de ces mots : sans lui, ce n'est pas une salutation (« thank you », « okay »…). */
 const GREETING_CORE = new Set(['hello', 'hi', 'hey', 'hiya', 'howdy', 'greetings', 'welcome', 'morning', 'afternoon', 'evening',
