@@ -8,15 +8,18 @@
     en ligne (Inkscape en ajoute dès qu'on touche au panneau « Fond et contour » ; le script les retire
     quand la forme a une classe). Affecter les classes par « Sélecteurs et CSS » (Ctrl+Maj+Q).
   - Ombres et lumières : classes .ombre / .lumiere (translucides), valables pour toutes les variantes.
+  - Ombre de barbe : classe .barbe, sans opacité en ligne (une variante la règle ou la met à 0).
   - Yeux (2 états) et bouches (5 formes) superposés exactement, centrés sur ancre_yeux / ancre_bouche.
-  - Pas de texte : le slogan du badge (bannerText) est écrit par le code dans badge_zone_texte (repère).
+  - Pas de texte : le slogan (bannerText) est écrit par le code dans badge_zone_texte (repère), en encre
+    .badge-fond et en Noto Sans Bold (public/fonts), après le calque vetements. Le calque badge est la
+    surimpression dessinée ensuite par-dessus l'encre : grain d'usure, plis et ombres du tissu.
   - Coiffures et accessoires : sous-groupes coiffure_<nom> (dans cheveux_arriere et cheveux_avant)
     et accessoire_<nom> (dans accessoires), choisis dans config.local.json.
   - Fond : fichiers séparés dans avatar/fonds/, jamais dans ce fichier.
   - Repères (calque caché) : lus par le code, jamais affichés.
 
   Cadrage : 800 × 880, axe vertical x = 400. Yeux vers y = 300, menton vers y = 470,
-  badge entre y = 560 et 680. Sous y = 800, le buste passe sous le bandeau du bas : le dessiner
+  slogan imprimé sur la poitrine entre y = 552 et 636, juste sous le col. Sous y = 800, le buste passe sous le bandeau du bas : le dessiner
   jusqu'en bas de la page, sans bord coupé.
 -->
 <svg xmlns="http://www.w3.org/2000/svg"
@@ -30,8 +33,8 @@
     <sodipodi:guide id="guide_yeux" position="0,580" orientation="0,-1" inkscape:label="yeux (y = 300)"/>
     <sodipodi:guide id="guide_bouche" position="0,470" orientation="0,-1" inkscape:label="bouche (y = 410)"/>
     <sodipodi:guide id="guide_menton" position="0,410" orientation="0,-1" inkscape:label="menton (y = 470)"/>
-    <sodipodi:guide id="guide_badge_haut" position="0,320" orientation="0,-1" inkscape:label="badge, haut (y = 560)"/>
-    <sodipodi:guide id="guide_badge_bas" position="0,200" orientation="0,-1" inkscape:label="badge, bas (y = 680)"/>
+    <sodipodi:guide id="guide_badge_haut" position="0,328" orientation="0,-1" inkscape:label="impression du slogan, haut (y = 552)"/>
+    <sodipodi:guide id="guide_badge_bas" position="0,244" orientation="0,-1" inkscape:label="impression du slogan, bas (y = 636)"/>
     <sodipodi:guide id="guide_bandeau" position="0,80" orientation="0,-1" inkscape:label="sous le bandeau du bas (y = 800)"/>
   </sodipodi:namedview>
 
@@ -42,9 +45,10 @@
     .cheveux       { fill: #3b2a24 }
     .cheveux-trait { fill: #1e1513 }
     .sourcils      { fill: #2b1d18 }
-    .vetement      { fill: #3e4a5c }
-    .vetement-2    { fill: #e8e3da }
-    .vetement-trait { fill: #1c222c }
+    .barbe         { fill: #2b1d18; opacity: 0.1 }
+    .vetement      { fill: #6f7766 }
+    .vetement-2    { fill: #30343b }
+    .vetement-trait { fill: #1a1d22 }
     .blanc-oeil    { fill: #f2ede5 }
     .iris          { fill: #4a3426 }
     .reflet        { fill: #ffffff }
@@ -84,7 +88,7 @@
   <g inkscape:groupmode="layer" id="reperes" inkscape:label="reperes" style="display:none">
     <rect id="zone_visage" class="repere" x="270" y="220" width="260" height="280"/>
     <!-- Zone où le code écrit le slogan (bannerText) sur le badge. -->
-    <rect id="badge_zone_texte" class="repere" x="270" y="580" width="260" height="80"/>
+    <rect id="badge_zone_texte" class="repere" x="278" y="560" width="244" height="68"/>
     <circle id="ancre_yeux_gauche" class="repere" cx="345" cy="300" r="4"/>
     <circle id="ancre_yeux_droit" class="repere" cx="455" cy="300" r="4"/>
     <circle id="ancre_bouche" class="repere" cx="400" cy="410" r="4"/>

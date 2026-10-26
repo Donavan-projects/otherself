@@ -14,6 +14,7 @@ composants suivants. Ceux marqués « embarqué » font partie de l'extension co
 | [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) (Microsoft) | exécution des modèles (VAD, voix) | MIT | embarqué |
 | [Silero VAD](https://github.com/snakers4/silero-vad) v5 (Silero Team) | détection de parole (`vendor/silero_vad_v5.onnx`) | MIT | embarqué |
 | [@ricky0123/vad-web](https://github.com/ricky0123/vad) | source du fichier `silero_vad_v5.onnx` utilisé | ISC | fichier modèle repris |
+| [Noto Sans](https://github.com/notofonts/latin-greek-cyrillic) Bold (Google LLC) | police du slogan imprimé sur l'avatar (`public/fonts/NotoSans-Bold.ttf`, texte de licence dans `public/fonts/OFL.txt`) | OFL-1.1 | embarqué |
 | [WXT](https://github.com/wxt-dev/wxt) | cadre de l'extension (petites parties à l'exécution) | MIT | embarqué en partie |
 
 ## Voix
