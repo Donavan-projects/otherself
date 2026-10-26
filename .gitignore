@@ -7,3 +7,6 @@ web-ext.config.ts
 # Données personnelles de la démo : jamais commitées.
 config.local.json
 local/
+
+# Références visuelles d'autres œuvres (droits d'auteur) : jamais commitées.
+design/references/

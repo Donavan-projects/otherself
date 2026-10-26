@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
 import { defineConfig } from 'wxt';
+import { checkAvatarSvgs } from './scripts/check-avatar-svg';
 import { checkLocales } from './scripts/check-locales';
 
 const DEFAULT_LOCALE = 'fr';
@@ -99,6 +100,8 @@ export default defineConfig({
     'build:publicAssets': (wxt, files) => {
       checkLocales(wxt.config.publicDir, DEFAULT_LOCALE);
       const root = wxt.config.root;
+      // Personnages SVG : couleurs en ligne retirées, calques et classes vérifiés.
+      checkAvatarSvgs(resolve(root, 'avatar'), (message) => wxt.logger.info(message));
       for (const [dest, src] of Object.entries(VENDOR_FILES)) {
         files.push({ absoluteSrc: resolve(root, src), relativeDest: dest });
       }

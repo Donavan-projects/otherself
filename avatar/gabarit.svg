@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Gabarit d'avatar OtherSelf (buste de face, animable). À copier pour chaque personnage.
+
+  Règles (vérifiées et corrigées par scripts/check-avatar-svg.ts au build) :
+  - Calques Inkscape aux noms fixes (id = inkscape:label), dans l'ordre d'empilement ci-dessous.
+  - Couleurs uniquement par les classes du bloc <style id="palette"> : jamais de fill ni de stroke
+    en ligne (Inkscape en ajoute dès qu'on touche au panneau « Fond et contour » ; le script les retire
+    quand la forme a une classe). Affecter les classes par « Sélecteurs et CSS » (Ctrl+Maj+Q).
+  - Ombres et lumières : classes .ombre / .lumiere (translucides), valables pour toutes les variantes.
+  - Yeux (2 états) et bouches (5 formes) superposés exactement, centrés sur ancre_yeux / ancre_bouche.
+  - Pas de texte : le slogan du badge (bannerText) est écrit par le code dans badge_zone_texte (repère).
+  - Coiffures et accessoires : sous-groupes coiffure_<nom> (dans cheveux_arriere et cheveux_avant)
+    et accessoire_<nom> (dans accessoires), choisis dans config.local.json.
+  - Fond : fichiers séparés dans avatar/fonds/, jamais dans ce fichier.
+  - Repères (calque caché) : lus par le code, jamais affichés.
+
+  Cadrage : 800 × 880, axe vertical x = 400. Yeux vers y = 300, menton vers y = 470,
+  badge entre y = 560 et 680. Sous y = 800, le buste passe sous le bandeau du bas : le dessiner
+  jusqu'en bas de la page, sans bord coupé.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+     width="800" height="880" viewBox="0 0 800 880" id="otherself-avatar">
+  <sodipodi:namedview id="vue" pagecolor="#ffffff" bordercolor="#666666" showguides="true" inkscape:document-units="px">
+    <!-- Positions des guides en repère Inkscape (origine en bas à gauche : y = 880 − y du SVG). -->
+    <sodipodi:guide id="guide_axe" position="400,880" orientation="1,0" inkscape:label="axe (x = 400)"/>
+    <sodipodi:guide id="guide_haut_tete" position="0,770" orientation="0,-1" inkscape:label="haut des cheveux (y = 110)"/>
+    <sodipodi:guide id="guide_yeux" position="0,580" orientation="0,-1" inkscape:label="yeux (y = 300)"/>
+    <sodipodi:guide id="guide_bouche" position="0,470" orientation="0,-1" inkscape:label="bouche (y = 410)"/>
+    <sodipodi:guide id="guide_menton" position="0,410" orientation="0,-1" inkscape:label="menton (y = 470)"/>
+    <sodipodi:guide id="guide_badge_haut" position="0,320" orientation="0,-1" inkscape:label="badge, haut (y = 560)"/>
+    <sodipodi:guide id="guide_badge_bas" position="0,200" orientation="0,-1" inkscape:label="badge, bas (y = 680)"/>
+    <sodipodi:guide id="guide_bandeau" position="0,80" orientation="0,-1" inkscape:label="sous le bandeau du bas (y = 800)"/>
+  </sodipodi:namedview>
+
+  <style id="palette">
+    /* Variante par défaut. Le code remplace ces valeurs par la palette choisie (config.local.json). */
+    .peau          { fill: #d9a47e }
+    .peau-trait    { fill: #6b3f2a }
+    .cheveux       { fill: #3b2a24 }
+    .cheveux-trait { fill: #1e1513 }
+    .sourcils      { fill: #2b1d18 }
+    .vetement      { fill: #3e4a5c }
+    .vetement-2    { fill: #e8e3da }
+    .vetement-trait { fill: #1c222c }
+    .blanc-oeil    { fill: #f2ede5 }
+    .iris          { fill: #4a3426 }
+    .reflet        { fill: #ffffff }
+    .levres        { fill: #b8706a }
+    .trait         { fill: #2a2230 }
+    .trait-ligne   { fill: none; stroke: #2a2230 }
+    .ombre         { fill: #2a1a1a; opacity: 0.22; mix-blend-mode: multiply }
+    .lumiere       { fill: #fff8ee; opacity: 0.18; mix-blend-mode: screen }
+    .badge-fond    { fill: #ffd400 }
+    .badge-bord    { fill: #111111 }
+    .repere        { fill: none; stroke: #ff00ff; stroke-width: 2 }
+  </style>
+
+  <defs id="definitions"/>
+
+  <g inkscape:groupmode="layer" id="cheveux_arriere" inkscape:label="cheveux_arriere">
+    <g id="cheveux_arriere_coiffure_principale" inkscape:label="coiffure_principale"/>
+  </g>
+  <g inkscape:groupmode="layer" id="corps" inkscape:label="corps"/>
+  <g inkscape:groupmode="layer" id="cou" inkscape:label="cou"/>
+  <g inkscape:groupmode="layer" id="vetements" inkscape:label="vetements"/>
+  <g inkscape:groupmode="layer" id="tete" inkscape:label="tete"/>
+  <g inkscape:groupmode="layer" id="yeux_ouverts" inkscape:label="yeux_ouverts"/>
+  <g inkscape:groupmode="layer" id="yeux_fermes" inkscape:label="yeux_fermes"/>
+  <g inkscape:groupmode="layer" id="bouche_repos" inkscape:label="bouche_repos"/>
+  <g inkscape:groupmode="layer" id="bouche_A" inkscape:label="bouche_A"/>
+  <g inkscape:groupmode="layer" id="bouche_E" inkscape:label="bouche_E"/>
+  <g inkscape:groupmode="layer" id="bouche_O" inkscape:label="bouche_O"/>
+  <g inkscape:groupmode="layer" id="bouche_M" inkscape:label="bouche_M"/>
+  <g inkscape:groupmode="layer" id="sourcils" inkscape:label="sourcils"/>
+  <g inkscape:groupmode="layer" id="cheveux_avant" inkscape:label="cheveux_avant">
+    <g id="cheveux_avant_coiffure_principale" inkscape:label="coiffure_principale"/>
+  </g>
+  <g inkscape:groupmode="layer" id="accessoires" inkscape:label="accessoires"/>
+  <g inkscape:groupmode="layer" id="badge" inkscape:label="badge"/>
+
+  <g inkscape:groupmode="layer" id="reperes" inkscape:label="reperes" style="display:none">
+    <rect id="zone_visage" class="repere" x="270" y="220" width="260" height="280"/>
+    <!-- Zone où le code écrit le slogan (bannerText) sur le badge. -->
+    <rect id="badge_zone_texte" class="repere" x="270" y="580" width="260" height="80"/>
+    <circle id="ancre_yeux_gauche" class="repere" cx="345" cy="300" r="4"/>
+    <circle id="ancre_yeux_droit" class="repere" cx="455" cy="300" r="4"/>
+    <circle id="ancre_bouche" class="repere" cx="400" cy="410" r="4"/>
+    <line id="ligne_yeux" class="repere" x1="250" y1="300" x2="550" y2="300"/>
+    <line id="ligne_menton" class="repere" x1="250" y1="470" x2="550" y2="470"/>
+    <line id="ligne_bandeau" class="repere" x1="0" y1="800" x2="800" y2="800"/>
+  </g>
+</svg>
