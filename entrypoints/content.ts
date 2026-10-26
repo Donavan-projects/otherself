@@ -5,6 +5,7 @@
 
 import { PAGE_TAG, type FromPage, type PageEnvelope } from '@/lib/bridge-messages';
 import { installFakeGetUserMedia } from '@/lib/inject';
+import { mapAssets } from '@/lib/avatar';
 import { fileToBlob, type SerializedSources } from '@/lib/injection-sources';
 import { createLogger } from '@/lib/log';
 import { createVoiceOutput, type VoiceOutput } from '@/lib/page-audio';
@@ -48,15 +49,13 @@ export default defineContentScript({
       async install(sources) {
         if (installed) return 'déjà actif';
         installed = true;
-        const photo = sources.photo
-          ? await createImageBitmap(fileToBlob(sources.photo), { imageOrientation: 'from-image' })
-          : null;
-        log(`installation (${frame} ${location.href}) : photo ${photo ? `${photo.width}x${photo.height}` : 'absente'}, bandeau « ${sources.bannerText} »`);
+        const avatar = await mapAssets(sources.avatar, (file) => createImageBitmap(fileToBlob(file)));
+        log(`installation (${frame} ${location.href}) : avatar ${avatar.under.width}x${avatar.under.height}, bandeau « ${sources.bannerText} » à y = ${avatar.banner.y}`);
         if (sources.debugSafeZone) log('débogage : contour de la zone de sécurité affiché');
 
         let voice: VoiceOutput | null = null;
         const media = installFakeGetUserMedia({
-          photo,
+          avatar,
           avatarOptions: { bannerText: sources.bannerText, debugSafeZone: sources.debugSafeZone },
           createAudioTrack: async () => {
             voice = createVoiceOutput(

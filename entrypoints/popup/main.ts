@@ -1,5 +1,7 @@
-import { loadDemoConfig, localUrl } from '@/lib/config';
-import { bytesToBase64, type SerializedFile, type SerializedSources } from '@/lib/injection-sources';
+import { mapAssets } from '@/lib/avatar';
+import { buildAvatarAssets } from '@/lib/avatar-assets';
+import { loadDemoConfig } from '@/lib/config';
+import { blobToFile, type SerializedSources } from '@/lib/injection-sources';
 import { createLogger } from '@/lib/log';
 
 const pages = [
@@ -29,18 +31,12 @@ const status = (message: string) => {
   statusEl.textContent = message;
 };
 
-async function loadFile(path: string | null | undefined): Promise<SerializedFile | null> {
-  if (!path) return null;
-  const response = await fetch(localUrl(path));
-  if (!response.ok) throw new Error(`${path} introuvable (${response.status})`);
-  const blob = await response.blob();
-  return { base64: bytesToBase64(await blob.arrayBuffer()), type: blob.type };
-}
-
+/** Avatar préparé ici (page de l'extension), puis remis à la page sous forme d'images seulement. */
 async function loadSources(): Promise<SerializedSources> {
   const config = await loadDemoConfig();
+  const { assets } = await buildAvatarAssets(config);
   return {
-    photo: await loadFile(config.photo),
+    avatar: await mapAssets(assets, blobToFile),
     bannerText: config.bannerText,
     debugSafeZone: config.debugSafeZone,
   };
@@ -66,6 +62,7 @@ async function ensureOffscreen() {
 async function activate() {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (tab?.id === undefined) throw new Error('aucun onglet actif');
+  status('préparation de l’avatar…');
   const sources = await loadSources();
   const pipeline = await ensureOffscreen();
   // allFrames : seuls les cadres couverts par activeTab (même origine que l'onglet) sont atteints.

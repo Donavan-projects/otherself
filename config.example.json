@@ -1,5 +1,10 @@
 {
-  "photo": "local/photo.jpg",
+  "avatar": "otherself",
+  "background": "interieur-clair",
+  "palette": {},
+  "hairstyle": "principale",
+  "accessories": [],
+  "bannerOffsetY": 0,
   "testAudio": "local/test-audio.ogg",
   "debugSafeZone": false,
   "language": "en",

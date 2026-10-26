@@ -2,8 +2,9 @@
 // le canvas de l'avatar comme caméra et la piste audio fournie comme micro, sous le nom
 // « Avatar IA – OtherSelf ». Sans API d'extension : tourne dans le monde MAIN d'un onglet.
 
-import { AvatarRenderer, type AvatarOptions } from './avatar';
+import { AvatarRenderer, type AvatarAssets, type AvatarOptions, type MouthShape } from './avatar';
 import { createLogger } from './log';
+import { audioContext } from './page-audio';
 
 const FPS = 30;
 const STATS_INTERVAL_MS = 5000;
@@ -15,7 +16,7 @@ const ENUMERATE_CHECK_MS = 5000;
 const log = createLogger('inject');
 
 export interface FakeMediaSources {
-  photo: ImageBitmap | null;
+  avatar: AvatarAssets<ImageBitmap>;
   avatarOptions: AvatarOptions;
   /** Crée la piste du micro injecté, au premier appel de getUserMedia. */
   createAudioTrack: () => Promise<MediaStreamTrack>;
@@ -135,13 +136,39 @@ function disguise(track: MediaStreamTrack, kind: InputKind): MediaStreamTrack {
 }
 
 async function createFakeTracks(sources: FakeMediaSources): Promise<FakeTracks> {
-  const video = createVideoTrack(sources.photo, sources.avatarOptions);
-  return { video: video.track, stopRendering: video.stop, audio: await sources.createAudioTrack() };
+  // La bouche suit le niveau du micro injecté, c'est-à-dire la voix réellement jouée.
+  let level = () => 0;
+  const video = createVideoTrack(sources.avatar, sources.avatarOptions, () => level());
+  const audio = await sources.createAudioTrack();
+  level = createLevelMeter(audio);
+  return { video: video.track, stopRendering: video.stop, audio };
 }
 
-function createVideoTrack(photo: ImageBitmap | null, options: AvatarOptions): { track: MediaStreamTrack; stop(): void } {
+/** Niveau RMS instantané d'une piste audio (analyseur, jamais relié aux haut-parleurs). */
+function createLevelMeter(track: MediaStreamTrack): () => number {
+  const ctx = audioContext();
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 1024;
+  ctx.createMediaStreamSource(new MediaStream([track])).connect(analyser);
+  const samples = new Float32Array(analyser.fftSize);
+  return () => {
+    analyser.getFloatTimeDomainData(samples);
+    let sum = 0;
+    for (const sample of samples) sum += sample * sample;
+    return Math.sqrt(sum / samples.length);
+  };
+}
+
+function createVideoTrack(avatar: AvatarAssets<ImageBitmap>, options: AvatarOptions, level: () => number): { track: MediaStreamTrack; stop(): void } {
   // Canvas hors DOM : la page ne voit que le flux, bandeau compris (règle 1).
-  const renderer = new AvatarRenderer(document.createElement('canvas'), photo, options);
+  // Niveau maximal par période de statistiques : sert à régler les seuils de la bouche (lib/avatar.ts).
+  let maxLevel = 0;
+  const measured = () => {
+    const value = level();
+    maxLevel = Math.max(maxLevel, value);
+    return value;
+  };
+  const renderer = new AvatarRenderer(document.createElement('canvas'), avatar, options, measured);
   renderer.draw();
   const track = renderer.canvas.captureStream(FPS).getVideoTracks()[0];
   if (!track) throw new Error('captureStream n\'a fourni aucune piste vidéo');
@@ -149,15 +176,31 @@ function createVideoTrack(photo: ImageBitmap | null, options: AvatarOptions): { 
   // Redessin continu : un canvas figé peut ne produire aucune image dans le flux.
   // setInterval plutôt que requestAnimationFrame, qui s'arrête si l'onglet est masqué.
   let frames = 0;
+  let drawTime = 0;
+  let maxDrawTime = 0;
+  const shapes = new Map<MouthShape, number>();
   let last = performance.now();
   const drawing = setInterval(() => {
-    renderer.draw();
+    const start = performance.now();
+    const shape = renderer.draw(start);
+    const spent = performance.now() - start;
     frames += 1;
+    drawTime += spent;
+    maxDrawTime = Math.max(maxDrawTime, spent);
+    shapes.set(shape, (shapes.get(shape) ?? 0) + 1);
   }, 1000 / FPS);
   const stats = setInterval(() => {
     const now = performance.now();
-    log(`vidéo : ${((frames * 1000) / (now - last)).toFixed(1)} images/s dessinées`);
+    const mouth = [...shapes].map(([shape, count]) => `${shape} ${count}`).join(', ');
+    log(
+      `vidéo : ${((frames * 1000) / (now - last)).toFixed(1)} images/s, dessin ${(drawTime / Math.max(1, frames)).toFixed(2)} ms ` +
+        `en moyenne (max ${maxDrawTime.toFixed(1)} ms), bouche : ${mouth} (niveau max ${maxLevel.toFixed(3)})`,
+    );
     frames = 0;
+    drawTime = 0;
+    maxDrawTime = 0;
+    maxLevel = 0;
+    shapes.clear();
     last = now;
   }, STATS_INTERVAL_MS);
 

@@ -41,7 +41,7 @@ Chargez `.output/chrome-mv3` dans `chrome://extensions` (mode développeur, « C
 ## État d'avancement
 
 - Fait : page de répétition, rendu de l'avatar avec bandeau, injection caméra et micro, pipeline voix (écoute, transcription, réponse, synthèse vocale, révélation et déclaration configurable), testé sur Google Meet et InterviewCoach.
-- Ensuite : avatar cartoon OtherSelf (le rendu actuel à partir d'une photo est provisoire), puis tournage de la démo.
+- En cours : avatar cartoon OtherSelf (personnage SVG original, slogan imprimé sur le t-shirt, bouche animée par la voix), à tester sur Meet ; puis tournage de la démo.
 
 ## Licence et crédits
 

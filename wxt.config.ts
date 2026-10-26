@@ -1,12 +1,11 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { extname, resolve } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { basename, extname, resolve } from 'node:path';
 import { defineConfig } from 'wxt';
 import { checkAvatarSvgs } from './scripts/check-avatar-svg';
 import { checkLocales } from './scripts/check-locales';
 
 const DEFAULT_LOCALE = 'fr';
 const LOCAL_CONFIG = 'config.local.json';
-const PHOTO_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
 const AUDIO_EXTENSIONS = ['.mp3', '.ogg', '.wav', '.webm', '.m4a'];
 const TEXT_EXTENSIONS = ['.md', '.txt'];
 
@@ -25,6 +24,12 @@ const VENDOR_FILES: Record<string, string> = {
 
 // Champs simples recopiés tels quels dans local/config.json (voir lib/config.ts et docs/config.md).
 const PASSTHROUGH_FIELDS = [
+  'avatar',
+  'background',
+  'palette',
+  'hairstyle',
+  'accessories',
+  'bannerOffsetY',
   'debugSafeZone',
   'bargeInMs',
   'candidateName',
@@ -102,6 +107,12 @@ export default defineConfig({
       const root = wxt.config.root;
       // Personnages SVG : couleurs en ligne retirées, calques et classes vérifiés.
       checkAvatarSvgs(resolve(root, 'avatar'), (message) => wxt.logger.info(message));
+      // Personnages et fonds (dessins du projet, pas des données personnelles), lus par les pages de l'extension.
+      for (const [dir, dest] of [['avatar', 'avatar-svg'], ['avatar/fonds', 'avatar-svg/fonds']] as const) {
+        for (const file of readdirSync(resolve(root, dir)).filter((name) => name.endsWith('.svg') && name !== 'gabarit.svg')) {
+          files.push({ absoluteSrc: resolve(root, dir, file), relativeDest: `${dest}/${file}` });
+        }
+      }
       for (const [dest, src] of Object.entries(VENDOR_FILES)) {
         files.push({ absoluteSrc: resolve(root, src), relativeDest: dest });
       }
@@ -116,7 +127,6 @@ export default defineConfig({
         return dest;
       };
       const output: Record<string, unknown> = {
-        photo: copy('photo', PHOTO_EXTENSIONS, 'photo', true),
         // Son de test du micro injecté, utilisé seulement par rehearsal?inject.
         testAudio: copy('testAudio', AUDIO_EXTENSIONS, 'test-audio'),
         cv: copy('cv', TEXT_EXTENSIONS, 'cv', true),
@@ -124,6 +134,13 @@ export default defineConfig({
       for (const field of PASSTHROUGH_FIELDS) {
         if (config?.[field] !== undefined) output[field] = config[field];
       }
+      for (const [field, dir] of [['avatar', 'avatar'], ['background', 'avatar/fonds']] as const) {
+        const name = config?.[field];
+        if (typeof name === 'string' && !existsSync(resolve(root, dir, `${basename(name)}.svg`))) {
+          warn(`${LOCAL_CONFIG} : "${field}" introuvable (${dir}/${name}.svg)`);
+        }
+      }
+      if (config?.photo !== undefined) warn(`${LOCAL_CONFIG} : champ "photo" ignoré (avatar cartoon, règle 4), à retirer`);
       if (config && !config.openaiApiKey) warn(`${LOCAL_CONFIG} : champ "openaiApiKey" manquant (pipeline voix inactif)`);
       files.push({ relativeDest: 'local/config.json', contents: JSON.stringify(output) });
     },

@@ -1,5 +1,7 @@
-// Photo et options d'affichage sérialisées (jamais la clé API) pour passer de l'extension au monde MAIN de l'onglet,
-// via les arguments de scripting.executeScript (pas de web_accessible_resources).
+// Images de l'avatar et options d'affichage sérialisées (jamais la clé API) pour passer de l'extension
+// au monde MAIN de l'onglet, via les arguments de scripting.executeScript (pas de web_accessible_resources).
+
+import type { AvatarAssets } from './avatar';
 
 export interface SerializedFile {
   base64: string;
@@ -7,7 +9,7 @@ export interface SerializedFile {
 }
 
 export interface SerializedSources {
-  photo: SerializedFile | null;
+  avatar: AvatarAssets<SerializedFile>;
   bannerText: string;
   debugSafeZone: boolean;
 }
@@ -19,6 +21,10 @@ export function bytesToBase64(bytes: ArrayBuffer): string {
     binary += String.fromCharCode(...view.subarray(i, i + 0x8000));
   }
   return btoa(binary);
+}
+
+export async function blobToFile(blob: Blob): Promise<SerializedFile> {
+  return { base64: bytesToBase64(await blob.arrayBuffer()), type: blob.type };
 }
 
 /** Décodage sans fetch(data:…) : la CSP de la page pourrait le bloquer. */

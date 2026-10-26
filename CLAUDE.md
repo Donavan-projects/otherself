@@ -1,8 +1,13 @@
 # OtherSelf
 
-## État actuel (25/10/2026, étape 4 terminée)
+## État actuel (26/10/2026, étape 5 en cours)
 
-- **Prochaine étape : étape 5, visuel OtherSelf**, selon `docs/visuel-otherself.md`.
+- **Étape 5, visuel OtherSelf : intégré, à tester sur Meet** (avec et sans Framing, mesurer où Meet coupe l'image, régler `bannerOffsetY`).
+  - Personnage SVG `avatar/otherself.svg` (gabarit et règles : `avatar/gabarit.svg`, vérifié et corrigé au build par `scripts/check-avatar-svg.ts`), fond `avatar/fonds/interieur-clair.svg`. Références visuelles dans `design/references/`, jamais commitées.
+  - Le popup (page de l'extension) prépare l'avatar (`lib/avatar-assets.ts`) : variante de `config.local.json` (palette, coiffure, accessoires, fond), calques rastérisés à l'échelle du cadre, slogan (`bannerText`) imprimé et courbé sur le t-shirt en Noto Sans Bold embarquée (OFL), surimpression du tissu. La page ne reçoit que des images (1,2 Mo, ni configuration ni clé).
+  - Cadrage webcam : haut de la tête à y = 94, slogan au milieu de la poitrine juste au-dessus du bandeau, bandeau en bas de la zone de sécurité (y = 529). `bannerOffsetY` déplace le bandeau (borné à la zone de sécurité) et réduit le personnage pour garder le slogan au-dessus.
+  - Page : seule la zone des yeux et de la bouche est redessinée (≈ 130×125 px, 0,15 ms par image, 30 images/s), bandeau peint en dernier à chaque image. Bouche pilotée par le niveau RMS du micro injecté (voix réellement jouée) : repos, M, E, puis A et O en alternance ; clignements aléatoires. Log toutes les 5 s : images/s, temps de dessin, formes de bouche, niveau max.
+  - Photo retirée (règle 4) : le champ `photo` de `config.local.json` est ignoré, avec un avertissement au build.
 - **Étape 3 terminée : voie A (injection) retenue.** Testée sur Google Meet (compte A dans Chrome avec l'extension, compte B dans Brave) : image, bandeau et son arrivent chez B.
 - **Étape 4 terminée : pipeline voix validé sur Meet et InterviewCoach** : l'avatar entend le recruteur, se révèle, répond et parle. Choix : transcription en flux `gpt-live-transcribe` (session Realtime, clé éphémère créée par l'extension), LLM `gpt-6-luna` en streaming sans raisonnement, Piper en WebAssembly dans un worker du document offscreen, langue `en` pour la démo. Latence : 2 à 3 s sur Meet ; sur InterviewCoach 6 à 11 s avant les corrections du 25/10 (Piper dans un worker, début de réponse court), à remesurer.
 - **Son du recruteur : partage de l'onglet par la page** (`lib/share-tab.ts`) : après l'activation, un bouton injecté (« Autoriser OtherSelf à écouter le recruteur… ») ouvre la fenêtre de partage standard de Chrome sur l'onglet courant, son compris (`getDisplayMedia`, `preferCurrentTab`, version d'origine reprise d'un cadre vierge si la plateforme l'a remplacée). La vidéo du partage est arrêtée aussitôt, le flux n'est jamais remis à la plateforme (aucune présentation déclenchée sur Meet), le son est lu par AudioWorklet (URL blob, ou `MediaStreamTrackProcessor` si la CSP de la page refuse le blob) et part vers le document offscreen par le pont, à 24 kHz (16 kHz pour Silero). Aucune permission : `tabCapture` a été essayé puis retiré, Chrome l'annonce comme « Lire et modifier toutes vos données sur tous les sites Web » (vérifié avec `chrome.management.getPermissionWarningsByManifest`). Le build de production n'affiche aucun avertissement.
@@ -17,7 +22,7 @@
 - **Désactivation** : bouton « Désactiver sur cet onglet » dans le popup (injection retirée, pistes injectées arrêtées, partage arrêté, document offscreen fermé). Onglet fermé ou rechargé : partage et pont s'arrêtent d'eux-mêmes.
 - **Micro sur Meet** : après l'activation, Meet n'affiche pas toujours « Avatar IA – OtherSelf » tant qu'on ne change pas de micro dans son menu ; `devicechange` est envoyé à l'installation puis à +1 s et +3 s, et un log dit 5 s après si la page a relu la liste.
 - **Prérequis actuel sur la plateforme** : build de production ; autoriser caméra et micro pour le site (cadenas de la barre d'adresse) ; désactiver côté A le cadrage automatique (Meet : Paramètres → Vidéo → Cadrage / Framing) ; activer l'extension sur l'onglet (popup → « Activer sur cet onglet ») ; cliquer le bouton OtherSelf dans la page et partager l'onglet avec son son ; si besoin, changer de micro dans la plateforme pour qu'elle redemande les flux. Recharger l'onglet annule l'injection.
-- **Cadrage automatique (confirmé sur Meet)** : il zoome sur le visage détecté et coupe le bandeau de la zone de sécurité. Pas de correction sur la composition photo, remplacée à l'étape 5 ; parade prévue décrite dans `docs/visuel-otherself.md`, section 3.
+- **Cadrage automatique (confirmé sur Meet)** : il zoome sur le visage détecté et coupe le bandeau de la zone de sécurité. Parade de l'étape 5 : slogan imprimé sur le t-shirt, au-dessus du bandeau. **Mesuré sur Meet le 26/10** (captures chez B) : le cadrage **détecte le visage cartoon** et zoome en gardant le haut du cadre (vue partagée ×1,2 : y 0 à 536 visibles ; vignette épinglée : y 0 à 596) ; le slogan reste entier et lisible dans les deux cas, le bandeau est coupé (réduit à son bord en vue partagée, coupé de ~13 px en bas en vue épinglée). Sans cadrage : vue partagée 2:1 = 36 px coupés en haut et en bas, bandeau entier avec 75 px de marge. Le zoom semble suivre la taille du visage : remonter le bandeau (`bannerOffsetY`) réduit le personnage et ne devrait pas le sauver du cadrage (hypothèse à vérifier). Le nom du participant (Meet) se superpose au coin bas gauche du bandeau dans la vignette épinglée.
 - **Pivot (24/10/2026)** : le projet s'appelle désormais OtherSelf (ex-Contre-Recruteur ; le dossier du projet garde son nom pour ne pas changer l'identifiant de l'extension).
 - **Licence : GPL-3.0-or-later** (`LICENSE`), imposée par eSpeak NG (GPL-3.0) embarqué dans `piper_phonemize`. Composants tiers et voix : `THIRD_PARTY_NOTICES.md`, copié avec `LICENSE` dans l'extension construite. Dépôt GitHub privé : `Donavan-projects/otherself`.
 - Configuration locale : voir `docs/config.md`.
@@ -40,7 +45,7 @@ Ces règles sont le cœur du projet. Ne jamais les assouplir, les rendre optionn
 1. **Bandeau incrusté** : un bandeau est dessiné directement dans chaque image du flux vidéo injecté (dans le canvas), en dernier, jamais en superposition DOM masquable, dans la zone de sécurité centrale qui survit aux recadrages des plateformes (4:3, carré, haut et bas coupés jusqu'à environ 21:9), sur une seule ligne, sans chevaucher le visage, lisible dans une vignette d'environ 320×180. Son texte est configurable (`bannerText`) : « Candidat automatisé, comme vous. » par défaut, variante anglaise « Automated candidate, just like you. ». Il n'est jamais vide ni désactivable, et doit dire clairement que le candidat est automatisé (pas de formulation générique comme « Avatar IA » seule).
 2. **Révélation immédiate** : la première prise de parole de l'avatar annonce qu'il est une IA, y compris en mode « message » (la révélation précède la déclaration). Aucun réglage pour la retarder ou la supprimer.
 3. **Aucun mode discret** : pas d'écran caché, pas de suggestion de réponses à lire, pas d'option pour tromper un interlocuteur humain.
-4. **Avatar cartoon uniquement** : aucun import de photo, aucun clonage de visage ou de voix. Voix synthétique générique (Piper). Le rendu actuel à partir d'une photo est provisoire et sera remplacé à l'étape 5.
+4. **Avatar cartoon uniquement** : aucun import de photo, aucun clonage de visage ou de voix. Voix synthétique générique (Piper). La photo provisoire a été retirée à l'étape 5.
 5. **Pas d'invention** : le prompt système interdit d'inventer expériences, diplômes ou chiffres. Le LLM répond uniquement à partir du CV et des notes de l'utilisateur.
 6. **Permissions minimales** : `activeTab` + `scripting` + `offscreen` (document du pipeline voix), injection à la demande sur l'onglet actif. Jamais de `host_permissions`, et en particulier jamais sur `<all_urls>` : OpenAI et Hugging Face acceptent les requêtes CORS de l'extension sans permission d'hôte.
 
@@ -80,11 +85,13 @@ entrypoints/
   bridge.content.ts    # monde isolé : relais page ↔ document offscreen
   offscreen/           # pipeline voix (VAD, STT, LLM, Piper)
   popup/               # boutons Activer / Désactiver (Pause / Reprendre la main : reporté)
-  options/             # assistant de setup : clé API, CV, photo, voix
+  options/             # assistant de setup : clé API, CV, voix
   rehearsal/           # page « faux recruteur » pour tester sans plateforme réelle
-  avatar/              # page de l'avatar (aperçu)
+  avatar/              # page de l'avatar (aperçu animé, voix simulée)
 lib/
-  vad.ts  stt.ts  llm.ts  tts.ts  avatar.ts  prompt.ts
+  vad.ts  stt.ts  llm.ts  tts.ts  prompt.ts
+  avatar.ts            # rendu du cadre : composition, yeux et bouche animés, bandeau (monde MAIN et pages)
+  avatar-assets.ts     # pages de l'extension : SVG → images de l'avatar, variante, slogan courbé
   conversation.ts      # tour de parole, ouverture (révélation + messageText), latence
   config.ts            # lecture de local/config.json (généré depuis config.local.json)
   page-audio.ts        # monde MAIN : lecture de la voix dans le micro injecté
@@ -94,11 +101,15 @@ lib/
   chunks.ts            # découpe du texte du LLM en morceaux à synthétiser
   bridge-messages.ts  pcm.ts
   inject.ts            # remplacement getUserMedia / enumerateDevices (monde MAIN)
-  injection-sources.ts # photo et son sérialisés pour le monde MAIN
+  injection-sources.ts # images de l'avatar sérialisées pour le monde MAIN
   test-audio.ts        # son de test du micro injecté (banc rehearsal?inject seulement)
   log.ts               # logs préfixés et horodatés
 scripts/
   check-locales.ts     # vérification des fichiers _locales au build
+  check-avatar-svg.ts  # vérification et correction des SVG de personnage au build
+avatar/
+  gabarit.svg  otherself.svg  fonds/   # personnage et fonds (SVG Inkscape)
+public/fonts/          # Noto Sans Bold (OFL), police du slogan
 docs/
   spec.md  config.md  visuel-otherself.md
 ```

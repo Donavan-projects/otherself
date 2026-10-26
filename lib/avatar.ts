@@ -1,180 +1,237 @@
-// Rendu de l'avatar « carton » dans un canvas 1280×720 : photo de l'utilisateur
-// et bandeau incrusté. Sert aux deux voies (injection dans l'onglet ou page OBS).
-
-import { bannerTextOrDefault, loadDemoConfig, localUrl } from './config';
-import { createLogger } from './log';
+// Rendu de l'avatar cartoon dans un canvas 1280×720 : images préparées par l'extension
+// (lib/avatar-assets.ts), yeux et bouche animés, bandeau incrusté. Tourne dans le monde MAIN
+// de l'onglet (voie A) comme dans les pages de l'extension (aperçu, banc d'essai).
 
 export const AVATAR_WIDTH = 1280;
 export const AVATAR_HEIGHT = 720;
 
-
 // Zone de sécurité : survit à un recadrage central en 4:3, en carré (x 280 à 1000),
 // et à une coupe du haut et du bas jusqu'à environ 21:9 (vignettes Meet, ~2:1 compris).
-// Le bloc utile (contenu en haut, bandeau dessous, sans chevauchement) y tient en entier,
-// centré verticalement. « Contenu » = la photo aujourd'hui, l'avatar cartoon à l'étape 5.
-const SAFE_ZONE = { left: 290, right: 990, top: 100, bottom: 610 };
-const BANNER_HEIGHT = 80;
+// Le bandeau y tient en entier (règle 1).
+export const SAFE_ZONE = { left: 290, right: 990, top: 100, bottom: 610 };
+export const BANNER_HEIGHT = 80;
 const BANNER_FONT_SIZE = 50;
 const BANNER_BORDER = 3;
 const BANNER_PADDING_X = 14;
 // Resserrement horizontal maximal du texte avant de réduire la police : garde des
 // lettres hautes, lisibles dans une vignette de 320×180.
 const BANNER_MIN_SQUEEZE = 0.78;
-const BANNER_GAP = 14;
-// Hauteur maximale du contenu (bordure comprise) : laisse une marge en haut et en bas
-// de la zone de sécurité, au cas où la plateforme recadre plus que prévu.
-const CONTENT_MAX_HEIGHT = 346;
-const PHOTO_BORDER = 8;
-const PLACEHOLDER_ASPECT = 3 / 4;
 
-interface Rect {
+// Cadrage de webcam : haut de la tête vers 13 % du cadre, slogan du t-shirt entièrement
+// au-dessus du bandeau, bandeau en bas de la zone de sécurité (réglable par bannerOffsetY).
+const HEAD_TOP = 94;
+const SLOGAN_GAP = 12;
+const DEFAULT_BANNER_TOP = SAFE_ZONE.bottom - BANNER_HEIGHT - 1;
+const MIN_BANNER_TOP = 400;
+
+export interface Rect {
   x: number;
   y: number;
   width: number;
   height: number;
 }
 
-interface Composition {
-  /** Emplacement du contenu, bordure comprise. */
-  content: Rect;
+export interface FrameLayout {
+  /** Échelle du SVG du personnage dans le cadre, et position de son coin haut gauche. */
+  scale: number;
+  left: number;
+  top: number;
+  banner: Rect;
+  /** Décalage demandé hors des limites (zone de sécurité, taille minimale du personnage) : ramené dedans. */
+  clamped: boolean;
+}
+
+/**
+ * Compose personnage, slogan et bandeau : le bandeau est placé (décalage bannerOffsetY, en pixels,
+ * négatif vers le haut), puis le personnage est mis à l'échelle pour que le haut de sa tête reste
+ * à HEAD_TOP et que le bas du slogan arrive juste au-dessus du bandeau.
+ */
+export function composeFrame(svg: { width: number; hairTop: number; sloganBottom: number }, bannerOffsetY = 0): FrameLayout {
+  const wanted = DEFAULT_BANNER_TOP + Math.round(bannerOffsetY);
+  const bannerTop = Math.min(SAFE_ZONE.bottom - BANNER_HEIGHT, Math.max(MIN_BANNER_TOP, wanted));
+  const scale = (bannerTop - SLOGAN_GAP - HEAD_TOP) / (svg.sloganBottom - svg.hairTop);
+  return {
+    scale,
+    left: Math.round(AVATAR_WIDTH / 2 - (svg.width / 2) * scale),
+    top: Math.round(HEAD_TOP - svg.hairTop * scale),
+    banner: { x: SAFE_ZONE.left, y: bannerTop, width: SAFE_ZONE.right - SAFE_ZONE.left, height: BANNER_HEIGHT },
+    clamped: bannerTop !== wanted,
+  };
+}
+
+export const MOUTH_SHAPES = ['repos', 'A', 'E', 'O', 'M'] as const;
+export type MouthShape = (typeof MOUTH_SHAPES)[number];
+
+/** Image placée dans le cadre (coordonnées du canvas 1280×720). */
+export interface Sprite<T> {
+  image: T;
+  x: number;
+  y: number;
+}
+
+/**
+ * Images de l'avatar, prêtes à composer. T : Blob dans l'extension, fichier sérialisé pour
+ * passer au monde MAIN, ImageBitmap pour dessiner.
+ */
+export interface AvatarAssets<T> {
+  /** Plein cadre fixe : fond, corps, vêtements, tête sans yeux ni bouche, slogan et sa surimpression. */
+  under: T;
+  /** Sourcils et cheveux de devant, par-dessus les yeux. */
+  over: Sprite<T>;
+  eyes: { open: Sprite<T>; closed: Sprite<T> };
+  mouths: Record<MouthShape, Sprite<T>>;
+  /** Zone redessinée à chaque image : yeux et bouches. */
+  region: Rect;
   banner: Rect;
 }
 
-/** Place le contenu (largeur / hauteur = aspect) et le bandeau dans la zone de sécurité. */
-export function composeLayout(aspect: number): Composition {
-  const safeWidth = SAFE_ZONE.right - SAFE_ZONE.left;
-  const safeHeight = SAFE_ZONE.bottom - SAFE_ZONE.top;
-  const maxHeight = Math.min(CONTENT_MAX_HEIGHT, safeHeight - BANNER_GAP - BANNER_HEIGHT);
-  const height = Math.round(Math.min(maxHeight, safeWidth / aspect));
-  const width = Math.round(Math.min(safeWidth, height * aspect));
-  const blockHeight = height + BANNER_GAP + BANNER_HEIGHT;
-  const top = Math.round(SAFE_ZONE.top + (safeHeight - blockHeight) / 2);
+export async function mapAssets<A, B>(assets: AvatarAssets<A>, convert: (image: A) => Promise<B>): Promise<AvatarAssets<B>> {
+  const sprite = async (item: Sprite<A>): Promise<Sprite<B>> => ({ ...item, image: await convert(item.image) });
+  const mouths = await Promise.all(MOUTH_SHAPES.map(async (shape) => [shape, await sprite(assets.mouths[shape])] as const));
   return {
-    content: { x: Math.round((AVATAR_WIDTH - width) / 2), y: top, width, height },
-    banner: { x: SAFE_ZONE.left, y: top + height + BANNER_GAP, width: safeWidth, height: BANNER_HEIGHT },
+    under: await convert(assets.under),
+    over: await sprite(assets.over),
+    eyes: { open: await sprite(assets.eyes.open), closed: await sprite(assets.eyes.closed) },
+    mouths: Object.fromEntries(mouths) as Record<MouthShape, Sprite<B>>,
+    region: assets.region,
+    banner: assets.banner,
   };
 }
 
 export interface AvatarOptions {
-  /** Texte du bandeau (bannerText) ; vide ou absent : texte par défaut (règle 1). */
-  bannerText?: string;
+  /** Texte du bandeau (bannerText), déjà vérifié : jamais vide (règle 1). */
+  bannerText: string;
   /** Dessine le contour de la zone de sécurité (debugSafeZone dans config.local.json). */
   debugSafeZone?: boolean;
 }
 
-const log = createLogger('avatar');
+// Bouche : niveau (RMS) de la voix réellement jouée dans le micro injecté. La voix est normalisée
+// à −18 dBFS RMS (≈ 0,126) : les seuils sont placés autour de ce niveau.
+const LEVEL_SILENCE = 0.015;
+const LEVEL_LOW = 0.035;
+const LEVEL_HIGH = 0.095;
+const LEVEL_ATTACK = 0.6;
+const LEVEL_RELEASE = 0.35;
+/** Durée minimale d'une forme de bouche : évite le scintillement. */
+const MOUTH_HOLD_MS = 70;
 
-/** Charge la photo et les options déclarées dans config.local.json (copiées dans le build sous local/). */
-export async function loadAvatarConfig(): Promise<{ photo: ImageBitmap | null; options: AvatarOptions }> {
-  const config = await loadDemoConfig();
-  const options: AvatarOptions = { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone };
-  log(`bandeau : « ${config.bannerText} »`);
-  if (options.debugSafeZone) log('débogage : contour de la zone de sécurité affiché');
-  if (!config.photo) {
-    log('aucune photo configurée (config.local.json), silhouette affichée');
-    return { photo: null, options };
+/** Choisit la forme de bouche d'après le niveau lissé : repos, M, E, puis A et O en alternance. */
+export class MouthAnimator {
+  private level = 0;
+  private shape: MouthShape = 'repos';
+  private since = 0;
+  private nextOpen: 'A' | 'O' = 'A';
+
+  update(rawLevel: number, now: number): MouthShape {
+    this.level += (rawLevel - this.level) * (rawLevel > this.level ? LEVEL_ATTACK : LEVEL_RELEASE);
+    let wanted: MouthShape;
+    if (this.level < LEVEL_SILENCE) wanted = 'repos';
+    else if (this.level < LEVEL_LOW) wanted = 'M';
+    else if (this.level < LEVEL_HIGH) wanted = 'E';
+    else wanted = this.shape === 'A' || this.shape === 'O' ? this.shape : this.nextOpen;
+    if (wanted !== this.shape && now - this.since >= MOUTH_HOLD_MS) {
+      // Chaque nouvelle ouverture alterne A et O : la bouche ne répète pas la même forme.
+      if (wanted === 'A' || wanted === 'O') this.nextOpen = wanted === 'A' ? 'O' : 'A';
+      this.shape = wanted;
+      this.since = now;
+    }
+    return this.shape;
   }
-  const photoResponse = await fetch(localUrl(config.photo));
-  if (!photoResponse.ok) throw new Error(`photo introuvable : ${config.photo} (${photoResponse.status})`);
-  const photo = await createImageBitmap(await photoResponse.blob(), { imageOrientation: 'from-image' });
-  log(`photo chargée : ${config.photo} (${photo.width}x${photo.height})`);
-  if (Math.max(photo.width, photo.height) < AVATAR_HEIGHT) {
-    log(`photo de petite taille, l'image risque d'être floue (au moins ${AVATAR_HEIGHT} px conseillés)`);
+}
+
+// Clignements : toutes les 2,5 à 6 s, yeux fermés 110 ms, parfois deux de suite.
+const BLINK_MIN_MS = 2500;
+const BLINK_MAX_MS = 6000;
+const BLINK_CLOSED_MS = 110;
+const DOUBLE_BLINK_CHANCE = 0.15;
+const DOUBLE_BLINK_GAP_MS = 180;
+
+export class BlinkAnimator {
+  private next: number;
+  private closedUntil = 0;
+
+  constructor(now: number) {
+    this.next = now + randomBetween(BLINK_MIN_MS, BLINK_MAX_MS);
   }
-  return { photo, options };
+
+  closed(now: number): boolean {
+    if (now >= this.next) {
+      this.closedUntil = now + BLINK_CLOSED_MS;
+      const double = Math.random() < DOUBLE_BLINK_CHANCE;
+      this.next = double ? this.closedUntil + DOUBLE_BLINK_GAP_MS : now + randomBetween(BLINK_MIN_MS, BLINK_MAX_MS);
+    }
+    return now < this.closedUntil;
+  }
+}
+
+function randomBetween(min: number, max: number) {
+  return min + Math.random() * (max - min);
 }
 
 export class AvatarRenderer {
   readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
-  // Fond et photo ne changent pas : rendus une fois, recopiés à chaque image.
-  private readonly base: OffscreenCanvas;
-  private readonly layout: Composition;
+  private readonly assets: AvatarAssets<ImageBitmap>;
   private readonly options: AvatarOptions;
-  private readonly bannerText: string;
+  /** Bandeau rendu une fois, recopié à chaque image. */
+  private readonly banner: OffscreenCanvas;
+  private readonly mouth = new MouthAnimator();
+  private readonly blink: BlinkAnimator;
+  private readonly level: () => number;
+  private complete = false;
 
-  constructor(canvas: HTMLCanvasElement, photo: ImageBitmap | null, options: AvatarOptions = {}) {
+  constructor(canvas: HTMLCanvasElement, assets: AvatarAssets<ImageBitmap>, options: AvatarOptions, level: () => number = () => 0) {
     canvas.width = AVATAR_WIDTH;
     canvas.height = AVATAR_HEIGHT;
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) throw new Error('contexte 2D indisponible');
     this.canvas = canvas;
     this.ctx = ctx;
+    this.assets = assets;
     this.options = options;
-    this.bannerText = bannerTextOrDefault(options.bannerText);
-    this.layout = composeLayout(photo ? photo.width / photo.height : PLACEHOLDER_ASPECT);
-    this.base = renderBase(photo, this.layout.content);
+    this.level = level;
+    this.blink = new BlinkAnimator(performance.now());
+    this.banner = new OffscreenCanvas(assets.banner.width, assets.banner.height);
+    const bannerCtx = this.banner.getContext('2d');
+    if (!bannerCtx) throw new Error('contexte 2D hors écran indisponible');
+    drawBanner(bannerCtx, { x: 0, y: 0, width: assets.banner.width, height: assets.banner.height }, options.bannerText);
   }
 
-  /** Dessine une image complète. Le bandeau est toujours peint en dernier. */
-  draw() {
-    this.ctx.drawImage(this.base, 0, 0);
-    if (this.options.debugSafeZone) drawSafeZone(this.ctx);
-    drawBanner(this.ctx, this.layout.banner, this.bannerText);
+  /**
+   * Dessine une image : le cadre entier la première fois, ensuite seulement la zone des yeux
+   * et de la bouche (le reste ne bouge pas). Le bandeau est toujours peint en dernier.
+   */
+  draw(now = performance.now()): MouthShape {
+    const { ctx, assets } = this;
+    const region = assets.region;
+    if (this.complete) {
+      ctx.drawImage(assets.under, region.x, region.y, region.width, region.height, region.x, region.y, region.width, region.height);
+    } else {
+      ctx.drawImage(assets.under, 0, 0);
+      if (this.options.debugSafeZone) drawSafeZone(ctx);
+    }
+    const eyes = this.blink.closed(now) ? assets.eyes.closed : assets.eyes.open;
+    const shape = this.mouth.update(this.level(), now);
+    const mouth = assets.mouths[shape];
+    ctx.drawImage(eyes.image, eyes.x, eyes.y);
+    ctx.drawImage(mouth.image, mouth.x, mouth.y);
+    if (this.complete) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(region.x, region.y, region.width, region.height);
+      ctx.clip();
+      ctx.drawImage(assets.over.image, assets.over.x, assets.over.y);
+      ctx.restore();
+    } else {
+      ctx.drawImage(assets.over.image, assets.over.x, assets.over.y);
+      this.complete = true;
+    }
+    ctx.drawImage(this.banner, assets.banner.x, assets.banner.y);
+    return shape;
   }
 }
 
-function renderBase(photo: ImageBitmap | null, content: Rect): OffscreenCanvas {
-  const base = new OffscreenCanvas(AVATAR_WIDTH, AVATAR_HEIGHT);
-  const ctx = base.getContext('2d', { alpha: false });
-  if (!ctx) throw new Error('contexte 2D hors écran indisponible');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-
-  if (photo) {
-    drawBlurredBackground(ctx, photo);
-    drawPhotoCard(ctx, photo, content);
-  } else {
-    drawPlaceholder(ctx, content);
-  }
-  return base;
-}
-
-/** Fond : la photo agrandie, floutée et assombrie, pour remplir le 16:9. */
-function drawBlurredBackground(ctx: OffscreenCanvasRenderingContext2D, photo: ImageBitmap) {
-  const scale = Math.max(AVATAR_WIDTH / photo.width, AVATAR_HEIGHT / photo.height) * 1.1;
-  const width = photo.width * scale;
-  const height = photo.height * scale;
-  ctx.save();
-  ctx.filter = 'blur(40px) brightness(0.55)';
-  ctx.drawImage(photo, (AVATAR_WIDTH - width) / 2, (AVATAR_HEIGHT - height) / 2, width, height);
-  ctx.restore();
-}
-
-/** Photo entière, bordée de blanc comme un tirage découpé, à l'emplacement du contenu. */
-function drawPhotoCard(ctx: OffscreenCanvasRenderingContext2D, photo: ImageBitmap, content: Rect) {
-  ctx.save();
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-  ctx.shadowBlur = 24;
-  ctx.shadowOffsetY = 6;
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(content.x, content.y, content.width, content.height);
-  ctx.restore();
-  // Photo entière dans le cadre intérieur, sans déformation.
-  const innerWidth = content.width - 2 * PHOTO_BORDER;
-  const innerHeight = content.height - 2 * PHOTO_BORDER;
-  const scale = Math.min(innerWidth / photo.width, innerHeight / photo.height);
-  const width = photo.width * scale;
-  const height = photo.height * scale;
-  ctx.drawImage(photo, content.x + (content.width - width) / 2, content.y + (content.height - height) / 2, width, height);
-}
-
-/** Silhouette neutre quand aucune photo n'est configurée. */
-function drawPlaceholder(ctx: OffscreenCanvasRenderingContext2D, content: Rect) {
-  ctx.fillStyle = '#2b2f36';
-  ctx.fillRect(0, 0, AVATAR_WIDTH, AVATAR_HEIGHT);
-  const centerX = content.x + content.width / 2;
-  const unit = content.height / 400;
-  ctx.fillStyle = '#4a505a';
-  ctx.beginPath();
-  ctx.arc(centerX, content.y + 140 * unit, 85 * unit, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(centerX, content.y + content.height, 170 * unit, 150 * unit, 0, Math.PI, 0);
-  ctx.fill();
-}
-
-/** Débogage : contour pointillé de la zone de sécurité, sous le bandeau. */
+/** Débogage : contour pointillé de la zone de sécurité, hors de la zone redessinée. */
 function drawSafeZone(ctx: CanvasRenderingContext2D) {
   ctx.save();
   ctx.strokeStyle = '#ff00ff';
@@ -189,19 +246,20 @@ function drawSafeZone(ctx: CanvasRenderingContext2D) {
 }
 
 /**
- * Bandeau jaune bordé de noir, sur une ligne, sous le contenu et sur toute la largeur
- * de la zone de sécurité. Le texte est resserré horizontalement plutôt que réduit.
+ * Bandeau jaune bordé de noir, sur une ligne, sur toute la largeur de la zone de sécurité.
+ * Le texte est resserré horizontalement plutôt que réduit.
  */
-function drawBanner(ctx: CanvasRenderingContext2D, banner: Rect, text: string) {
-  const { x, y, width } = banner;
+export function drawBanner(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, banner: Rect, text: string) {
+  const { x, y, width, height } = banner;
   const maxTextWidth = width - 2 * (BANNER_BORDER + BANNER_PADDING_X);
   ctx.save();
   ctx.fillStyle = '#111';
-  ctx.fillRect(x, y, width, BANNER_HEIGHT);
+  ctx.fillRect(x, y, width, height);
   ctx.fillStyle = '#ffd400';
-  ctx.fillRect(x + BANNER_BORDER, y + BANNER_BORDER, width - 2 * BANNER_BORDER, BANNER_HEIGHT - 2 * BANNER_BORDER);
+  ctx.fillRect(x + BANNER_BORDER, y + BANNER_BORDER, width - 2 * BANNER_BORDER, height - 2 * BANNER_BORDER);
 
-  let fontSize = BANNER_FONT_SIZE;
+  // Police proportionnelle à la hauteur du bandeau (50 px pour 80 px de haut).
+  let fontSize = Math.round((height * BANNER_FONT_SIZE) / BANNER_HEIGHT);
   ctx.font = bannerFont(fontSize);
   // Réduit la police seulement si le resserrement maximal ne suffit pas (police de repli).
   while (fontSize > 24 && ctx.measureText(text).width * BANNER_MIN_SQUEEZE > maxTextWidth) {
@@ -212,7 +270,7 @@ function drawBanner(ctx: CanvasRenderingContext2D, banner: Rect, text: string) {
   ctx.fillStyle = '#111';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.translate(AVATAR_WIDTH / 2, y + BANNER_HEIGHT / 2 + 2);
+  ctx.translate(x + width / 2, y + height / 2 + 2);
   ctx.scale(squeeze, 1);
   ctx.fillText(text, 0, 0);
   ctx.restore();
