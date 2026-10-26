@@ -20,7 +20,7 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | `palette` | objet | Variante de couleurs sans redessiner : classe de la palette du SVG → couleur CSS. Exemple : `{ "peau": "#a86f4c", "cheveux": "#151010", "vetement": "#5b6470", "barbe": "none" }`. Classes : `peau`, `peau-trait`, `cheveux`, `cheveux-trait`, `sourcils`, `barbe`, `vetement` (surchemise), `vetement-2` (t-shirt), `vetement-trait`, `iris`, `levres`, `badge-fond` (encre du slogan)… | Couleurs du SVG |
 | `hairstyle` | nom | Coiffure : sous-groupe `coiffure_<nom>` du SVG | `principale` |
 | `accessories` | liste de noms | Accessoires affichés : sous-groupes `accessoire_<nom>` | aucun |
-| `bannerOffsetY` | pixels | Décalage vertical du bandeau du bas, négatif vers le haut. Il reste dans la zone de sécurité et ne remonte jamais sur le slogan du t-shirt (de y = 529 à 590) | `0` (bandeau en bas du cadre, y = 590 à 670) |
+| `bannerOffsetY` | pixels | Décalage vertical du bandeau du bas, négatif vers le haut. Il reste dans la zone de sécurité et ne remonte jamais sur le slogan du t-shirt (de y = 529 à 608) | `0` (bandeau en bas du cadre, y = 608 à 670) |
 | `bannerText` | texte | Texte du bandeau incrusté (règle 1), aussi imprimé sur le t-shirt de l'avatar. Démo : « Automated candidate, just like you. » | « Candidat automatisé, comme vous. » (un texte vide est aussi remplacé par celui-ci) |
 | `language` | `en`, `fr` | Langue de l'entretien : transcription, réponses du LLM, phrase de révélation | `en` |
 | `candidateName` | texte | Prénom ou nom du candidat : l'avatar parle de lui à la troisième personne (« Alex a travaillé… »), et se présente comme « l'avatar IA qui représente Alex » | « the candidate » / « le candidat » |

@@ -9,10 +9,14 @@ export const AVATAR_HEIGHT = 720;
 // en haut et en bas, à la coupe 2:1 mesurée sur Meet sans cadrage automatique (36 px), avec 14 px
 // de marge. Décision du 26/10/2026 : la coupe 21:9 (86 px) n'est plus couverte.
 export const SAFE_ZONE = { left: 290, right: 990, top: 50, bottom: 670 };
-export const BANNER_HEIGHT = 80;
+// 62 px plutôt que 80 : avec le cadrage automatique, Meet coupe vers y = 605, et un bandeau plus haut
+// laissait dépasser une ligne jaune. Sur 580 px de large, c'est la largeur qui limite la police,
+// pas la hauteur : le texte garde sa taille.
+export const BANNER_HEIGHT = 62;
 // Bandeau centré et moins large que la zone : le nom affiché par Meet en bas à gauche de la
 // vignette ne masque pas le début du texte.
 const BANNER_WIDTH = 580;
+/** Taille de police maximale (avant resserrement et réduction à la largeur). */
 const BANNER_FONT_SIZE = 50;
 const BANNER_BORDER = 3;
 const BANNER_PADDING_X = 14;
@@ -262,8 +266,7 @@ export function drawBanner(ctx: CanvasRenderingContext2D | OffscreenCanvasRender
   ctx.fillStyle = '#ffd400';
   ctx.fillRect(x + BANNER_BORDER, y + BANNER_BORDER, width - 2 * BANNER_BORDER, height - 2 * BANNER_BORDER);
 
-  // Police proportionnelle à la hauteur du bandeau (50 px pour 80 px de haut).
-  let fontSize = Math.round((height * BANNER_FONT_SIZE) / BANNER_HEIGHT);
+  let fontSize = Math.min(BANNER_FONT_SIZE, Math.round(height * 0.8));
   ctx.font = bannerFont(fontSize);
   // Réduit la police seulement si le resserrement maximal ne suffit pas (police de repli).
   while (fontSize > 24 && ctx.measureText(text).width * BANNER_MIN_SQUEEZE > maxTextWidth) {
