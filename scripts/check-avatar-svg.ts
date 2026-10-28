@@ -5,7 +5,9 @@
 //   stroke, en attribut ou dans style) perd la couleur en ligne ; c'est la classe qui compte,
 //   pour que les variantes (peau, cheveux, vêtements) changent sans redessiner. Inkscape ajoute
 //   ces couleurs en ligne dès qu'on touche au panneau « Fond et contour ».
-// - Refuse : un calque obligatoire manquant, une forme colorable sans classe de la palette.
+// - Refuse : un calque obligatoire manquant, une forme colorable sans classe de la palette, des dimensions <svg>
+//   illisibles, des réglages invalides sur badge_zone_texte (data-bas-cadre hors de [517, 550], data-lignes-max
+//   qui n'est pas un entier de 1 à 6, largeur ou hauteur nulle).
 // - Signale seulement : repères ou coiffure manquants, texte dans le dessin.
 //
 // Lecture des balises par expressions régulières (fichiers Inkscape réguliers), sans dépendance.
@@ -33,6 +35,35 @@ export const REQUIRED_LAYERS = [
 ];
 const OPTIONAL_LAYERS = ['accessoires', 'reperes'];
 const MARKERS = ['badge_zone_texte', 'zone_visage', 'ancre_yeux_gauche', 'ancre_yeux_droit', 'ancre_bouche'];
+// Mêmes bornes que lib/avatar.ts (SLOGAN_BOTTOM_MIN, SLOGAN_BOTTOM_MAX) et lib/avatar-assets.ts (SLOGAN_MAX_LINES).
+const SLOGAN_BOTTOM_MIN = 517;
+const SLOGAN_BOTTOM_MAX = 550;
+const SLOGAN_MAX_LINES = 6;
+
+/** Dimensions de la racine et réglages de badge_zone_texte (lus par lib/avatar-assets.ts). */
+function checkFraming(tag: string, attrs: string, id: string | undefined, where: string, report: AvatarSvgReport) {
+  if (tag === 'svg') {
+    const width = Number(attribute(attrs, 'width'));
+    const height = Number(attribute(attrs, 'height'));
+    if (!(width > 0) || !(height > 0)) report.errors.push(`${where} : width et height doivent être des nombres positifs sans unité`);
+    const viewBox = attribute(attrs, 'viewBox');
+    if (viewBox !== undefined && viewBox.trim().split(/[\s,]+/).map(Number).join(' ') !== `0 0 ${width} ${height}`) {
+      report.warnings.push(`${where} : viewBox « ${viewBox} » différente de « 0 0 ${width} ${height} »`);
+    }
+  }
+  if (id !== 'badge_zone_texte') return;
+  for (const name of ['width', 'height']) {
+    if (!(Number(attribute(attrs, name)) > 0)) report.errors.push(`${where} : ${name} doit être un nombre positif`);
+  }
+  const bottom = attribute(attrs, 'data-bas-cadre');
+  if (bottom !== undefined && !(Number(bottom) >= SLOGAN_BOTTOM_MIN && Number(bottom) <= SLOGAN_BOTTOM_MAX)) {
+    report.errors.push(`${where} : data-bas-cadre="${bottom}" refusé (nombre de ${SLOGAN_BOTTOM_MIN} à ${SLOGAN_BOTTOM_MAX} attendu)`);
+  }
+  const lines = attribute(attrs, 'data-lignes-max');
+  if (lines !== undefined && !(Number.isInteger(Number(lines)) && Number(lines) >= 1 && Number(lines) <= SLOGAN_MAX_LINES)) {
+    report.errors.push(`${where} : data-lignes-max="${lines}" refusé (entier de 1 à ${SLOGAN_MAX_LINES} attendu)`);
+  }
+}
 
 const SHAPES = new Set(['path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'line', 'text', 'tspan']);
 /** Contenu jamais rendu tel quel : définitions, masques, dégradés, métadonnées. */
@@ -124,6 +155,7 @@ export function checkAvatarSvg(file: string, write = true): AvatarSvgReport {
     const parent = stack.at(-1);
     const id = attribute(attrs, 'id');
     if (id) ids.add(id);
+    checkFraming(tag, attrs, id, `${name}, <${tag}${id ? ` id="${id}"` : ''}>`, report);
     const label = attribute(attrs, 'inkscape:label');
     const isLayer = tag === 'g' && attribute(attrs, 'inkscape:groupmode') === 'layer';
     if (isLayer && label) layers.add(label);

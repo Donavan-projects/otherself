@@ -3,7 +3,7 @@
 // config.local.json, rastérise les calques à l'échelle du cadre, écrit le slogan courbé sur le
 // t-shirt. La page de la plateforme ne reçoit que des images (jamais la configuration ni la clé API).
 
-import { composeFrame, mapAssets, AVATAR_HEIGHT, AVATAR_WIDTH, MOUTH_SHAPES, type AvatarAssets, type FrameLayout, type MouthShape, type Rect, type Sprite } from './avatar';
+import { composeFrame, mapAssets, AVATAR_HEIGHT, AVATAR_WIDTH, MOUTH_SHAPES, SLOGAN_BOTTOM_MAX, SLOGAN_BOTTOM_MIN, type AvatarAssets, type FrameLayout, type MouthShape, type Rect, type Sprite } from './avatar';
 import type { DemoConfig } from './config';
 import { createLogger } from './log';
 
@@ -16,6 +16,13 @@ const SLOGAN_FONT = 'OtherSelfSlogan';
 const SLOGAN_MIN_SQUEEZE = 0.78;
 /** Encre un peu transparente : aspect mat, le coton transparaît. */
 const SLOGAN_INK_ALPHA = 0.94;
+/** Nombre de lignes maximal accepté pour data-lignes-max (retours à la ligne selon la forme de la zone). */
+export const SLOGAN_MAX_LINES = 6;
+/**
+ * Zone du slogan de l'avatar d'origine dans le cadre (288 x 84 à l'échelle 0,688) : référence de lisibilité.
+ * Le journal signale un slogan dont les lettres seraient plus petites qu'avec cette zone et l'ancien calcul.
+ */
+const SLOGAN_REFERENCE_ZONE = { width: 198, height: 58 };
 /** Marge autour des vignettes découpées (yeux, bouches, cheveux). */
 const SPRITE_PAD = 2;
 
@@ -60,12 +67,24 @@ export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ asset
     width: Number(zone.getAttribute('width')),
     height: Number(zone.getAttribute('height')),
     bend: Number(zone.getAttribute('data-courbure') ?? 0),
+    bottomInFrame: optionalNumber(zone, 'data-bas-cadre'),
+    maxLines: optionalNumber(zone, 'data-lignes-max'),
   };
+  // Réglages optionnels : refusés hors limites (scripts/check-avatar-svg.ts les refuse aussi au build).
+  if (slogan.bottomInFrame !== undefined && !(slogan.bottomInFrame >= SLOGAN_BOTTOM_MIN && slogan.bottomInFrame <= SLOGAN_BOTTOM_MAX)) {
+    throw new Error(`${variant.avatar}.svg : data-bas-cadre = ${slogan.bottomInFrame} hors de [${SLOGAN_BOTTOM_MIN}, ${SLOGAN_BOTTOM_MAX}]`);
+  }
+  if (slogan.maxLines !== undefined && !(Number.isInteger(slogan.maxLines) && slogan.maxLines >= 1 && slogan.maxLines <= SLOGAN_MAX_LINES)) {
+    throw new Error(`${variant.avatar}.svg : data-lignes-max = ${slogan.maxLines} (entier de 1 à ${SLOGAN_MAX_LINES} attendu)`);
+  }
 
   // Haut de la tête mesuré sur le dessin (dépend de la coiffure), à l'échelle 1.
   const head = await rasterize(withLayers(character, ['cheveux_arriere', 'cheveux_avant', 'tete']), svgWidth, svgHeight);
   const hairTop = opaqueBounds(head)?.y ?? 0;
-  const layout = composeFrame({ width: svgWidth, hairTop, sloganBottom: slogan.y + slogan.height }, variant.bannerOffsetY);
+  const layout = composeFrame(
+    { width: svgWidth, hairTop, sloganBottom: slogan.y + slogan.height, sloganBottomInFrame: slogan.bottomInFrame },
+    variant.bannerOffsetY,
+  );
   if (layout.clamped) log(`bannerOffsetY = ${variant.bannerOffsetY} hors limites : bandeau ramené à y = ${layout.banner.y} (zone de sécurité)`);
   const width = Math.round(svgWidth * layout.scale);
   const height = Math.round(svgHeight * layout.scale);
@@ -86,7 +105,7 @@ export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ asset
     y: layout.top + slogan.y * layout.scale,
     width: slogan.width * layout.scale,
     height: slogan.height * layout.scale,
-  }, slogan.bend * layout.scale);
+  }, slogan.bend * layout.scale, slogan.maxLines);
   ctx.drawImage(await layer(OVERLAY_LAYERS), layout.left, layout.top);
 
   // Parties animées et plan du dessus, découpés à leur emprise.
@@ -122,6 +141,12 @@ function applyPalette(doc: Document, palette: Record<string, string>) {
     css = css.replace(rule, `$1${color.trim()}`);
   }
   style.textContent = css;
+}
+
+/** Attribut numérique facultatif : undefined s'il est absent, NaN s'il est illisible (refusé ensuite). */
+function optionalNumber(element: Element, name: string): number | undefined {
+  const value = element.getAttribute(name);
+  return value === null ? undefined : Number(value);
 }
 
 function paletteColor(doc: Document, name: string): string | null {
@@ -240,10 +265,11 @@ function loadSloganFont(): Promise<void> {
 }
 
 /**
- * Slogan imprimé sur le t-shirt : deux lignes centrées (une seule si le texte y reste assez grand),
- * écrites à plat puis recopiées colonne par colonne avec la courbure du torse (bouts relevés de bend).
+ * Slogan imprimé sur le t-shirt : deux lignes centrées (une seule si le texte y reste assez grand), ou, si le SVG
+ * donne data-lignes-max, de 1 à maxLines lignes choisies selon la forme de la zone ; écrites à plat puis recopiées
+ * colonne par colonne avec la courbure du torse (bouts relevés de bend).
  */
-async function drawSlogan(ctx: CanvasRenderingContext2D, text: string, ink: string, zone: Rect, bend: number) {
+async function drawSlogan(ctx: CanvasRenderingContext2D, text: string, ink: string, zone: Rect, bend: number, maxLines?: number) {
   await loadSloganFont();
   const width = Math.round(zone.width);
   const height = Math.round(zone.height);
@@ -251,18 +277,24 @@ async function drawSlogan(ctx: CanvasRenderingContext2D, text: string, ink: stri
   const flat = canvas(width, height + 2 * pad);
   const f = context(flat);
   const font = (size: number) => `700 ${size}px ${SLOGAN_FONT}, sans-serif`;
-  const fit = (lines: string[], maxSize: number) => {
+  const fitWidth = (lines: string[], maxSize: number, w: number) => {
     let size = Math.floor(maxSize);
     f.font = font(size);
-    while (size > 6 && Math.max(...lines.map((line) => f.measureText(line).width)) * SLOGAN_MIN_SQUEEZE > width) {
+    while (size > 6 && Math.max(...lines.map((line) => f.measureText(line).width)) * SLOGAN_MIN_SQUEEZE > w) {
       size -= 1;
       f.font = font(size);
     }
     return size;
   };
-  const oneLine = fit([text], height * 0.9);
-  const lines = oneLine >= height * 0.55 ? [text] : splitInTwo(text);
-  const size = lines.length === 1 ? oneLine : fit(lines, (height / 2) * 1.05);
+  // Ancien calcul (une ou deux lignes), inchangé : il sert aussi de référence de lisibilité.
+  const legacy = (w: number, h: number) => {
+    const oneLine = fitWidth([text], h * 0.9, w);
+    const lines = oneLine >= h * 0.55 ? [text] : splitInTwo(text);
+    return { lines, size: lines.length === 1 ? oneLine : fitWidth(lines, (h / 2) * 1.05, w) };
+  };
+  const { lines, size } = maxLines === undefined ? legacy(width, height) : wrapToShape(text, maxLines, width, height, fitWidth, f);
+  const reference = legacy(SLOGAN_REFERENCE_ZONE.width, SLOGAN_REFERENCE_ZONE.height).size;
+  log(`slogan : ${lines.length} ligne(s), police ${size} px (référence ${reference} px)` + (size < reference ? ' : LETTRES PLUS PETITES QUE LA RÉFÉRENCE' : ''));
   f.font = font(size);
   f.fillStyle = ink;
   f.textAlign = 'center';
@@ -283,6 +315,66 @@ async function drawSlogan(ctx: CanvasRenderingContext2D, text: string, ink: stri
     ctx.drawImage(flat, x, 0, 1, flat.height, zone.x + x, zone.y - pad - bend * u * u, 1, flat.height);
   }
   ctx.restore();
+}
+
+/**
+ * Retours à la ligne selon la forme de la zone : pour n = 1..maxLines, découpage aux espaces qui minimise la ligne
+ * la plus longue (à 2 % près, on préfère les coupures après une virgule, deux-points ou point-virgule), puis la plus grande
+ * police qui tient en largeur (resserrement compris) et en hauteur (n lignes d'interligne 1,02). On garde le n qui donne
+ * la plus grande police ; à égalité, le moins de lignes.
+ */
+function wrapToShape(
+  text: string,
+  maxLines: number,
+  width: number,
+  height: number,
+  fitWidth: (lines: string[], maxSize: number, w: number) => number,
+  f: CanvasRenderingContext2D,
+): { lines: string[]; size: number } {
+  // Typographie française : « : ; ! ? » » restent avec le mot précédent et « « » avec le suivant (jamais en début
+  // ou fin de ligne seuls), même séparés par une espace.
+  const words: string[] = [];
+  for (const token of text.split(/\s+/).filter(Boolean)) {
+    const last = words.length - 1;
+    if (last >= 0 && (/^[:;!?»]+$/.test(token) || words[last] === '«')) words[last] += ` ${token}`;
+    else words.push(token);
+  }
+  // Largeurs mesurées à 100 px (la police du contexte est modifiée par fitWidth entre deux essais).
+  const measure = new Map<string, number>();
+  const at100 = (line: string) => {
+    if (!measure.has(line)) {
+      f.font = `700 100px ${SLOGAN_FONT}, sans-serif`;
+      measure.set(line, f.measureText(line).width);
+    }
+    return measure.get(line)!;
+  };
+  const widest = (lines: string[]) => Math.max(...lines.map(at100));
+  const pauses = (lines: string[]) => lines.slice(0, -1).filter((line) => /[,:;]$/.test(line)).length;
+  let best: { lines: string[]; size: number } | null = null;
+  for (let n = 1; n <= Math.min(maxLines, words.length); n += 1) {
+    const all = [...splits(words, n)];
+    const narrowest = Math.min(...all.map(widest));
+    // Parmi les découpages à 2 % de la ligne la plus courte possible : le plus de coupures après une ponctuation.
+    const chosen = all
+      .filter((lines) => widest(lines) <= narrowest * 1.02)
+      .sort((a, b) => pauses(b) - pauses(a) || widest(a) - widest(b))[0];
+    // Jamais vide en pratique (n ≤ nombre de mots) ; sinon, nombre de lignes suivant, puis repli sur une ligne.
+    if (!chosen) continue;
+    const size = fitWidth(chosen, height / (n * 1.02), width);
+    if (!best || size > best.size) best = { lines: chosen, size };
+  }
+  return best ?? { lines: [text], size: fitWidth([text], height * 0.9, width) };
+}
+
+/** Toutes les façons de répartir les mots, dans l'ordre, sur n lignes non vides. */
+function* splits(words: string[], n: number): Generator<string[]> {
+  if (n === 1) {
+    yield [words.join(' ')];
+    return;
+  }
+  for (let i = 1; i <= words.length - n + 1; i += 1) {
+    for (const rest of splits(words.slice(i), n - 1)) yield [words.slice(0, i).join(' '), ...rest];
+  }
 }
 
 /** Coupe le slogan en deux lignes : après la virgule si elle existe, sinon à l'espace le plus proche du milieu. */

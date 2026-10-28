@@ -29,6 +29,11 @@ const BANNER_MIN_SQUEEZE = 0.78;
 // (réglable par bannerOffsetY, sans jamais remonter sur le slogan).
 const HEAD_TOP = 94;
 const SLOGAN_BOTTOM = 517;
+// Plafond strict du bas du slogan quand le SVG le règle (data-bas-cadre sur badge_zone_texte) : le slogan sert de
+// bandeau de secours quand le cadrage automatique coupe vers y = 605, il en reste à 55 px au moins.
+// scripts/check-avatar-svg.ts refuse toute valeur hors de [SLOGAN_BOTTOM, SLOGAN_BOTTOM_MAX].
+export const SLOGAN_BOTTOM_MIN = SLOGAN_BOTTOM;
+export const SLOGAN_BOTTOM_MAX = 550;
 const SLOGAN_GAP = 12;
 const DEFAULT_BANNER_TOP = SAFE_ZONE.bottom - BANNER_HEIGHT;
 
@@ -51,13 +56,25 @@ export interface FrameLayout {
 
 /**
  * Compose personnage, slogan et bandeau : le personnage est mis à l'échelle pour que le haut de sa
- * tête soit à HEAD_TOP et le bas du slogan à SLOGAN_BOTTOM ; le bandeau est en bas de la zone de
- * sécurité, décalé de bannerOffsetY (pixels, négatif vers le haut), jamais sur le slogan.
+ * tête soit à HEAD_TOP et le bas du slogan à SLOGAN_BOTTOM (ou à sloganBottomInFrame, data-bas-cadre du SVG,
+ * entre SLOGAN_BOTTOM_MIN et SLOGAN_BOTTOM_MAX) ; le bandeau est en bas de la zone de sécurité, décalé de
+ * bannerOffsetY (pixels, négatif vers le haut), jamais sur le slogan.
  */
-export function composeFrame(svg: { width: number; hairTop: number; sloganBottom: number }, bannerOffsetY = 0): FrameLayout {
-  const scale = (SLOGAN_BOTTOM - HEAD_TOP) / (svg.sloganBottom - svg.hairTop);
+export function composeFrame(
+  svg: { width: number; hairTop: number; sloganBottom: number; sloganBottomInFrame?: number },
+  bannerOffsetY = 0,
+): FrameLayout {
+  const sloganBottom = svg.sloganBottomInFrame ?? SLOGAN_BOTTOM;
+  if (!(sloganBottom >= SLOGAN_BOTTOM_MIN && sloganBottom <= SLOGAN_BOTTOM_MAX)) {
+    throw new Error(`bas du slogan à y = ${sloganBottom} : hors de [${SLOGAN_BOTTOM_MIN}, ${SLOGAN_BOTTOM_MAX}]`);
+  }
+  // Garde-fou : le bandeau, dans la zone de sécurité, doit pouvoir rester sous le slogan avec son écart.
+  if (sloganBottom + SLOGAN_GAP > SAFE_ZONE.bottom - BANNER_HEIGHT) {
+    throw new Error(`bas du slogan à y = ${sloganBottom} : plus de place pour le bandeau sous le slogan`);
+  }
+  const scale = (sloganBottom - HEAD_TOP) / (svg.sloganBottom - svg.hairTop);
   const wanted = DEFAULT_BANNER_TOP + Math.round(bannerOffsetY);
-  const bannerTop = Math.min(SAFE_ZONE.bottom - BANNER_HEIGHT, Math.max(SLOGAN_BOTTOM + SLOGAN_GAP, wanted));
+  const bannerTop = Math.min(SAFE_ZONE.bottom - BANNER_HEIGHT, Math.max(sloganBottom + SLOGAN_GAP, wanted));
   return {
     scale,
     left: Math.round(AVATAR_WIDTH / 2 - (svg.width / 2) * scale),
