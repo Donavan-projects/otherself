@@ -16,7 +16,7 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | Champ | Valeurs | Rôle | Si absent |
 | --- | --- | --- | --- |
 | `avatar` | nom de fichier | Personnage : `avatar/<avatar>.svg` (voir `avatar/gabarit.svg`) | `otherself` |
-| `background` | nom de fichier | Fond : `avatar/fonds/<background>.svg` | `interieur-clair` |
+| `background` | nom de fichier | Fond : `avatar/fonds/<background>.svg` | `bureau-clair` (autres fonds : `bureau`, `interieur-clair`) |
 | `palette` | objet | Variante de couleurs sans redessiner : classe de la palette du SVG → couleur CSS. Exemple : `{ "peau": "#a86f4c", "cheveux": "#151010", "vetement": "#5b6470", "barbe": "none" }`. Classes : `peau`, `peau-trait`, `cheveux`, `cheveux-trait`, `sourcils`, `barbe`, `vetement` (surchemise), `vetement-2` (t-shirt), `vetement-trait`, `iris`, `levres`, `badge-fond` (encre du slogan)… | Couleurs du SVG |
 | `hairstyle` | nom | Coiffure : sous-groupe `coiffure_<nom>` du SVG | `principale` |
 | `accessories` | liste de noms | Accessoires affichés : sous-groupes `accessoire_<nom>` | aucun |

@@ -53,7 +53,7 @@ export const DEFAULT_BANNER_TEXT = 'Candidat automatisé, comme vous.';
 
 const DEFAULTS: DemoConfig = {
   avatar: 'otherself',
-  background: 'interieur-clair',
+  background: 'bureau-clair',
   palette: {},
   hairstyle: 'principale',
   accessories: [],
