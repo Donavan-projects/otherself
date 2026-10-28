@@ -1,7 +1,14 @@
 # OtherSelf
 
-## État actuel (26/10/2026, étape 5 terminée)
+## État actuel (28/10/2026, étape 5 terminée ; branche `avatar-v4` à tester sur Meet)
 
+- **Branche `avatar-v4` (28/10, non poussée, à tester sur Meet avant fusion)** :
+  - Avatar v4 (`avatar/otherself.svg`, 1010 × 1000, issu d'illustrations générées avec ChatGPT puis vectorisées) ; l'ancien reste disponible sous `"avatar": "otherself-v1"`. Slogan du t-shirt sur plusieurs lignes selon la forme de la zone (`data-lignes-max`), bas du texte réglable (`data-bas-cadre`, plafond 550). v4 : échelle 0,637, slogan sur 3 lignes en 27 px, bandeau y = 608, préparation ≈ 1 s (0,4 s avant). Intégré depuis un paquet de l'atelier (`paquet-integration/`, jamais commité), avec une garde ajoutée dans `wrapToShape` (le projet compile avec `noUncheckedIndexedAccess`).
+  - Fonds `bureau-clair` (par défaut) et `bureau` ; `interieur-clair` reste sélectionnable.
+  - **LLM par défaut : `gpt-5.6-luna`** (`lib/config.ts`, exemple, doc). Diagnostic du 28/10 : avec `gpt-6-luna`, le premier mot arrivait en 5 à 14 s, temps passé côté API avant toute génération (raisonnement bien coupé : 0 token ; prompt ≈ 1 200 à 1 450 tokens, presque tout en cache ; réseau 0,2 à 1,5 s), et ce délai variait d'une minute à l'autre (1 à 3,5 s plus tard). `gpt-5.6-luna` : premier mot en 0,8 à 1,7 s, réponses conformes aux règles (aucune invention, troisième personne, honnêteté, refus de la manipulation) sur 6 questions × 4 passes. `gpt-6-luna` reste sélectionnable (`llmModel`).
+  - **Logs `[llm]`** (`lib/llm.ts`) : une ligne par appel (modèle, en-têtes, premier mot, fin, tokens du prompt et en cache, raisonnement, identifiant de requête). Le temps de traitement de l'API (`openai-processing-ms`) n'est pas exposé aux navigateurs (CORS) : dans l'extension, le délai des en-têtes en tient lieu, réseau compris. Aussi sur la branche `llm-logs` (depuis `main`).
+  - **Prompt pour l'oral** (`lib/prompt.ts`) : première phrase de 3 à 6 mots, deux phrases au plus sauf demande de détails, trois éléments au plus par réponse (tous types confondus), deux noms de projets au plus. Respecté sur 4 passes, à de rares écarts près (une première phrase de 7 mots ; une fois trois tâches plus deux technologies).
+  - Banc d'essai des voix : paramètre `&phrases=…|…` pour synthétiser un texte libre (prononciation des noms).
 - **Prochaine étape : étape 6, tournage** (enregistrement d'écran de la session pour la vidéo et le post LinkedIn). Avant de filmer : `debugSafeZone` à `false`, voix `en_US-norman-medium` (jamais joe pour une publication).
 - **Étape 5, visuel OtherSelf : terminée, validée sur Meet le 26/10** : bouche synchronisée avec le son vu de B, bandeau entier sans cadrage et sans ligne jaune avec cadrage, révélation rejouée à chaque nouvelle page.
   - Personnage SVG `avatar/otherself.svg` (gabarit et règles : `avatar/gabarit.svg`, vérifié et corrigé au build par `scripts/check-avatar-svg.ts`), fond `avatar/fonds/interieur-clair.svg`. Références visuelles dans `design/references/`, jamais commitées.

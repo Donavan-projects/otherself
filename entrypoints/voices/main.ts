@@ -10,7 +10,7 @@ import { OpenAiVoice } from '@/lib/tts-openai';
 import { configureOnnxRuntime } from '@/lib/vad';
 
 const log = createLogger('tts');
-const SENTENCES = [
+const DEFAULT_SENTENCES = [
   // Premier morceau typique d'une réponse : c'est lui qui fixe le délai avant que l'avatar parle.
   "That's a good question:",
   'Donavan led a team of four engineers on a logistics platform.',
@@ -18,6 +18,8 @@ const SENTENCES = [
 ];
 
 const params = new URLSearchParams(location.search);
+// &phrases=… : phrases à synthétiser à la place des phrases par défaut, séparées par « | » (prononciation d'un nom, etc.).
+const SENTENCES = params.get('phrases')?.split('|').map((item) => item.trim()).filter(Boolean) ?? DEFAULT_SENTENCES;
 const list = (name: string, fallback: string) => (params.get(name) ?? fallback).split(',').map((item) => item.trim()).filter(Boolean);
 const piperVoices = list('voix', 'en_US-norman-medium,en_US-john-medium');
 const openaiVoices = list('openai', '');

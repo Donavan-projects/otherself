@@ -37,7 +37,7 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | `silenceMs` | millisecondes | Silence après lequel le recruteur est considéré comme ayant fini sa question | `800` |
 | `bargeInMs` | millisecondes | Parole continue du recruteur par-dessus la voix de l'avatar nécessaire pour l'interrompre. En dessous, la prise de parole est ignorée (écho ou bruit probable) | `600` |
 | `sttModel` | modèle OpenAI | Transcription en flux (session Realtime) | `gpt-live-transcribe` |
-| `llmModel` | modèle OpenAI | Réponses en streaming, sans raisonnement | `gpt-6-luna` |
+| `llmModel` | modèle OpenAI | Réponses en streaming, sans raisonnement. `gpt-6-luna` reste possible, mais son premier mot varie de 1 à 14 s (mesuré le 28/10) | `gpt-5.6-luna` (premier mot en 0,8 à 1,7 s) |
 | `debugSafeZone` | `true` / `false` | Débogage : dessine dans l'image le contour pointillé magenta de la zone de sécurité (visible aussi par l'interlocuteur sur la plateforme) | Désactivé |
 | `testAudio` | mp3, ogg, wav, webm, m4a | Banc d'essai `rehearsal?inject` uniquement : son joué en boucle par le micro injecté | Bip de 440 Hz chaque seconde |
 

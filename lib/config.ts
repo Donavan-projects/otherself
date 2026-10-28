@@ -77,7 +77,7 @@ const DEFAULTS: DemoConfig = {
   monitorAvatar: true,
   monitorVolume: 0.8,
   sttModel: 'gpt-live-transcribe',
-  llmModel: 'gpt-6-luna',
+  llmModel: 'gpt-5.6-luna',
 };
 
 /** Règle 1 : un texte de bandeau vide ou absent est remplacé par le texte par défaut. */
