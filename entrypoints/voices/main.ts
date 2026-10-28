@@ -3,6 +3,7 @@
 // la vitesse de synthèse et la variation de hauteur (indice de l'intonation), et permet d'écouter.
 
 import { loadDemoConfig } from '@/lib/config';
+import { openingText } from '@/lib/prompt';
 import { createLogger } from '@/lib/log';
 import { encodeWav, floatToInt16 } from '@/lib/pcm';
 import { PiperVoice, type PiperScales, type SpeechAudio } from '@/lib/tts';
@@ -18,15 +19,23 @@ const DEFAULT_SENTENCES = [
 ];
 
 const params = new URLSearchParams(location.search);
-// &phrases=… : phrases à synthétiser à la place des phrases par défaut, séparées par « | » (prononciation d'un nom, etc.).
-const SENTENCES = params.get('phrases')?.split('|').map((item) => item.trim()).filter(Boolean) ?? DEFAULT_SENTENCES;
 const list = (name: string, fallback: string) => (params.get(name) ?? fallback).split(',').map((item) => item.trim()).filter(Boolean);
-const piperVoices = list('voix', 'en_US-norman-medium,en_US-john-medium');
-const openaiVoices = list('openai', '');
-const settings: PiperScales[] = list('reglages', '1/0.667/0.8').map((item) => {
+const parseScales = (item: string): PiperScales => {
   const [lengthScale, noiseScale, noiseW] = item.split('/').map(Number);
   return { lengthScale: lengthScale!, noiseScale: noiseScale!, noiseW: noiseW! };
+};
+/**
+ * Voix Piper : « voix[:locuteur][@length/noise/noise_w] », par exemple en_US-libritts-high:p3922 ou
+ * en_US-john-medium@0.85/0.8/1. Sans « @ », chaque réglage de &reglages est essayé.
+ */
+const piperVoices = list('voix', 'en_US-norman-medium,en_US-john-medium').map((item) => {
+  const [name = item, scales] = item.split('@');
+  // « : » ou « # » (encodé %23 dans une adresse) avant le locuteur.
+  const [voiceId = name, speaker] = name.split(/[#:]/);
+  return { label: name, voiceId, speaker, scales: scales ? parseScales(scales) : undefined };
 });
+const openaiVoices = list('openai', '');
+const settings: PiperScales[] = list('reglages', '1/0.667/0.8').map(parseScales);
 
 const statusEl = document.querySelector<HTMLParagraphElement>('#status')!;
 const tbody = document.querySelector<HTMLTableSectionElement>('#results')!;
@@ -153,21 +162,39 @@ async function measure(engine: string, label: string, sentence: number, run: (on
 }
 
 const config = await loadDemoConfig();
+// &jeu=entretien : l'ouverture réelle (révélation et messageText de config.local.json), une réponse type sur le
+// parcours du candidat et la phrase des noms de projets. &phrases=… : phrases libres, séparées par « | ».
+const interviewSet = [
+  openingText(config.language, config.messageText, config.candidateName),
+  "Donavan has fourteen years of operational experience. He now builds AI products and automation workflows.",
+  'His recent projects include ADELIN, Curator Agent, IntelAgent, Familiar.dev, and Loupe.',
+];
+const SENTENCES =
+  params.get('jeu') === 'entretien'
+    ? interviewSet
+    : (params.get('phrases')?.split('|').map((item) => item.trim()).filter(Boolean) ?? DEFAULT_SENTENCES);
 configureOnnxRuntime();
-for (const voiceId of piperVoices) {
-  status(`chargement de ${voiceId} (téléchargée une seule fois)…`);
-  const voice = await PiperVoice.load(voiceId, settings[0]);
-  // Première phrase de chauffe, non mesurée : la première inférence est toujours plus lente.
-  await voice.synthesize('Hello.');
-  for (const scales of settings) {
+// Voix consécutives sur le même modèle (locuteurs d'une voix libritts) : un seul chargement.
+let loaded = null as { voiceId: string; voice: PiperVoice } | null;
+for (const item of piperVoices) {
+  if (loaded?.voiceId !== item.voiceId) {
+    loaded?.voice.dispose();
+    status(`chargement de ${item.voiceId} (téléchargée une seule fois)…`);
+    const voice = await PiperVoice.load(item.speaker ? `${item.voiceId}#${item.speaker}` : item.voiceId, item.scales ?? settings[0]);
+    // Première phrase de chauffe, non mesurée : la première inférence est toujours plus lente.
+    await voice.synthesize('Hello.');
+    loaded = { voiceId: item.voiceId, voice };
+  }
+  const { voice } = loaded;
+  for (const scales of item.scales ? [item.scales] : settings) {
     const label = `${scales.lengthScale} / ${scales.noiseScale} / ${scales.noiseW}`;
     for (const [index, sentence] of SENTENCES.entries()) {
-      status(`${voiceId}, ${label}, phrase ${index + 1}`);
-      await measure(`Piper ${voiceId}`, label, index + 1, async (onAudio) => onAudio(await voice.synthesize(sentence, scales)));
+      status(`${item.label}, ${label}, phrase ${index + 1}`);
+      await measure(`Piper ${item.label}`, label, index + 1, async (onAudio) => onAudio(await voice.synthesize(sentence, scales, item.speaker)));
     }
   }
-  voice.dispose();
 }
+loaded?.voice.dispose();
 for (const voiceName of openaiVoices) {
   if (!config.openaiApiKey) break;
   const voice = new OpenAiVoice({ apiKey: config.openaiApiKey, model: config.openaiTtsModel, voice: voiceName });

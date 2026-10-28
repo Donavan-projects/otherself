@@ -106,6 +106,8 @@ export class PiperVoice implements TtsEngine {
     private readonly worker: Worker,
     readonly voice: string,
     readonly scales: PiperScales,
+    /** Locuteurs de la voix (voix à plusieurs locuteurs seulement). */
+    readonly speakers: string[],
   ) {
     worker.addEventListener('message', (event: MessageEvent<FromTtsWorker>) => this.onMessage(event.data));
   }
@@ -115,11 +117,13 @@ export class PiperVoice implements TtsEngine {
     return `Piper ${this.voice} (length_scale ${lengthScale}, noise_scale ${noiseScale}, noise_w ${noiseW})`;
   }
 
+  /** `voice` : identifiant Piper, suivi de « #locuteur » pour une voix à plusieurs locuteurs (ex. en_US-libritts-high#p3922). */
   static async load(voice: string, scales: Partial<PiperScales> = DEFAULT_PIPER_SCALES): Promise<PiperVoice> {
+    const [voiceId = voice, speaker] = voice.split('#');
     const started = performance.now();
     const worker = new Worker(new URL('./tts.worker.ts', import.meta.url));
     let lastPercent = -10;
-    const applied = await new Promise<PiperScales>((resolve, reject) => {
+    const ready = await new Promise<{ scales: PiperScales; speakers: string[] }>((resolve, reject) => {
       const onMessage = ({ data }: MessageEvent<FromTtsWorker>) => {
         if (data.type === 'progress') {
           if (!data.total || !data.url.endsWith('.onnx')) return;
@@ -130,7 +134,7 @@ export class PiperVoice implements TtsEngine {
           }
         } else if (data.type === 'ready' || data.type === 'error') {
           worker.removeEventListener('message', onMessage);
-          if (data.type === 'ready') resolve(data.scales);
+          if (data.type === 'ready') resolve({ scales: data.scales, speakers: data.speakers });
           else reject(new Error(data.message));
         }
       };
@@ -138,7 +142,8 @@ export class PiperVoice implements TtsEngine {
       worker.addEventListener('error', (event) => reject(new Error(`worker Piper : ${event.message}`)), { once: true });
       const init: ToTtsWorker = {
         type: 'init',
-        voiceId: voice,
+        voiceId,
+        speaker,
         scales,
         wasmPaths: {
           onnxWasm: localUrl('/vendor/ort/'),
@@ -148,7 +153,7 @@ export class PiperVoice implements TtsEngine {
       };
       worker.postMessage(init);
     });
-    const piper = new PiperVoice(worker, voice, applied);
+    const piper = new PiperVoice(worker, voice, ready.scales, ready.speakers);
     log(`voix ${piper.description} prête dans un worker (${Math.round(performance.now() - started)} ms)`);
     return piper;
   }
@@ -162,12 +167,12 @@ export class PiperVoice implements TtsEngine {
     onAudio(await this.synthesize(text));
   }
 
-  /** `scales` : réglages pour cette phrase (banc d'essai), gardés pour les suivantes. */
-  synthesize(text: string, scales?: Partial<PiperScales>): Promise<SpeechAudio & { elapsedMs: number }> {
+  /** `scales`, `speaker` : réglages et locuteur pour cette phrase (banc d'essai), gardés pour les suivantes. */
+  synthesize(text: string, scales?: Partial<PiperScales>, speaker?: string): Promise<SpeechAudio & { elapsedMs: number }> {
     const id = (this.nextId += 1);
     return new Promise((resolve, reject) => {
       this.pending.set(id, { text, resolve, reject });
-      const message: ToTtsWorker = { type: 'synth', id, text, scales };
+      const message: ToTtsWorker = { type: 'synth', id, text, scales, speaker };
       this.worker.postMessage(message);
     });
   }
