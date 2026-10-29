@@ -17,7 +17,8 @@
     et accessoire_<nom> (dans accessoires), choisis dans config.local.json.
   - Fond : fichiers séparés dans avatar/fonds/, jamais dans ce fichier.
   - Voix par défaut du personnage : attributs data-voix (voix Piper, ex. en_US-norman-medium) et
-    data-voix-openai (voix OpenAI, ex. ash) sur la racine <svg> ; le champ voice de config.local.json l'emporte.
+    data-voix-openai (voix OpenAI, ex. ash) et data-voix-hauteur (hauteur Piper en demi-tons, ex. 1.5) sur la racine <svg> ;
+    les champs voice, openaiVoice et pitchSemitones de config.local.json l'emportent.
   - Repères (calque caché) : lus par le code, jamais affichés.
 
   Cadrage : 800 × 1000, axe vertical x = 400, cadrage de webcam (buste coupé par le bas du cadre).

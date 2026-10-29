@@ -32,7 +32,7 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | `openaiVoice` | voix OpenAI | Voix de la synthèse OpenAI (`ash`, `onyx`…) | Voix du personnage : attribut `data-voix-openai` du SVG (`ash`) |
 | `openaiTtsModel` | modèle OpenAI | Modèle de synthèse OpenAI | `gpt-4o-mini-tts` |
 | `piperScales` | objet | Réglages Piper : `lengthScale` (débit, plus petit = plus rapide), `noiseScale` (variation de l'intonation), `noiseW` (variation du rythme). Comparer au banc d'essai des voix (popup) | `{ "lengthScale": 0.92, "noiseScale": 0.8, "noiseW": 1 }` |
-| `pitchSemitones` | −6 à +6 | Hauteur de la voix Piper, en demi-tons, sans changer le débit : synthèse avec un `length_scale` × 2^(n/12), rejouée 2^(n/12) fois plus vite (micro injecté et retour audio ; la bouche suit le son joué). À comparer à l'écoute au banc d'essai (`voix~1.5`) | `0` (voix d'origine) |
+| `pitchSemitones` | −6 à +6 | Hauteur de la voix Piper, en demi-tons, sans changer le débit : synthèse avec un `length_scale` × 2^(n/12), rejouée 2^(n/12) fois plus vite (micro injecté et retour audio ; la bouche suit le son joué). À comparer à l'écoute au banc d'essai (`voix~1.5`) | Hauteur du personnage : attribut `data-voix-hauteur` du SVG (`1.5` pour `otherself`), sinon `0` |
 | `monitorAvatar` | `true` / `false` | Retour audio : vous entendez la voix de l'avatar, jouée par l'extension hors de l'onglet de l'entretien (elle n'est donc jamais prise pour le recruteur) | Activé |
 | `monitorVolume` | 0 à 1 | Volume du retour audio | `0.8` |
 | `silenceMs` | millisecondes | Silence après lequel le recruteur est considéré comme ayant fini sa question | `800` |

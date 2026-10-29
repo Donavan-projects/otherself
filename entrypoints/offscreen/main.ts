@@ -137,7 +137,7 @@ async function start() {
   if (config.ttsProvider === 'openai') {
     voice = new OpenAiVoice({ apiKey: config.openaiApiKey, model: config.openaiTtsModel, voice: config.openaiVoice || defaults.openai || 'ash' });
   } else {
-    voice = await PiperVoice.load(config.voice || defaults.piper || 'en_US-ljspeech-medium', { ...DEFAULT_PIPER_SCALES, ...config.piperScales }, config.pitchSemitones);
+    voice = await PiperVoice.load(config.voice || defaults.piper || 'en_US-ljspeech-medium', { ...DEFAULT_PIPER_SCALES, ...config.piperScales }, config.pitchSemitones ?? defaults.pitch ?? 0);
   }
   log(`synthèse vocale : ${voice.description}${config.voice || config.openaiVoice ? '' : ` (voix du personnage ${config.avatar})`}`);
   // Retour pour l'utilisateur : joué ici, jamais dans l'onglet capturé.

@@ -7,7 +7,7 @@
      xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
      xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
      width="1010" height="1000" viewBox="0 0 1010 1000" id="otherself-avatar"
-     data-voix="en_US-norman-medium" data-voix-openai="ash">
+     data-voix="en_US-norman-medium" data-voix-openai="ash" data-voix-hauteur="1.5">
   <style id="palette">
     .peau              { fill: #F1AB76; stroke: #F1AB76; stroke-linejoin: round }
     .peau-ombre        { fill: #C9865D; stroke: #C9865D; stroke-linejoin: round }

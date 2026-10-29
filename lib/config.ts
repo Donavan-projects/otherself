@@ -34,8 +34,8 @@ export interface DemoConfig {
   /** Voix OpenAI ; vide : voix du personnage (data-voix-openai du SVG). */
   openaiVoice: string;
   openaiTtsModel: string;
-  /** Hauteur de la voix Piper en demi-tons (−6 à +6), sans changement de débit. 0 : voix d'origine. */
-  pitchSemitones: number;
+  /** Hauteur de la voix Piper en demi-tons (−6 à +6), sans changement de débit ; null : hauteur du personnage (data-voix-hauteur du SVG), sinon 0. */
+  pitchSemitones: number | null;
   /** Réglages Piper (débit, intonation, rythme) ; absents : valeurs retenues dans lib/tts.ts. */
   piperScales: { lengthScale?: number; noiseScale?: number; noiseW?: number };
   /** Silence (ms) après lequel le recruteur est considéré comme ayant fini de parler. */
@@ -73,7 +73,7 @@ const DEFAULTS: DemoConfig = {
   openaiVoice: '',
   openaiTtsModel: 'gpt-4o-mini-tts',
   piperScales: {},
-  pitchSemitones: 0,
+  pitchSemitones: null,
   silenceMs: 800,
   bargeInMs: 600,
   openaiApiKey: '',
@@ -112,7 +112,7 @@ export async function loadDemoConfig(): Promise<DemoConfig> {
       return Number.isFinite(value) && value > 0 ? [[key, value]] : [];
     }),
   );
-  config.pitchSemitones = Number.isFinite(Number(raw.pitchSemitones)) ? Math.min(6, Math.max(-6, Number(raw.pitchSemitones))) : 0;
+  config.pitchSemitones = clampPitch(raw.pitchSemitones);
   config.avatar = safeName(raw.avatar) ?? DEFAULTS.avatar;
   config.background = safeName(raw.background) ?? DEFAULTS.background;
   config.palette = Object.fromEntries(
@@ -127,18 +127,25 @@ export async function loadDemoConfig(): Promise<DemoConfig> {
   return config;
 }
 
+/** Hauteur en demi-tons bornée à [−6, 6], ou null si absente ou illisible. */
+function clampPitch(value: unknown): number | null {
+  if (value === undefined || value === null || value === '' || !Number.isFinite(Number(value))) return null;
+  return Math.min(6, Math.max(-6, Number(value)));
+}
+
 /** Nom de fichier ou de classe sans chemin ni caractère spécial. */
 function safeName(value: unknown): string | null {
   return typeof value === 'string' && /^[\w-]+$/.test(value) ? value : null;
 }
 
-/** Voix par défaut du personnage : attributs data-voix et data-voix-openai de la racine du SVG. */
-export async function avatarVoices(avatar: string): Promise<{ piper: string | null; openai: string | null }> {
+/** Voix par défaut du personnage : attributs data-voix, data-voix-openai et data-voix-hauteur de la racine du SVG. */
+export async function avatarVoices(avatar: string): Promise<{ piper: string | null; openai: string | null; pitch: number | null }> {
   const response = await fetch(localUrl(`/avatar-svg/${avatar}.svg`));
-  if (!response.ok) return { piper: null, openai: null };
+  if (!response.ok) return { piper: null, openai: null, pitch: null };
   const root = /<svg\b[^>]*>/.exec(await response.text())?.[0] ?? '';
   const read = (name: string) => safeName(new RegExp(`\\s${name}="([^"]*)"`).exec(root)?.[1]);
-  return { piper: read('data-voix'), openai: read('data-voix-openai') };
+  const pitch = new RegExp('\\sdata-voix-hauteur="([^"]*)"').exec(root)?.[1];
+  return { piper: read('data-voix'), openai: read('data-voix-openai'), pitch: clampPitch(pitch) };
 }
 
 export async function loadLocalText(path: string | null): Promise<string> {
