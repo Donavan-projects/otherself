@@ -43,6 +43,7 @@ const PASSTHROUGH_FIELDS = [
   'openaiVoice',
   'openaiTtsModel',
   'piperScales',
+  'pitchSemitones',
   'silenceMs',
   'openaiApiKey',
   'sttModel',

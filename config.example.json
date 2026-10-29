@@ -14,6 +14,7 @@
   "cv": "local/cv.md",
   "openaiApiKey": "sk-proj-REMPLACER-PAR-VOTRE-CLE",
   "ttsProvider": "piper",
+  "pitchSemitones": 0,
   "monitorAvatar": true,
   "monitorVolume": 0.8,
   "silenceMs": 800,

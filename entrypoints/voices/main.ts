@@ -28,11 +28,15 @@ const parseScales = (item: string): PiperScales => {
  * Voix Piper : « voix[:locuteur][@length/noise/noise_w] », par exemple en_US-libritts-high:p3922 ou
  * en_US-john-medium@0.85/0.8/1. Sans « @ », chaque réglage de &reglages est essayé.
  */
-const piperVoices = list('voix', 'en_US-norman-medium,en_US-john-medium').map((item) => {
+// « ~n » en fin d'élément : hauteur de n demi-tons (ex. en_US-norman-medium@0.92/0.8/1~1.5), sans changer le débit.
+const piperVoices = list('voix', 'en_US-norman-medium,en_US-john-medium').map((entry) => {
+  const [item = entry, pitch] = entry.split('~');
   const [name = item, scales] = item.split('@');
   // « : » ou « # » (encodé %23 dans une adresse) avant le locuteur.
   const [voiceId = name, speaker] = name.split(/[#:]/);
-  return { label: name, voiceId, speaker, scales: scales ? parseScales(scales) : undefined };
+  const pitchSemitones = Number(pitch ?? 0) || 0;
+  const label = pitchSemitones ? `${name} ${pitchSemitones > 0 ? '+' : ''}${pitchSemitones} demi-ton(s)` : name;
+  return { label, voiceId, speaker, scales: scales ? parseScales(scales) : undefined, pitchSemitones };
 });
 const openaiVoices = list('openai', '');
 const settings: PiperScales[] = list('reglages', '1/0.667/0.8').map(parseScales);
@@ -190,7 +194,9 @@ for (const item of piperVoices) {
     const label = `${scales.lengthScale} / ${scales.noiseScale} / ${scales.noiseW}`;
     for (const [index, sentence] of SENTENCES.entries()) {
       status(`${item.label}, ${label}, phrase ${index + 1}`);
-      await measure(`Piper ${item.label}`, label, index + 1, async (onAudio) => onAudio(await voice.synthesize(sentence, scales, item.speaker)));
+      await measure(`Piper ${item.label}`, label, index + 1, async (onAudio) =>
+        onAudio(await voice.synthesize(sentence, scales, item.speaker, item.pitchSemitones)),
+      );
     }
   }
 }

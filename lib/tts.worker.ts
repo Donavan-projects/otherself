@@ -20,10 +20,12 @@ export type ToTtsWorker =
       voiceId: string;
       /** Voix à plusieurs locuteurs (libritts…) : identifiant du locuteur (clé de speaker_id_map, ex. p3922). */
       speaker?: string;
+      /** Hauteur en demi-tons (0 : voix d'origine), voir applyPitch. */
+      pitchSemitones?: number;
       scales: Partial<PiperScales>;
       wasmPaths: { onnxWasm: string; piperData: string; piperWasm: string };
     }
-  | { type: 'synth'; id: number; text: string; scales?: Partial<PiperScales>; speaker?: string };
+  | { type: 'synth'; id: number; text: string; scales?: Partial<PiperScales>; speaker?: string; pitchSemitones?: number };
 
 export type FromTtsWorker =
   | { type: 'progress'; loaded: number; total: number; url: string }
@@ -55,11 +57,29 @@ JSON.parse = function (text: string, reviver?: (key: string, value: unknown) => 
   return value;
 };
 
+/** length_scale demandé, avant la correction de hauteur. */
+let baseLengthScale: number | null = null;
+/** Facteur de hauteur 2^(n/12) ; 1 : voix d'origine. */
+let pitchFactor = 1;
+
 function applyScales(scales: Partial<PiperScales> = {}) {
   if (!inference) return;
-  if (scales.lengthScale !== undefined) inference.length_scale = scales.lengthScale;
+  baseLengthScale ??= inference.length_scale;
+  if (scales.lengthScale !== undefined) baseLengthScale = scales.lengthScale;
   if (scales.noiseScale !== undefined) inference.noise_scale = scales.noiseScale;
   if (scales.noiseW !== undefined) inference.noise_w = scales.noiseW;
+  inference.length_scale = baseLengthScale * pitchFactor;
+}
+
+/**
+ * Hauteur : la voix est synthétisée plus lente (length_scale × f, f = 2^(n/12)), puis l'audio est déclaré à une
+ * fréquence d'échantillonnage f fois plus haute. Rejoué ainsi (comme avec un playbackRate de f), il retrouve son
+ * débit et monte de n demi-tons, dans le micro injecté comme dans le retour audio, sans autre traitement.
+ */
+function applyPitch(semitones: number | undefined) {
+  if (semitones === undefined) return;
+  pitchFactor = 2 ** (semitones / 12);
+  applyScales();
 }
 
 // Locuteur : la bibliothèque envoie toujours sid = 0 (premier locuteur) ; le numéro choisi remplace sid juste
@@ -83,7 +103,7 @@ function chooseSpeaker(speaker: string | undefined) {
 }
 
 const currentScales = (): PiperScales => ({
-  lengthScale: inference?.length_scale ?? 1,
+  lengthScale: baseLengthScale ?? inference?.length_scale ?? 1,
   noiseScale: inference?.noise_scale ?? 0.667,
   noiseW: inference?.noise_w ?? 0.8,
 });
@@ -99,10 +119,11 @@ scope.onmessage = ({ data: message }) => {
       wasmPaths: message.wasmPaths,
       progress: ({ loaded, total, url }) => scope.postMessage({ type: 'progress', loaded, total, url }),
     });
-    const { scales, speaker } = message;
+    const { scales, speaker, pitchSemitones } = message;
     session.then(
       () => {
         applyScales(scales);
+        applyPitch(pitchSemitones);
         try {
           chooseSpeaker(speaker);
         } catch (error) {
@@ -115,18 +136,20 @@ scope.onmessage = ({ data: message }) => {
     );
     return;
   }
-  const { id, text, scales, speaker } = message;
+  const { id, text, scales, speaker, pitchSemitones } = message;
   queue = queue.then(async () => {
     try {
       if (!session) throw new Error('voix non chargée');
       const ready = await session;
       // Réglages propres à cette phrase (banc d'essai des voix) : appliqués, puis gardés.
       if (scales) applyScales(scales);
+      applyPitch(pitchSemitones);
       chooseSpeaker(speaker);
       const started = performance.now();
       const wav = await ready.predict(text);
       const { samples, sampleRate } = decodeWav(await wav.arrayBuffer());
-      scope.postMessage({ type: 'audio', id, samples, sampleRate, elapsedMs: performance.now() - started }, [samples.buffer]);
+      // Fréquence déclarée × f : rejoué plus vite et plus haut, au débit d'origine (applyPitch).
+      scope.postMessage({ type: 'audio', id, samples, sampleRate: Math.round(sampleRate * pitchFactor), elapsedMs: performance.now() - started }, [samples.buffer]);
     } catch (error) {
       scope.postMessage({ type: 'error', id, message: errorMessage(error) });
     }

@@ -34,6 +34,8 @@ export interface DemoConfig {
   /** Voix OpenAI ; vide : voix du personnage (data-voix-openai du SVG). */
   openaiVoice: string;
   openaiTtsModel: string;
+  /** Hauteur de la voix Piper en demi-tons (−6 à +6), sans changement de débit. 0 : voix d'origine. */
+  pitchSemitones: number;
   /** Réglages Piper (débit, intonation, rythme) ; absents : valeurs retenues dans lib/tts.ts. */
   piperScales: { lengthScale?: number; noiseScale?: number; noiseW?: number };
   /** Silence (ms) après lequel le recruteur est considéré comme ayant fini de parler. */
@@ -71,6 +73,7 @@ const DEFAULTS: DemoConfig = {
   openaiVoice: '',
   openaiTtsModel: 'gpt-4o-mini-tts',
   piperScales: {},
+  pitchSemitones: 0,
   silenceMs: 800,
   bargeInMs: 600,
   openaiApiKey: '',
@@ -109,6 +112,7 @@ export async function loadDemoConfig(): Promise<DemoConfig> {
       return Number.isFinite(value) && value > 0 ? [[key, value]] : [];
     }),
   );
+  config.pitchSemitones = Number.isFinite(Number(raw.pitchSemitones)) ? Math.min(6, Math.max(-6, Number(raw.pitchSemitones))) : 0;
   config.avatar = safeName(raw.avatar) ?? DEFAULTS.avatar;
   config.background = safeName(raw.background) ?? DEFAULTS.background;
   config.palette = Object.fromEntries(
