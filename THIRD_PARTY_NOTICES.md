@@ -38,6 +38,7 @@ ne s'applique pas à elles.**
 | --- | --- | --- |
 | `avatar/otherself.svg` (personnage v4) | illustration de base générée avec ChatGPT (OpenAI) ; tête vectorisée à partir de cette image, palette fixe, calques du gabarit ; yeux, clignement et bouches redessinés à la main | mise à disposition sans revendication de droits |
 | `avatar/fonds/bureau.svg`, `avatar/fonds/bureau-clair.svg` | image générée avec ChatGPT (OpenAI), recadrée et retouchée (désaturée, éclaircie pour `bureau-clair`), intégrée en WebP dans un SVG | mise à disposition sans revendication de droits |
+| `docs/images/otherself-apercu.png` (capture du README) | image vidéo rendue par l'extension : personnage v4 et fond `bureau` ci-dessus, slogan et bandeau dessinés par le code | mise à disposition sans revendication de droits |
 | `avatar/otherself-v1.svg`, `avatar/gabarit.svg`, `avatar/fonds/interieur-clair.svg` | dessinés directement en SVG pour le projet, avec Claude Code (Anthropic) | licence du dépôt (GPL-3.0-or-later) |
 
 Le texte du t-shirt et le bandeau sont dessinés par le code, en Noto Sans Bold (OFL-1.1, voir ci-dessus).

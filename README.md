@@ -2,6 +2,10 @@
 
 Une extension de navigateur qui explore la symétrie des entretiens de recrutement automatisés : face à un recruteur IA, votre propre avatar IA peut répondre en votre nom, en s'identifiant clairement comme une IA.
 
+![Avatar OtherSelf : personnage cartoon aux cheveux bruns en bataille et à la barbe courte, veste kaki sur un sweat noir dont le t-shirt porte l'inscription « Automated candidate, just like you. », devant un bureau ouvert flou ; en bas de l'image, le même texte sur un bandeau jaune.](docs/images/otherself-apercu.png)
+
+*Image vidéo envoyée par l'extension (1280 × 720) : le slogan du t-shirt et le bandeau sont dessinés par le code. Personnage et fond générés avec ChatGPT (OpenAI), voir [Licence et crédits](#licence-et-crédits).*
+
 > **Statut : prototype de démonstration.** Ce dépôt accompagne une vidéo de démonstration. Un projet complet, utilisable par tous sans compétences techniques, ne sera développé que si le sujet suscite de l'intérêt. Aucun support n'est garanti.
 
 > **Avertissement.** Utiliser OtherSelf dans une vraie candidature, c'est probablement renoncer au poste. Les plateformes d'entretien peuvent aussi interdire les outils automatisés dans leurs conditions d'utilisation.
