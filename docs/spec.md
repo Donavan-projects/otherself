@@ -38,7 +38,7 @@ C'est le pipeline du recruteur à l'envers : la question entre par le son de la 
 
 ## Stack recommandée
 
-Tout est écrit en TypeScript dans une seule extension Manifest V3, qui tourne sur Mac, Windows et Linux. La machine de référence reste modeste (16 Go de RAM, GeForce GTX 960M de 4 Go) : le léger tourne dans l'onglet, le lourd passe par des API cloud. Les outils cités sont de mémoire, à vérifier avant de choisir.
+Tout est écrit en TypeScript dans une seule extension Manifest V3, qui tourne sur Mac, Windows et Linux. La machine de référence reste modeste (ordinateur portable de 2015, processeur 4 cœurs, 16 Go, sans carte graphique utilisable) : le léger tourne dans l'onglet, le lourd passe par des API cloud. Les outils cités sont de mémoire, à vérifier avant de choisir.
 
 | Brique | Dans le navigateur | Choix par défaut |
 | --- | --- | --- |

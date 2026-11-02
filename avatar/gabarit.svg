@@ -91,7 +91,11 @@
   <g inkscape:groupmode="layer" id="reperes" inkscape:label="reperes" style="display:none">
     <rect id="zone_visage" class="repere" x="270" y="220" width="260" height="280"/>
     <!-- Zone où le code écrit le slogan (bannerText) ; data-courbure : flèche de la courbure du torse,
-         en unités du SVG (les bouts des lignes remontent d'autant par rapport au milieu). -->
+         en unités du SVG (les bouts des lignes remontent d'autant par rapport au milieu).
+         Optionnels : data-lignes-max (entier de 1 à 6) répartit le slogan sur autant de lignes au plus,
+         selon la forme de la zone (sans lui : 1 ou 2 lignes) ; data-bas-cadre (517 à 550) place le bas du
+         texte dans le cadre 1280 × 720 (sans lui : 517). Le bandeau va alors de data-bas-cadre + 12 à 608,
+         soit bannerOffsetY de data-bas-cadre − 596 à 0. -->
     <rect id="badge_zone_texte" class="repere" x="256" y="610" width="288" height="84" data-courbure="7"/>
     <circle id="ancre_yeux_gauche" class="repere" cx="345" cy="300" r="4"/>
     <circle id="ancre_yeux_droit" class="repere" cx="455" cy="300" r="4"/>

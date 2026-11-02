@@ -44,7 +44,7 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 
 ## Voix
 
-Licences vérifiées pour une vidéo publiée. Vitesse mesurée en WebAssembly sur la machine de référence (i7-4720HQ), en temps de synthèse rapporté à la durée de l'audio (moins de 1 = plus rapide que le temps réel) :
+Licences vérifiées pour une vidéo publiée. Vitesse mesurée en WebAssembly sur la machine de référence (ordinateur portable de 2015, processeur 4 cœurs, 16 Go, sans carte graphique utilisable), en temps de synthèse rapporté à la durée de l'audio (moins de 1 = plus rapide que le temps réel) :
 
 | Voix | Genre | Licence du jeu de données | Vitesse |
 | --- | --- | --- | --- |
