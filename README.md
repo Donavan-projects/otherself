@@ -1,6 +1,6 @@
 # OtherSelf
 
-Une extension de navigateur pour réagir à un entretien d'embauche automatisé que vous jugez injuste : au lieu d'un humain face à une machine, c'est votre propre avatar IA qui répond, clairement identifié comme tel.
+Une extension de navigateur qui explore la symétrie des entretiens de recrutement automatisés : face à un recruteur IA, votre propre avatar IA peut répondre en votre nom, en s'identifiant clairement comme une IA.
 
 > **Statut : prototype de démonstration.** Ce dépôt accompagne une vidéo de démonstration. Un projet complet, utilisable par tous sans compétences techniques, ne sera développé que si le sujet suscite de l'intérêt. Aucun support n'est garanti.
 
@@ -40,13 +40,13 @@ Chargez `.output/chrome-mv3` dans `chrome://extensions` (mode développeur, « C
 
 ## État d'avancement
 
-- Fait : page de répétition, rendu de l'avatar avec bandeau, injection caméra et micro, pipeline voix (écoute, transcription, réponse, synthèse vocale, révélation et déclaration configurable), testé sur Google Meet et InterviewCoach.
-- En cours : avatar cartoon OtherSelf (personnage SVG original, slogan imprimé sur le t-shirt, bouche animée par la voix), à tester sur Meet ; puis tournage de la démo.
+- Fait : page de répétition, rendu de l'avatar avec bandeau, injection caméra et micro, pipeline voix (écoute, transcription, réponse, synthèse vocale, révélation et déclaration configurable), avatar cartoon OtherSelf (slogan imprimé sur le t-shirt, bouche animée par la voix), testé sur Google Meet.
+- En cours : tournage de la démo.
 
 ## Licence et crédits
 
 OtherSelf est un logiciel libre sous licence [GPL-3.0-or-later](LICENSE) : l'extension embarque le phonémiseur eSpeak NG, lui-même sous GPL-3.0. Copyright (C) 2026 Donavan-projects.
 
-Merci aux projets sur lesquels OtherSelf repose : [Piper](https://github.com/rhasspy/piper) et [piper-tts-web](https://github.com/Mintplex-Labs/piper-tts-web) pour la voix de synthèse, [eSpeak NG](https://github.com/espeak-ng/espeak-ng) pour la phonémisation, [Silero VAD](https://github.com/snakers4/silero-vad) pour la détection de parole, [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) et [WXT](https://github.com/wxt-dev/wxt). Voix par défaut : `en_US-ljspeech-medium`, entraînée sur le jeu [LJ Speech](https://keithito.com/LJ-Speech-Dataset/) (domaine public). Détail des licences : [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Merci aux projets sur lesquels OtherSelf repose : [Piper](https://github.com/rhasspy/piper) et [piper-tts-web](https://github.com/Mintplex-Labs/piper-tts-web) pour la voix de synthèse, [eSpeak NG](https://github.com/espeak-ng/espeak-ng) pour la phonémisation, [Silero VAD](https://github.com/snakers4/silero-vad) pour la détection de parole, [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) et [WXT](https://github.com/wxt-dev/wxt). Voix par défaut : `en_US-norman-medium`, entraînée sur des enregistrements [LibriVox](https://librivox.org) (domaine public), jouée 1,5 demi-ton plus haut sans changer le débit. Police du slogan : [Noto Sans](https://github.com/notofonts/latin-greek-cyrillic) Bold (Google, licence [OFL-1.1](public/fonts/OFL.txt)). Détail des licences : [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-**Avatar et fond.** Le personnage OtherSelf (v4) et le fond « bureau » ont été créés à partir d'illustrations de base générées avec ChatGPT (OpenAI). Le personnage a été vectorisé, ramené à une palette fixe et réparti dans les calques du gabarit. Les parties animées (yeux, clignement, bouches) ont été redessinées à la main. Le fond est une image matricielle recadrée et retouchée (désaturée, et éclaircie pour « bureau-clair »), intégrée en WebP dans un SVG. Le texte du t-shirt et le bandeau sont dessinés par le code.
+**Avatar et fond.** Les images du personnage OtherSelf (v4) et du fond « bureau » ont été générées avec ChatGPT (OpenAI). La tête a été vectorisée à partir de cette image, ramenée à une palette fixe et répartie dans les calques du gabarit. Les parties animées (yeux, clignement, bouches) ont été redessinées à la main. Le fond est une image matricielle recadrée et retouchée (désaturée, et éclaircie pour « bureau-clair »), intégrée en WebP dans un SVG. Le texte du t-shirt et le bandeau sont dessinés par le code. Ces images sont mises à disposition sans revendication de droits ; leur statut est distinct de la licence du code, la GPL ne s'applique pas à elles (détail : [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#images)).

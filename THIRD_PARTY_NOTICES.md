@@ -20,13 +20,35 @@ composants suivants. Ceux marqués « embarqué » font partie de l'extension co
 ## Voix
 
 Téléchargées depuis Hugging Face ([rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices), miroir
-`diffusionstudio/piper-voices`) ; une seule voix, celle choisie dans `config.local.json`.
+`diffusionstudio/piper-voices`) ; une seule voix : celle du personnage (`data-voix` dans son SVG), ou celle
+choisie dans `config.local.json`.
 
 | Voix | Jeu de données | Licence du jeu de données (fiche du modèle) | Remarque |
 | --- | --- | --- | --- |
-| `en_US-ljspeech-medium` (voix par défaut) | [LJ Speech](https://keithito.com/LJ-Speech-Dataset/) | domaine public | entraînée de zéro sur LJ Speech (Bryce Beattie) |
-| `en_US-norman-medium` | [LibriVox](https://librivox.org) | domaine public | entraînée de zéro ; voix masculine conseillée |
-| `en_US-joe-medium` | [OHF-Voice voice-datasets](https://github.com/OHF-Voice/voice-datasets) | CC0 | **affinée à partir de la voix `lessac`**, elle-même entraînée sur le jeu Lessac (licence Blizzard 2013, recherche) : statut incertain pour une publication |
+| `en_US-norman-medium` (voix par défaut du personnage `otherself`) | [LibriVox](https://librivox.org) | domaine public | entraînée de zéro ; jouée par OtherSelf 1,5 demi-ton plus haut (`data-voix-hauteur`, réglage `pitchSemitones`), sans changer le débit : modification faite à la lecture, le modèle téléchargé n'est pas modifié |
+| `en_US-ljspeech-medium` | [LJ Speech](https://keithito.com/LJ-Speech-Dataset/) | domaine public | entraînée de zéro sur LJ Speech (Bryce Beattie) ; voix féminine |
+| `en_US-joe-medium` | [OHF-Voice voice-datasets](https://github.com/OHF-Voice/voice-datasets) | CC0 | **affinée à partir de la voix `lessac`**, elle-même entraînée sur le jeu Lessac (licence Blizzard 2013, recherche) : statut incertain : **à éviter pour toute publication** (vidéo, démo enregistrée) |
+
+## Images
+
+Les images de l'avatar ont un statut distinct de la licence du code : **la licence GPL-3.0-or-later d'OtherSelf
+ne s'applique pas à elles.**
+
+| Fichier | Origine | Statut |
+| --- | --- | --- |
+| `avatar/otherself.svg` (personnage v4) | illustration de base générée avec ChatGPT (OpenAI) ; tête vectorisée à partir de cette image, palette fixe, calques du gabarit ; yeux, clignement et bouches redessinés à la main | mise à disposition sans revendication de droits |
+| `avatar/fonds/bureau.svg`, `avatar/fonds/bureau-clair.svg` | image générée avec ChatGPT (OpenAI), recadrée et retouchée (désaturée, éclaircie pour `bureau-clair`), intégrée en WebP dans un SVG | mise à disposition sans revendication de droits |
+| `avatar/otherself-v1.svg`, `avatar/gabarit.svg`, `avatar/fonds/interieur-clair.svg` | dessinés directement en SVG pour le projet, avec Claude Code (Anthropic) | licence du dépôt (GPL-3.0-or-later) |
+
+Le texte du t-shirt et le bandeau sont dessinés par le code, en Noto Sans Bold (OFL-1.1, voir ci-dessus).
+
+## Services externes
+
+Non distribués avec l'extension : appelés directement depuis le navigateur avec la clé API de l'utilisateur, à ses frais.
+
+- OpenAI : transcription (`gpt-live-transcribe`), réponses (`gpt-5.6-luna` par défaut) et, en option, synthèse vocale
+  (`gpt-4o-mini-tts`, voix `ash` du personnage).
+- Hugging Face : téléchargement des voix Piper ci-dessus.
 
 ## Sources des parties GPL
 
