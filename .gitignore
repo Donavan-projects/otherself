@@ -10,3 +10,6 @@ local/
 
 # Références visuelles d'autres œuvres (droits d'auteur) : jamais commitées.
 design/references/
+
+# Notes locales pour Claude Code (état, journal des tests, machine) : jamais commitées.
+CLAUDE.local.md
