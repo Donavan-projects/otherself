@@ -68,8 +68,9 @@ export function createPreview(source: PreviewSource): Preview {
       last = now;
     }, STATS_INTERVAL_MS);
 
-    const close = () => {
-      if (current?.video !== video) return;
+    /** Retire tout ; faux si l'aperçu était déjà fermé. */
+    const teardown = () => {
+      if (current?.video !== video) return false;
       current = null;
       clearInterval(stats);
       track.removeEventListener('ended', close);
@@ -77,6 +78,10 @@ export function createPreview(source: PreviewSource): Preview {
       track.stop();
       video.srcObject = null;
       video.remove();
+      return true;
+    };
+    const close = () => {
+      if (!teardown()) return;
       log(
         `aperçu fermé ; flux envoyé : ${before?.toFixed(1) ?? '?'} images/s avant l’ouverture, ` +
           `${Number.isFinite(minSent) ? minSent.toFixed(1) : '?'} au plus bas pendant l’aperçu`,
@@ -95,7 +100,7 @@ export function createPreview(source: PreviewSource): Preview {
       log(`aperçu ouvert en Picture-in-Picture (flux ${width}x${height}, fenêtre ${window.width}x${window.height}, sans son, sans miroir)`);
       return 'aperçu ouvert';
     } catch (error) {
-      close();
+      teardown();
       const message = error instanceof Error ? `${error.name} : ${error.message}` : String(error);
       log(`aperçu impossible : ${message}`);
       return `aperçu impossible : ${message}`;
