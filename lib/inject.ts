@@ -26,11 +26,19 @@ interface FakeTracks {
   video: MediaStreamTrack;
   audio: MediaStreamTrack;
   stopRendering(): void;
+  /** Images par seconde dessinées sur la dernière période de statistiques. */
+  fps(): number | null;
 }
 
 export interface FakeMediaHandle {
   /** Remet getUserMedia et enumerateDevices d'origine et coupe les pistes remises à la page. */
   uninstall(): void;
+  /** Aperçu (lib/preview.ts) : vrai si la page a reçu une piste vidéo encore active. */
+  sendingVideo(): boolean;
+  /** Aperçu : copie de la piste vidéo envoyée, à arrêter par l'appelant ; null sans caméra demandée. */
+  previewTrack(): MediaStreamTrack | null;
+  /** Aperçu : images par seconde du flux envoyé. */
+  sentFps(): number | null;
 }
 
 // Nom affiché par la plateforme pour la caméra, le micro et les pistes injectées.
@@ -44,6 +52,7 @@ export function installFakeGetUserMedia(sources: FakeMediaSources): FakeMediaHan
   const originalGetUserMedia = proto.getUserMedia;
   const originalEnumerateDevices = proto.enumerateDevices;
   let fake: Promise<FakeTracks> | null = null;
+  let created: FakeTracks | null = null;
   /** Pistes remises à la page : arrêtées à la désactivation (la page voit « ended »). */
   const handedOut: MediaStreamTrack[] = [];
   let enumerations = 0;
@@ -51,7 +60,7 @@ export function installFakeGetUserMedia(sources: FakeMediaSources): FakeMediaHan
   proto.getUserMedia = async function (this: MediaDevices, constraints?: MediaStreamConstraints) {
     log(`getUserMedia intercepté : ${JSON.stringify(constraints ?? {})}`);
     if (!constraints?.video && !constraints?.audio) return originalGetUserMedia.call(this, constraints);
-    fake ??= createFakeTracks(sources);
+    fake ??= createFakeTracks(sources).then((tracks) => (created = tracks));
     const { video, audio } = await fake;
     // Des clones : la page peut arrêter ses pistes sans couper les sources.
     const tracks: MediaStreamTrack[] = [];
@@ -88,7 +97,11 @@ export function installFakeGetUserMedia(sources: FakeMediaSources): FakeMediaHan
     );
   }, ENUMERATE_CHECK_MS);
 
+  const sendingVideo = () => handedOut.some((track) => track.kind === 'video' && track.readyState === 'live');
   return {
+    sendingVideo,
+    previewTrack: () => (created && sendingVideo() ? created.video.clone() : null),
+    sentFps: () => created?.fps() ?? null,
     uninstall() {
       for (const timer of [...repeats, check]) clearTimeout(timer);
       proto.getUserMedia = originalGetUserMedia;
@@ -102,6 +115,7 @@ export function installFakeGetUserMedia(sources: FakeMediaSources): FakeMediaHan
       log(`désactivation : getUserMedia et enumerateDevices d'origine remis, ${handedOut.length} piste(s) injectée(s) arrêtée(s)`);
       handedOut.length = 0;
       fake = null;
+      created = null;
       // La page relit la liste : vraie caméra et vrai micro de nouveau proposés.
       navigator.mediaDevices.dispatchEvent(new Event('devicechange'));
     },
@@ -141,7 +155,7 @@ async function createFakeTracks(sources: FakeMediaSources): Promise<FakeTracks> 
   const video = createVideoTrack(sources.avatar, sources.avatarOptions, () => level());
   const audio = await sources.createAudioTrack();
   level = createLevelMeter(audio);
-  return { video: video.track, stopRendering: video.stop, audio };
+  return { video: video.track, stopRendering: video.stop, fps: video.fps, audio };
 }
 
 /** Niveau RMS instantané d'une piste audio (analyseur, jamais relié aux haut-parleurs). */
@@ -159,7 +173,11 @@ function createLevelMeter(track: MediaStreamTrack): () => number {
   };
 }
 
-function createVideoTrack(avatar: AvatarAssets<ImageBitmap>, options: AvatarOptions, level: () => number): { track: MediaStreamTrack; stop(): void } {
+function createVideoTrack(
+  avatar: AvatarAssets<ImageBitmap>,
+  options: AvatarOptions,
+  level: () => number,
+): { track: MediaStreamTrack; stop(): void; fps(): number | null } {
   // Canvas hors DOM : la page ne voit que le flux, bandeau compris (règle 1).
   // Niveau maximal par période de statistiques : sert à régler les seuils de la bouche (lib/avatar.ts).
   let maxLevel = 0;
@@ -180,6 +198,7 @@ function createVideoTrack(avatar: AvatarAssets<ImageBitmap>, options: AvatarOpti
   let maxDrawTime = 0;
   const shapes = new Map<MouthShape, number>();
   let last = performance.now();
+  let lastFps: number | null = null;
   const drawing = setInterval(() => {
     const start = performance.now();
     const shape = renderer.draw(start);
@@ -191,9 +210,10 @@ function createVideoTrack(avatar: AvatarAssets<ImageBitmap>, options: AvatarOpti
   }, 1000 / FPS);
   const stats = setInterval(() => {
     const now = performance.now();
+    lastFps = (frames * 1000) / (now - last);
     const mouth = [...shapes].map(([shape, count]) => `${shape} ${count}`).join(', ');
     log(
-      `vidéo : ${((frames * 1000) / (now - last)).toFixed(1)} images/s, dessin ${(drawTime / Math.max(1, frames)).toFixed(2)} ms ` +
+      `vidéo : ${lastFps.toFixed(1)} images/s, dessin ${(drawTime / Math.max(1, frames)).toFixed(2)} ms ` +
         `en moyenne (max ${maxDrawTime.toFixed(1)} ms), bouche : ${mouth} (niveau max ${maxLevel.toFixed(3)})`,
     );
     frames = 0;
@@ -208,6 +228,7 @@ function createVideoTrack(avatar: AvatarAssets<ImageBitmap>, options: AvatarOpti
   log(`piste vidéo créée depuis le canvas (${width}x${height} @ ${FPS} fps)`);
   return {
     track,
+    fps: () => lastFps,
     stop() {
       clearInterval(drawing);
       clearInterval(stats);

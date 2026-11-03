@@ -9,11 +9,12 @@ import { mapAssets } from '@/lib/avatar';
 import { fileToBlob, type SerializedSources } from '@/lib/injection-sources';
 import { createLogger } from '@/lib/log';
 import { createVoiceOutput, type VoiceOutput } from '@/lib/page-audio';
+import { createPreview, type Preview } from '@/lib/preview';
 import { offerTabShare } from '@/lib/share-tab';
 
 declare global {
   interface Window {
-    __otherSelf?: { install(sources: SerializedSources): Promise<string>; uninstall(): string };
+    __otherSelf?: { install(sources: SerializedSources): Promise<string>; uninstall(): string; preview?: Preview | undefined };
   }
 }
 
@@ -71,6 +72,13 @@ export default defineContentScript({
         uninstallers.push(() => {
           voice?.stop();
           media.uninstall();
+        });
+        // Aperçu Picture-in-Picture pour le tournage (lib/preview.ts), fermé avant le reste.
+        const preview = createPreview(media);
+        window.__otherSelf!.preview = preview;
+        uninstallers.push(() => {
+          preview.close();
+          window.__otherSelf!.preview = undefined;
         });
         // Le pipeline voix n'est relié qu'au cadre principal. Son du recruteur : partage de
         // l'onglet par la page, son compris (bouton, getDisplayMedia), sans permission d'extension.
