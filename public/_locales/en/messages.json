@@ -67,5 +67,11 @@
   },
   "popupDeactivate": {
     "message": "Disable on this tab"
+  },
+  "popupPreview": {
+    "message": "Avatar preview"
+  },
+  "popupPreviewClose": {
+    "message": "Close preview"
   }
 }
