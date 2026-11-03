@@ -47,6 +47,8 @@ export interface DemoConfig {
   monitorAvatar: boolean;
   /** Volume du retour, de 0 à 1. */
   monitorVolume: number;
+  /** Bouton « Aperçu de l'avatar » du popup (fenêtre Picture-in-Picture pour le tournage). */
+  previewWindow: boolean;
   sttModel: string;
   llmModel: string;
 }
@@ -79,6 +81,7 @@ const DEFAULTS: DemoConfig = {
   openaiApiKey: '',
   monitorAvatar: true,
   monitorVolume: 0.8,
+  previewWindow: true,
   sttModel: 'gpt-live-transcribe',
   llmModel: 'gpt-5.6-luna',
 };
@@ -99,6 +102,7 @@ export async function loadDemoConfig(): Promise<DemoConfig> {
   config.silenceMs = Number(raw.silenceMs) > 0 ? Number(raw.silenceMs) : DEFAULTS.silenceMs;
   config.candidateName = typeof raw.candidateName === 'string' ? raw.candidateName.trim() : '';
   config.monitorAvatar = raw.monitorAvatar !== false;
+  config.previewWindow = raw.previewWindow !== false;
   config.monitorVolume =
     Number.isFinite(Number(raw.monitorVolume)) && raw.monitorVolume !== undefined
       ? Math.min(1, Math.max(0, Number(raw.monitorVolume)))
