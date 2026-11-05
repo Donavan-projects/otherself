@@ -82,6 +82,8 @@ lib/
   inject.ts            # remplacement getUserMedia / enumerateDevices (monde MAIN)
   injection-sources.ts # images de l'avatar sérialisées pour le monde MAIN
   test-audio.ts        # son de test du micro injecté (banc rehearsal?inject seulement)
+  preview.ts           # monde MAIN : aperçu de l'avatar en Picture-in-Picture (tournage), retirable
+  preview-popup.ts     # popup : bouton « Aperçu de l'avatar » (option previewWindow)
   log.ts               # logs préfixés et horodatés
 scripts/
   check-locales.ts     # vérification des fichiers _locales au build
@@ -159,6 +161,7 @@ Les règles non négociables s'appliquent dès maintenant, y compris pour la dé
 - Prérequis : autoriser caméra et micro pour le site (cadenas de la barre d'adresse) ; désactiver le cadrage automatique côté avatar (Meet : Paramètres → Vidéo → Cadrage / Framing) et ne pas utiliser de fond virtuel ; activer l'extension sur l'onglet (popup → « Activer sur cet onglet ») ; cliquer le bouton OtherSelf dans la page et partager l'onglet avec son son ; si besoin, changer de micro dans la plateforme pour qu'elle redemande les flux. Recharger l'onglet annule l'injection.
 - Deux comptes : A porte l'avatar, B joue le recruteur, de préférence avec un casque.
 - Logs à observer : console de l'onglet (`[inject]` : images/s, temps de dessin, formes de bouche, niveau max toutes les 5 s) et console du document offscreen (`[llm]`, `[tts]`, `[vad]`, `LATENCE …`, transcription horodatée `Recruteur : …` / `Avatar : …`).
+- Tournage : bouton « Aperçu de l'avatar » du popup (fenêtre Picture-in-Picture du flux envoyé, à l'endroit, sans son ; logs `[preview]` : images par seconde du flux envoyé avant et pendant l'aperçu). L'ouverture n'est possible que par un clic dans le popup : Chrome transmet ce geste au script injecté.
 - Banc d'essai sans plateforme : page `voices` (voix, réglages, hauteur, jeu « entretien ») et page `avatar` (aperçu animé).
 
 ## Conventions

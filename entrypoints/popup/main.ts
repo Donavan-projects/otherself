@@ -3,6 +3,7 @@ import { buildAvatarAssets } from '@/lib/avatar-assets';
 import { loadDemoConfig } from '@/lib/config';
 import { blobToFile, type SerializedSources } from '@/lib/injection-sources';
 import { createLogger } from '@/lib/log';
+import { setupPreviewButton } from '@/lib/preview-popup';
 
 const pages = [
   { id: '#open-rehearsal', label: 'popupOpenRehearsal', url: '/rehearsal.html' },
@@ -31,6 +32,8 @@ const status = (message: string) => {
   log(message);
   statusEl.textContent = message;
 };
+// Aperçu de l'avatar en Picture-in-Picture (tournage) : lib/preview-popup.ts.
+const preview = setupPreviewButton(document.querySelector<HTMLButtonElement>('#preview')!, status);
 
 /** Avatar préparé ici (page de l'extension), puis remis à la page sous forme d'images seulement. */
 async function loadSources(): Promise<SerializedSources> {
@@ -117,6 +120,7 @@ deactivateButton.addEventListener('click', () => {
     .catch((error: unknown) => status(`échec de la désactivation : ${error instanceof Error ? error.message : String(error)}`))
     .finally(() => {
       deactivateButton.disabled = false;
+      void preview.refresh();
     });
 });
 
@@ -127,5 +131,6 @@ activateButton.addEventListener('click', () => {
     .catch((error: unknown) => status(`échec : ${error instanceof Error ? error.message : String(error)}`))
     .finally(() => {
       activateButton.disabled = false;
+      void preview.refresh();
     });
 });

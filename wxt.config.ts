@@ -35,6 +35,7 @@ const PASSTHROUGH_FIELDS = [
   'candidateName',
   'monitorAvatar',
   'monitorVolume',
+  'previewWindow',
   'bannerText',
   'messageText',
   'language',

@@ -67,5 +67,11 @@
   },
   "popupDeactivate": {
     "message": "Désactiver sur cet onglet"
+  },
+  "popupPreview": {
+    "message": "Aperçu de l'avatar"
+  },
+  "popupPreviewClose": {
+    "message": "Fermer l'aperçu"
   }
 }

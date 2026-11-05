@@ -16,6 +16,7 @@
   "ttsProvider": "piper",
   "monitorAvatar": true,
   "monitorVolume": 0.8,
+  "previewWindow": true,
   "silenceMs": 800,
   "bargeInMs": 600,
   "sttModel": "gpt-live-transcribe",

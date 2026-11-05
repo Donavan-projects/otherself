@@ -35,6 +35,7 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | `pitchSemitones` | −6 à +6 | Hauteur de la voix Piper, en demi-tons, sans changer le débit : synthèse avec un `length_scale` × 2^(n/12), rejouée 2^(n/12) fois plus vite (micro injecté et retour audio ; la bouche suit le son joué). À comparer à l'écoute au banc d'essai (`voix~1.5`) | Hauteur du personnage : attribut `data-voix-hauteur` du SVG (`1.5` pour `otherself`), sinon `0` |
 | `monitorAvatar` | `true` / `false` | Retour audio : vous entendez la voix de l'avatar, jouée par l'extension hors de l'onglet de l'entretien (elle n'est donc jamais prise pour le recruteur) | Activé |
 | `monitorVolume` | 0 à 1 | Volume du retour audio | `0.8` |
+| `previewWindow` | `true` / `false` | Bouton « Aperçu de l'avatar » du popup, pour le tournage : fenêtre Picture-in-Picture montrant le flux vidéo envoyé à la plateforme, à l'endroit et sans son. `false` masque le bouton | Activé |
 | `silenceMs` | millisecondes | Silence après lequel le recruteur est considéré comme ayant fini sa question | `800` |
 | `bargeInMs` | millisecondes | Parole continue du recruteur par-dessus la voix de l'avatar nécessaire pour l'interrompre. En dessous, la prise de parole est ignorée (écho ou bruit probable) | `600` |
 | `sttModel` | modèle OpenAI | Transcription en flux (session Realtime) | `gpt-live-transcribe` |
