@@ -92,7 +92,7 @@ avatar/
   gabarit.svg  otherself.svg  otherself-v1.svg  fonds/   # personnages et fonds (SVG Inkscape)
 public/fonts/          # Noto Sans Bold (OFL), police du slogan
 docs/
-  spec.md  config.md  visuel-otherself.md
+  spec.md  config.md  visuel-otherself.md  tournage.md
 ```
 
 ## Décisions techniques (à connaître avant de modifier)
@@ -161,7 +161,7 @@ Les règles non négociables s'appliquent dès maintenant, y compris pour la dé
 - Prérequis : autoriser caméra et micro pour le site (cadenas de la barre d'adresse) ; désactiver le cadrage automatique côté avatar (Meet : Paramètres → Vidéo → Cadrage / Framing) et ne pas utiliser de fond virtuel ; activer l'extension sur l'onglet (popup → « Activer sur cet onglet ») ; cliquer le bouton OtherSelf dans la page et partager l'onglet avec son son ; si besoin, changer de micro dans la plateforme pour qu'elle redemande les flux. Recharger l'onglet annule l'injection.
 - Deux comptes : A porte l'avatar, B joue le recruteur, de préférence avec un casque.
 - Logs à observer : console de l'onglet (`[inject]` : images/s, temps de dessin, formes de bouche, niveau max toutes les 5 s) et console du document offscreen (`[llm]`, `[tts]`, `[vad]`, `LATENCE …`, transcription horodatée `Recruteur : …` / `Avatar : …`).
-- Tournage : bouton « Aperçu de l'avatar » du popup (fenêtre Picture-in-Picture du flux envoyé, à l'endroit, sans son ; logs `[preview]` : images par seconde du flux envoyé avant et pendant l'aperçu). L'ouverture n'est possible que par un clic dans le popup : Chrome transmet ce geste au script injecté.
+- Tournage : bouton « Aperçu de l'avatar » du popup (fenêtre Picture-in-Picture du flux envoyé, à l'endroit, sans son ; logs `[preview]` : images par seconde du flux envoyé avant et pendant l'aperçu). L'ouverture n'est possible que par un clic dans le popup : Chrome transmet ce geste au script injecté. Méthode d'enregistrement avec OBS (capture d'écran XSHM, rognage, checklist) : `docs/tournage.md`.
 - Banc d'essai sans plateforme : page `voices` (voix, réglages, hauteur, jeu « entretien ») et page `avatar` (aperçu animé).
 
 ## Conventions
