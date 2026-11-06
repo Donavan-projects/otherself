@@ -119,6 +119,10 @@ export default defineConfig({
           files.push({ absoluteSrc: resolve(root, dir, file), relativeDest: `${dest}/${file}` });
         }
       }
+      // Prototype VRM : modèles 3D de avatar/ copiés s'il y en a (aucun n'est obligatoire pour le build).
+      for (const file of readdirSync(resolve(root, 'avatar')).filter((name) => name.toLowerCase().endsWith('.vrm'))) {
+        files.push({ absoluteSrc: resolve(root, 'avatar', file), relativeDest: `avatar-vrm/${file}` });
+      }
       for (const [dest, src] of Object.entries(VENDOR_FILES)) {
         files.push({ absoluteSrc: resolve(root, src), relativeDest: dest });
       }
