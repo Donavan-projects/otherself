@@ -18,7 +18,7 @@ const params = new URLSearchParams(location.search);
 const physics = params.get('physics') !== '0';
 const antialias = params.get('aa') !== '0';
 const renderScale = Math.min(1, Math.max(0.25, Number(params.get('scale') ?? 1) || 1));
-const file = params.get('file') ?? 'Otherself.vrm';
+const file = params.get('file') ?? 'otherself.vrm';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#avatar')!;
 const statsBox = document.querySelector<HTMLPreElement>('#stats')!;

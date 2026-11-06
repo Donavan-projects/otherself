@@ -13,3 +13,6 @@ design/references/
 
 # Notes locales pour Claude Code (état, journal des tests, machine) : jamais commitées.
 CLAUDE.local.md
+
+# Modèle VRM exporté par VRoid (source, 15 Mo) : seul avatar/otherself.vrm, allégé, est commité.
+avatar/Otherself.vrm
