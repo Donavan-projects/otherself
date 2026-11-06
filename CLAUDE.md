@@ -66,10 +66,14 @@ entrypoints/
   rehearsal/           # page « faux recruteur » pour tester sans plateforme réelle
   avatar/              # page de l'avatar (aperçu animé, voix simulée)
   voices/              # banc d'essai des voix : Piper (voix, réglages, hauteur) et OpenAI, délais, écoute
+  vrm/                 # aperçu de l'avatar 3D (prototype VRM) : voix simulée, images/s, temps de dessin
 lib/
   vad.ts  stt.ts  llm.ts  tts.ts  prompt.ts  greeting.ts
   avatar.ts            # rendu du cadre : composition, yeux et bouche animés, bandeau (monde MAIN et pages)
   avatar-assets.ts     # pages de l'extension : SVG → images de l'avatar, variante, slogan courbé
+  avatar-vrm.ts        # prototype VRM : rendu three.js + three-vrm dans le même canvas, animation, repli SVG
+  vrm-assets.ts        # prototype VRM, pages de l'extension : slogan imprimé dans la texture du sweat, fond
+  glb.ts               # lecture / écriture GLB (VRM) sans dépendance (script et extension)
   conversation.ts      # tour de parole, ouverture (révélation + messageText), latence
   config.ts            # lecture de local/config.json (généré depuis config.local.json)
   page-audio.ts        # monde MAIN : lecture de la voix dans le micro injecté
@@ -88,8 +92,10 @@ lib/
 scripts/
   check-locales.ts     # vérification des fichiers _locales au build
   check-avatar-svg.ts  # vérification et correction des SVG de personnage au build
+  optimize-vrm.ts      # MANUEL (npm run vrm) : inspection et allègement du VRM exporté par VRoid
 avatar/
   gabarit.svg  otherself.svg  otherself-v1.svg  fonds/   # personnages et fonds (SVG Inkscape)
+  otherself.vrm        # avatar 3D allégé (commité) ; la source VRoid Otherself.vrm est ignorée par git
 public/fonts/          # Noto Sans Bold (OFL), police du slogan
 docs/
   spec.md  config.md  visuel-otherself.md  tournage.md
@@ -112,6 +118,7 @@ docs/
 - **Répartition bandeau / slogan** : sans cadrage automatique, le bandeau est l'élément principal (règle 1). Avec le cadrage automatique, le bandeau peut être coupé ; la transparence est alors assurée par le slogan du t-shirt et par la révélation vocale (règle 2).
 - **Désactivation** : bouton du popup (injection retirée, pistes arrêtées, partage arrêté, document offscreen fermé). Onglet fermé ou rechargé : partage et pont s'arrêtent d'eux-mêmes.
 - **Micro sur Meet** : Meet n'affiche pas toujours « Avatar IA – OtherSelf » tant qu'on ne change pas de micro dans son menu ; `devicechange` est envoyé à l'installation puis à +1 s et +3 s.
+- **Avatar 3D (prototype, branche `prototype-vrm`, `avatarRenderer: "vrm"`)** : modèle VRoid (VRM 1.0) rendu par three.js + three-vrm dans un canvas WebGL hors DOM, recopié à chaque image dans le canvas 2D capturé par-dessus le fond, **bandeau peint en dernier dans le canvas 2D** (règle 1 inchangée). Le SVG reste le défaut et le secours : rendu WebGL logiciel (SwiftShader, llvmpipe), échec du chargement ou contexte WebGL perdu → avatar SVG dans le même canvas, sans changer de piste. Textures décodées depuis le fichier par `createImageBitmap` (plugin de `GLTFLoader`), jamais par URL blob + fetch, que la CSP d'une plateforme peut bloquer. `npm run vrm -- optimize` est **manuel** (la source n'est pas commitée, le build ne doit pas en dépendre) : miniature, pantalon, chaussures, cordons de capuche et morph targets inutilisés retirés, textures ≤ 1024 px (15,5 → 5,4 Mo) ; gltf-transform n'est pas utilisé (il supprime les extensions VRMC). Slogan : imprimé par le popup dans la texture du sweat (agrandie à 2048 px), zone `VRM_SLOGAN_ZONE` en mètres (y 1,375 à 1,565 m), correspondance modèle → UV ajustée sur la pièce du devant ; cadrage résolu pour placer le haut des cheveux à y = 94 et le bas du slogan à y = 517, comme le SVG. Bouche : `MouthAnimator` inchangé, formes traduites en expressions VRM (repos et M : tout à 0, lèvres fermées ; E : ee 0,6 + ih 0,3 ; A : aa 0,8 ; O : oh 0,7 + ou 0,2), lissage 45 ms à l'ouverture, 80 ms à la fermeture. Le compteur de triangles de three.js (≈ 68 000) compte deux fois les primitives à contour MToon (≈ 36 000 triangles réels). Physique des cheveux et anticrénelage gardés (mode allégé sans intérêt mesuré). Licence du modèle : VRM Public License 1.0 (usage commercial autorisé), hors GPL, voir `THIRD_PARTY_NOTICES.md`.
 - **Licence : GPL-3.0-or-later** (`LICENSE`), imposée par eSpeak NG (GPL-3.0) embarqué dans `piper_phonemize`. Composants tiers, voix, police et images : `THIRD_PARTY_NOTICES.md`, copié avec `LICENSE` dans l'extension construite. Configuration locale : `docs/config.md`.
 
 ## Démo (priorité actuelle)
@@ -139,6 +146,7 @@ Ne pas commencer une étape avant que la précédente fonctionne.
 - Vérifier `enumerateDevices` : Meet affichait « Speaker not found » avec la liste injectée (fausse caméra, faux micro, sorties audio réelles).
 - Popup avec Activer / Pause / Reprendre la main.
 - Latence (cible 1,5 s) : seuil de silence réduit (`silenceMs`, 800 ms aujourd'hui) ; phrase d'attente préparée à l'avance, jouée dès la fin de la question pendant que le LLM répond (courte, neutre, sans rien affirmer sur le candidat).
+- Bouche pilotée par le texte (après le prototype VRM) : piper-tts-web ne renvoie que l'audio (`predict()`), et les modèles Piper standard n'ont pas de sortie de durées ; les identifiants de phonèmes sont accessibles par le remplacement de `session.run` déjà présent dans `lib/tts.worker.ts`. Pistes : vérifier les sorties du modèle norman (`outputNames`), réexporter la voix avec les durées, ou aligner les phonèmes sur l'audio ; puis associer phonèmes → expressions VRM, synchronisés sur la lecture réelle (`playback-started`).
 - Performances Piper : multi-thread via COOP/COEP sur les pages d'extension (gain mesuré nul en « medium », ×2 en « high ») ; demande une modification du manifeste.
 - **Autres moteurs de voix étudiés et écartés (29/10/2026) : ne pas refaire ces tests sans élément nouveau** (machine plus rapide, multi-thread, WebGPU fiable). En WebAssembly sur un thread, tous sont trop lents pour répondre en direct (à peu près le temps réel ou plus lent, contre 0,15 à 0,20 × pour Piper medium) ; mesures détaillées dans `CLAUDE.local.md`.
   - **Pocket TTS** (Kyutai, code MIT, poids CC BY 4.0 en accès conditionné ; voix Michael = VCTK p360, CC BY 4.0) : pas de portage navigateur prêt avec Michael (phonon-tts demande une conversion et des poids auto-hébergés ; l'export ONNX de KevinAHM n'a pas Michael, porte un fichier de licence CC BY-NC et charge ONNX Runtime depuis un CDN).
