@@ -14,103 +14,28 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import sharp from 'sharp';
+import { readAccessor, readGlb as parseGlb, vrmOf, writeGlb as serializeGlb, type BufferView, type Expression, type Glb, type GltfMaterial, type Json, type Primitive, type Vrm } from '../lib/glb.ts';
 
 const DEFAULT_SOURCE = 'avatar/Otherself.vrm';
 const DEFAULT_DESTINATION = 'avatar/otherself.vrm';
 /** Matériaux dont les primitives sont retirées : jamais visibles dans un cadrage en buste. */
 const DROPPED_MATERIALS = [/Bottoms/i, /Shoes/i];
 const MAX_TEXTURE_SIZE = 1024;
+/**
+ * Cordons de la capuche retirés : ils pendent au milieu du torse, devant le slogan (lib/vrm-assets.ts).
+ * Repérés comme petites pièces séparées du haut (moins de 64 sommets), devant le torse, près du milieu, dans sa
+ * moitié haute. Mettre à false pour les garder.
+ */
+const REMOVE_DRAWSTRINGS = true;
+const TOPS_MATERIAL = /Tops/i;
 
-const GLB_MAGIC = 0x46546c67;
-const CHUNK_JSON = 0x4e4f534a;
-const CHUNK_BIN = 0x004e4942;
-
-type Json = Record<string, unknown>;
-interface BufferView extends Json { buffer: number; byteOffset?: number; byteLength: number; byteStride?: number }
-interface Accessor extends Json { bufferView?: number; count: number; sparse?: unknown }
-interface Primitive extends Json { attributes: Record<string, number>; indices?: number; material?: number; targets?: Record<string, number>[] }
-interface Mesh extends Json { name?: string; primitives: Primitive[]; weights?: number[]; extras?: { targetNames?: string[] } }
-interface Image extends Json { name?: string; bufferView?: number; mimeType?: string; uri?: string }
-interface Texture extends Json { source?: number }
-interface Material extends Json { name?: string }
-interface Node extends Json { mesh?: number }
-interface Skin extends Json { inverseBindMatrices?: number }
-interface Bind extends Json { node?: number; index?: number; material?: number }
-interface Expression extends Json { morphTargetBinds?: Bind[]; materialColorBinds?: Bind[]; textureTransformBinds?: Bind[] }
-interface Gltf extends Json {
-  buffers: Json[];
-  bufferViews: BufferView[];
-  accessors: Accessor[];
-  meshes: Mesh[];
-  nodes: Node[];
-  materials: Material[];
-  textures?: Texture[];
-  images?: Image[];
-  skins?: Skin[];
-  animations?: { samplers: { input: number; output: number }[] }[];
-  extensions?: { VRMC_vrm?: Vrm; VRMC_springBone?: { springs?: { joints: unknown[] }[] } };
-}
-interface Vrm extends Json {
-  specVersion?: string;
-  meta: Json & { thumbnailImage?: number; commercialUsage?: string };
-  humanoid: { humanBones: Record<string, unknown> };
-  expressions?: { preset?: Record<string, Expression>; custom?: Record<string, Expression> };
-  lookAt?: { type?: string };
-}
-
-interface Glb {
-  json: Gltf;
-  bin: Uint8Array;
-}
-
-function readGlb(path: string): Glb {
-  const data = readFileSync(path);
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  if (view.getUint32(0, true) !== GLB_MAGIC) throw new Error(`${path} : pas un fichier GLB/VRM`);
-  let offset = 12;
-  let json: Gltf | null = null;
-  let bin = new Uint8Array();
-  while (offset < data.byteLength) {
-    const length = view.getUint32(offset, true);
-    const type = view.getUint32(offset + 4, true);
-    const chunk = data.subarray(offset + 8, offset + 8 + length);
-    if (type === CHUNK_JSON) json = JSON.parse(new TextDecoder().decode(chunk)) as Gltf;
-    else if (type === CHUNK_BIN) bin = new Uint8Array(chunk);
-    offset += 8 + length;
-  }
-  if (!json) throw new Error(`${path} : bloc JSON absent`);
-  if (json.buffers.length !== 1 || json.buffers[0]?.uri !== undefined) throw new Error(`${path} : un seul tampon intégré attendu`);
-  return { json, bin };
-}
+const readGlb = (path: string): Glb => parseGlb(new Uint8Array(readFileSync(path)), path);
 
 function writeGlb(path: string, glb: Glb): number {
-  const pad = (length: number) => (4 - (length % 4)) % 4;
-  let jsonText = JSON.stringify(glb.json);
-  jsonText += ' '.repeat(pad(new TextEncoder().encode(jsonText).byteLength));
-  const jsonBytes = new TextEncoder().encode(jsonText);
-  const binLength = glb.bin.byteLength + pad(glb.bin.byteLength);
-  const total = 12 + 8 + jsonBytes.byteLength + 8 + binLength;
-  const out = new Uint8Array(total);
-  const view = new DataView(out.buffer);
-  view.setUint32(0, GLB_MAGIC, true);
-  view.setUint32(4, 2, true);
-  view.setUint32(8, total, true);
-  view.setUint32(12, jsonBytes.byteLength, true);
-  view.setUint32(16, CHUNK_JSON, true);
-  out.set(jsonBytes, 20);
-  const binStart = 20 + jsonBytes.byteLength;
-  view.setUint32(binStart, binLength, true);
-  view.setUint32(binStart + 4, CHUNK_BIN, true);
-  out.set(glb.bin, binStart + 8);
-  writeFileSync(path, out);
-  return total;
+  const bytes = serializeGlb(glb);
+  writeFileSync(path, bytes);
+  return bytes.byteLength;
 }
-
-const vrmOf = (json: Gltf): Vrm => {
-  const vrm = json.extensions?.VRMC_vrm;
-  if (!vrm) throw new Error('extension VRMC_vrm absente (VRM 0.x non pris en charge)');
-  return vrm;
-};
 
 function expressionsOf(vrm: Vrm): [string, Expression][] {
   return [...Object.entries(vrm.expressions?.preset ?? {}), ...Object.entries(vrm.expressions?.custom ?? {})];
@@ -127,7 +52,7 @@ function textureRefs(value: unknown, visit: (ref: { index: number }) => void, ke
   }
 }
 
-function isOutlined(material: Material): boolean {
+function isOutlined(material: GltfMaterial): boolean {
   const mtoon = (material.extensions as Json | undefined)?.VRMC_materials_mtoon as Json | undefined;
   return !!mtoon && mtoon.outlineWidthMode !== undefined && mtoon.outlineWidthMode !== 'none' && Number(mtoon.outlineWidthFactor ?? 0) > 0;
 }
@@ -219,6 +144,9 @@ async function optimize(source: Glb): Promise<Glb> {
       return !DROPPED_MATERIALS.some((pattern) => pattern.test(name));
     });
   }
+
+  // 2 bis. Cordons de la capuche (indices du haut réécrits, sommets laissés : three-vrm retire ceux qui ne servent plus).
+  const replacedIndices = REMOVE_DRAWSTRINGS ? removeDrawstrings({ json, bin: source.bin }) : null;
 
   // 3. Morph targets utilisés par au moins une expression, par maillage.
   const usedTargets = new Map<number, Set<number>>();
@@ -324,6 +252,12 @@ async function optimize(source: Glb): Promise<Glb> {
   };
   const viewMap = new Map<number, number>();
   for (const accessor of json.accessors) {
+    if (replacedIndices && accessor === replacedIndices.accessor) {
+      accessor.bufferView = append(replacedIndices.bytes, {});
+      accessor.byteOffset = 0;
+      accessor.count = replacedIndices.count;
+      continue;
+    }
     if (accessor.bufferView === undefined) continue;
     const old = accessor.bufferView;
     if (!viewMap.has(old)) {
@@ -352,6 +286,64 @@ async function optimize(source: Glb): Promise<Glb> {
   }
   json.buffers = [{ byteLength: length }];
   return { json, bin };
+}
+
+/**
+ * Retire les triangles des cordons de la capuche dans la primitive du haut. Renvoie l'accesseur d'indices à
+ * remplacer et ses nouveaux octets (même type de composante), ou null si rien n'est retiré.
+ */
+function removeDrawstrings(glb: Glb): { accessor: Json; bytes: Uint8Array; count: number } | null {
+  const found = glb.json.meshes.flatMap((mesh) => mesh.primitives).find((primitive: Primitive) => TOPS_MATERIAL.test(glb.json.materials[primitive.material ?? -1]?.name ?? ''));
+  if (!found || found.indices === undefined) {
+    console.warn('cordons : haut du vêtement introuvable, rien retiré');
+    return null;
+  }
+  const positions = readAccessor(glb, found.attributes.POSITION!);
+  const indices = readAccessor(glb, found.indices).map((value) => value[0]!);
+  // Pièces séparées (composantes connexes) du haut.
+  const parent = positions.map((_, index) => index);
+  const root = (index: number): number => (parent[index] === index ? index : (parent[index] = root(parent[index]!)));
+  for (let t = 0; t < indices.length; t += 3) {
+    parent[root(indices[t]!)] = root(indices[t + 1]!);
+    parent[root(indices[t + 1]!)] = root(indices[t + 2]!);
+  }
+  const pieces = new Map<number, number[]>();
+  new Set(indices).forEach((vertex) => {
+    const key = root(vertex);
+    if (!pieces.has(key)) pieces.set(key, []);
+    pieces.get(key)!.push(vertex);
+  });
+  const bounds = (vertices: number[]) => {
+    const lo = [Infinity, Infinity, Infinity];
+    const hi = [-Infinity, -Infinity, -Infinity];
+    for (const vertex of vertices) positions[vertex]!.forEach((value, axis) => {
+      lo[axis] = Math.min(lo[axis]!, value);
+      hi[axis] = Math.max(hi[axis]!, value);
+    });
+    return { lo, hi };
+  };
+  const all = bounds([...new Set(indices)]);
+  const width = all.hi[0]! - all.lo[0]!;
+  const middleY = (all.lo[1]! + all.hi[1]!) / 2;
+  const middleZ = (all.lo[2]! + all.hi[2]!) / 2;
+  const strings = [...pieces.values()].filter((vertices) => {
+    const { lo, hi } = bounds(vertices);
+    return vertices.length < 64 && Math.max(Math.abs(lo[0]!), Math.abs(hi[0]!)) < width * 0.15 && lo[1]! > middleY && lo[2]! > middleZ && hi[1]! - lo[1]! > (all.hi[1]! - all.lo[1]!) * 0.1;
+  });
+  if (strings.length !== 2) {
+    console.warn(`cordons : ${strings.length} pièce(s) trouvée(s) au lieu de 2, rien retiré`);
+    return null;
+  }
+  const removed = new Set(strings.flat());
+  const kept: number[] = [];
+  for (let t = 0; t < indices.length; t += 3) {
+    const triangle = [indices[t]!, indices[t + 1]!, indices[t + 2]!];
+    if (!triangle.some((vertex) => removed.has(vertex))) kept.push(...triangle);
+  }
+  const accessor = glb.json.accessors[found.indices]!;
+  const bytes = accessor.componentType === 5125 ? new Uint8Array(new Uint32Array(kept).buffer) : new Uint8Array(new Uint16Array(kept).buffer);
+  console.log(`cordons : ${strings.length} pièces retirées (${(indices.length - kept.length) / 3} triangles)`);
+  return { accessor, bytes, count: kept.length };
 }
 
 const [command = 'inspect', first, second] = process.argv.slice(2);

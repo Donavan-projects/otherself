@@ -1,5 +1,6 @@
 import { mapAssets } from '@/lib/avatar';
 import { buildAvatarAssets } from '@/lib/avatar-assets';
+import { buildVrmAssets, mapVrmAssets } from '@/lib/vrm-assets';
 import { loadDemoConfig } from '@/lib/config';
 import { blobToFile, type SerializedSources } from '@/lib/injection-sources';
 import { createLogger } from '@/lib/log';
@@ -39,8 +40,18 @@ const preview = setupPreviewButton(document.querySelector<HTMLButtonElement>('#p
 async function loadSources(): Promise<SerializedSources> {
   const config = await loadDemoConfig();
   const { assets } = await buildAvatarAssets(config);
+  // Avatar 3D (prototype) : préparé en plus du SVG, qui reste le secours dans la page.
+  let vrm: SerializedSources['vrm'];
+  if (config.avatarRenderer === 'vrm') {
+    try {
+      vrm = await mapVrmAssets(await buildVrmAssets(config), blobToFile);
+    } catch (error) {
+      log(`avatar 3D indisponible (${error instanceof Error ? error.message : String(error)}) : avatar SVG utilisé`);
+    }
+  }
   return {
     avatar: await mapAssets(assets, blobToFile),
+    vrm,
     bannerText: config.bannerText,
     debugSafeZone: config.debugSafeZone,
   };

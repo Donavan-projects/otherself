@@ -27,6 +27,7 @@ const VENDOR_FILES: Record<string, string> = {
 const PASSTHROUGH_FIELDS = [
   'avatar',
   'background',
+  'avatarRenderer',
   'palette',
   'hairstyle',
   'accessories',

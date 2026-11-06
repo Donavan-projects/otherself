@@ -2,6 +2,7 @@
 // au monde MAIN de l'onglet, via les arguments de scripting.executeScript (pas de web_accessible_resources).
 
 import type { AvatarAssets } from './avatar';
+import type { VrmAssets } from './vrm-assets';
 
 export interface SerializedFile {
   base64: string;
@@ -10,6 +11,8 @@ export interface SerializedFile {
 
 export interface SerializedSources {
   avatar: AvatarAssets<SerializedFile>;
+  /** Avatar 3D (avatarRenderer: vrm) ; l'avatar SVG ci-dessus sert de secours. */
+  vrm?: VrmAssets<SerializedFile> | undefined;
   bannerText: string;
   debugSafeZone: boolean;
 }

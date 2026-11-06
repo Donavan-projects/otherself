@@ -17,6 +17,7 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | --- | --- | --- | --- |
 | `avatar` | nom de fichier | Personnage : `avatar/<avatar>.svg` (voir `avatar/gabarit.svg`) | `otherself` |
 | `background` | nom de fichier | Fond : `avatar/fonds/<background>.svg` | `bureau-clair` (autres fonds : `bureau`, `interieur-clair`) |
+| `avatarRenderer` | `svg` / `vrm` | Rendu de l'avatar. `vrm` (prototype) : modèle 3D `avatar/otherself.vrm` (VRoid), animé en WebGL, slogan imprimé sur le sweat ; sans accélération graphique ou en cas d'échec, l'avatar SVG est utilisé. Les champs `avatar`, `palette`, `hairstyle` et `accessories` ne concernent que le SVG (la voix reste celle du personnage SVG `avatar`) | `svg` |
 | `palette` | objet | Variante de couleurs sans redessiner : classe de la palette du SVG → couleur CSS. Exemple : `{ "peau": "#a86f4c", "cheveux": "#151010", "vetement": "#5b6470", "barbe": "none" }`. Classes : `peau`, `peau-trait`, `cheveux`, `cheveux-trait`, `sourcils`, `barbe`, `vetement` (surchemise), `vetement-2` (t-shirt), `vetement-trait`, `iris`, `levres`, `badge-fond` (encre du slogan)… | Couleurs du SVG |
 | `hairstyle` | nom | Coiffure : sous-groupe `coiffure_<nom>` du SVG | `principale` |
 | `accessories` | liste de noms | Accessoires affichés : sous-groupes `accessoire_<nom>` | aucun |

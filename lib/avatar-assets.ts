@@ -36,7 +36,7 @@ export type AvatarVariant = Pick<DemoConfig, 'avatar' | 'background' | 'palette'
 
 const assetUrl = (path: string) => browser.runtime.getURL(path as '/');
 
-async function fetchText(path: string): Promise<string> {
+export async function fetchText(path: string): Promise<string> {
   const response = await fetch(assetUrl(path));
   if (!response.ok) throw new Error(`${path} introuvable (${response.status})`);
   return response.text();
@@ -179,7 +179,7 @@ function withLayers(doc: Document, names: string[]): string {
   return new XMLSerializer().serializeToString(copy);
 }
 
-async function rasterize(svg: string, width: number, height: number): Promise<HTMLCanvasElement> {
+export async function rasterize(svg: string, width: number, height: number): Promise<HTMLCanvasElement> {
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
   try {
     const image = new Image();
@@ -193,14 +193,14 @@ async function rasterize(svg: string, width: number, height: number): Promise<HT
   }
 }
 
-function canvas(width: number, height: number): HTMLCanvasElement {
+export function canvas(width: number, height: number): HTMLCanvasElement {
   const result = document.createElement('canvas');
   result.width = width;
   result.height = height;
   return result;
 }
 
-function context(target: HTMLCanvasElement): CanvasRenderingContext2D {
+export function context(target: HTMLCanvasElement): CanvasRenderingContext2D {
   const ctx = target.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('contexte 2D indisponible');
   return ctx;
@@ -246,7 +246,7 @@ function union(sprites: Sprite<HTMLCanvasElement>[]): Rect {
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
-function toBlob(source: HTMLCanvasElement): Promise<Blob> {
+export function toBlob(source: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     source.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('encodage PNG impossible'))), 'image/png');
   });
@@ -269,7 +269,7 @@ function loadSloganFont(): Promise<void> {
  * donne data-lignes-max, de 1 à maxLines lignes choisies selon la forme de la zone ; écrites à plat puis recopiées
  * colonne par colonne avec la courbure du torse (bouts relevés de bend).
  */
-async function drawSlogan(ctx: CanvasRenderingContext2D, text: string, ink: string, zone: Rect, bend: number, maxLines?: number) {
+export async function drawSlogan(ctx: CanvasRenderingContext2D, text: string, ink: string, zone: Rect, bend: number, maxLines?: number) {
   await loadSloganFont();
   const width = Math.round(zone.width);
   const height = Math.round(zone.height);
