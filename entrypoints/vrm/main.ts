@@ -6,6 +6,7 @@
 import { createVrmRenderer } from '@/lib/avatar-vrm';
 import { loadDemoConfig } from '@/lib/config';
 import { createLogger } from '@/lib/log';
+import { buildAvatarAssets } from '@/lib/avatar-assets';
 import { buildVrmAssets } from '@/lib/vrm-assets';
 
 const FPS = 30;
@@ -28,14 +29,17 @@ function simulatedLevel(now: number): number {
 
 try {
   const config = await loadDemoConfig();
-  const assets = await buildVrmAssets(config);
+  // Le slogan reprend celui du personnage SVG : zone, lignes, police, encre.
+  const { slogan } = await buildAvatarAssets(config);
+  const assets = await buildVrmAssets(config, slogan);
   const renderer = await createVrmRenderer(
     canvas,
     {
       model: await assets.model.arrayBuffer(),
       background: await createImageBitmap(assets.background),
       banner: assets.banner,
-      slogan: assets.slogan,
+      camera: assets.camera,
+      slogan: { image: await createImageBitmap(assets.slogan), ...assets.sloganPlacement },
     },
     { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone },
     () => simulatedLevel(performance.now()),

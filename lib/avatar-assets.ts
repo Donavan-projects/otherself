@@ -32,6 +32,19 @@ const OVERLAY_LAYERS = ['badge'];
 const OVER_LAYERS = ['sourcils', 'cheveux_avant', 'accessoires'];
 const MOUTH_LAYERS: Record<MouthShape, string> = { repos: 'bouche_repos', A: 'bouche_A', E: 'bouche_E', O: 'bouche_O', M: 'bouche_M' };
 
+/** Slogan du personnage SVG, tel qu'imprimé dans le cadre : repris par l'avatar 3D (lib/vrm-assets.ts). */
+export interface SloganStyle {
+  /** Taille de la zone du slogan dans le cadre 1280×720 (pixels). */
+  width: number;
+  height: number;
+  /** Encre : couleur badge-fond de la palette du personnage. */
+  ink: string;
+  /** data-lignes-max du SVG (undefined : une ou deux lignes). */
+  maxLines: number | undefined;
+  /** Taille de police obtenue dans le cadre (pixels), pour comparaison. */
+  fontSize: number;
+}
+
 export type AvatarVariant = Pick<DemoConfig, 'avatar' | 'background' | 'palette' | 'hairstyle' | 'accessories' | 'bannerText' | 'bannerOffsetY'>;
 
 const assetUrl = (path: string) => browser.runtime.getURL(path as '/');
@@ -43,7 +56,7 @@ export async function fetchText(path: string): Promise<string> {
 }
 
 /** Construit les images de l'avatar à partir des SVG et de la variante choisie. */
-export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ assets: AvatarAssets<Blob>; layout: FrameLayout }> {
+export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ assets: AvatarAssets<Blob>; layout: FrameLayout; slogan: SloganStyle }> {
   const started = performance.now();
   const [characterSource, backgroundSource] = await Promise.all([
     fetchText(`/avatar-svg/${variant.avatar}.svg`),
@@ -100,7 +113,7 @@ export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ asset
   const bottom = layout.top + height;
   if (bottom < AVATAR_HEIGHT) ctx.drawImage(body, 0, height - 1, width, 1, layout.left, bottom, width, AVATAR_HEIGHT - bottom);
   const ink = paletteColor(character, 'badge-fond') ?? '#f2c62e';
-  await drawSlogan(ctx, variant.bannerText, ink, {
+  const printed = await drawSlogan(ctx, variant.bannerText, ink, {
     x: layout.left + slogan.x * layout.scale,
     y: layout.top + slogan.y * layout.scale,
     width: slogan.width * layout.scale,
@@ -124,7 +137,14 @@ export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ asset
     `avatar préparé en ${Math.round(performance.now() - started)} ms : ${variant.avatar} sur ${variant.background}, ` +
       `échelle ${layout.scale.toFixed(3)}, bandeau y = ${layout.banner.y}, zone animée ${region.width}x${region.height}`,
   );
-  return { assets, layout };
+  const sloganStyle: SloganStyle = {
+    width: slogan.width * layout.scale,
+    height: slogan.height * layout.scale,
+    ink,
+    maxLines: slogan.maxLines,
+    fontSize: printed.size,
+  };
+  return { assets, layout, slogan: sloganStyle };
 }
 
 /** Remplace les couleurs de la palette : { "peau": "#c68b62", "barbe": "none" }. */
@@ -260,6 +280,9 @@ function loadSloganFont(): Promise<void> {
     const font = new FontFace(SLOGAN_FONT, `url(${assetUrl(SLOGAN_FONT_URL)})`, { weight: '700' });
     await font.load();
     document.fonts.add(font);
+    // Sans elle, le canvas prendrait une police de remplacement (sans-serif) sans le dire.
+    if (!document.fonts.check(`700 20px ${SLOGAN_FONT}`)) throw new Error(`police du slogan (${SLOGAN_FONT_URL}) non chargée`);
+    log(`police du slogan chargée : ${SLOGAN_FONT_URL} (Noto Sans Bold)`);
   })();
   return fontLoaded;
 }
@@ -269,7 +292,14 @@ function loadSloganFont(): Promise<void> {
  * donne data-lignes-max, de 1 à maxLines lignes choisies selon la forme de la zone ; écrites à plat puis recopiées
  * colonne par colonne avec la courbure du torse (bouts relevés de bend).
  */
-export async function drawSlogan(ctx: CanvasRenderingContext2D, text: string, ink: string, zone: Rect, bend: number, maxLines?: number) {
+export async function drawSlogan(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  ink: string,
+  zone: Rect,
+  bend: number,
+  maxLines?: number,
+): Promise<{ lines: string[]; size: number }> {
   await loadSloganFont();
   const width = Math.round(zone.width);
   const height = Math.round(zone.height);
@@ -315,6 +345,7 @@ export async function drawSlogan(ctx: CanvasRenderingContext2D, text: string, in
     ctx.drawImage(flat, x, 0, 1, flat.height, zone.x + x, zone.y - pad - bend * u * u, 1, flat.height);
   }
   ctx.restore();
+  return { lines, size };
 }
 
 /**

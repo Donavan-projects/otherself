@@ -55,7 +55,8 @@ export default defineContentScript({
           model: await fileToBlob(sources.vrm.model).arrayBuffer(),
           background: await createImageBitmap(fileToBlob(sources.vrm.background)),
           banner: sources.vrm.banner,
-          slogan: sources.vrm.slogan,
+          camera: sources.vrm.camera,
+          slogan: { image: await createImageBitmap(fileToBlob(sources.vrm.slogan)), ...sources.vrm.sloganPlacement },
         };
         if (vrm) log(`avatar 3D reçu : modèle ${(vrm.model.byteLength / 1e6).toFixed(1)} Mo, l'avatar SVG sert de secours`);
         log(`installation (${frame} ${location.href}) : avatar ${avatar.under.width}x${avatar.under.height}, bandeau « ${sources.bannerText} » à y = ${avatar.banner.y}`);

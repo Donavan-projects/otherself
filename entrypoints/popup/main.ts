@@ -39,12 +39,12 @@ const preview = setupPreviewButton(document.querySelector<HTMLButtonElement>('#p
 /** Avatar préparé ici (page de l'extension), puis remis à la page sous forme d'images seulement. */
 async function loadSources(): Promise<SerializedSources> {
   const config = await loadDemoConfig();
-  const { assets } = await buildAvatarAssets(config);
+  const { assets, slogan } = await buildAvatarAssets(config);
   // Avatar 3D (prototype) : préparé en plus du SVG, qui reste le secours dans la page.
   let vrm: SerializedSources['vrm'];
   if (config.avatarRenderer === 'vrm') {
     try {
-      vrm = await mapVrmAssets(await buildVrmAssets(config), blobToFile);
+      vrm = await mapVrmAssets(await buildVrmAssets(config, slogan), blobToFile);
     } catch (error) {
       log(`avatar 3D indisponible (${error instanceof Error ? error.message : String(error)}) : avatar SVG utilisé`);
     }

@@ -16,21 +16,29 @@ import {
   BlinkAnimator,
   HEAD_TOP,
   MouthAnimator,
-  SLOGAN_BOTTOM,
   drawBanner,
   drawSafeZone,
   type AvatarOptions,
   type MouthShape,
   type Rect,
 } from './avatar';
+import { affine, frameY, VRM_FOV, type VrmCamera } from './vrm-frame';
 
-/** Ce que le rendu reçoit dans la page : modèle (slogan déjà imprimé), fond, bandeau, zone du slogan (mètres). */
+/** Ce que le rendu reçoit dans la page : modèle (slogan déjà imprimé), fond, bandeau, caméra (lib/vrm-frame.ts). */
 export interface VrmSources {
   model: ArrayBuffer;
   background: ImageBitmap;
   banner: Rect;
-  slogan: { top: number; bottom: number; front: number };
+  camera: VrmCamera;
+  /** Slogan dessiné à plat (lib/vrm-assets.ts) et la zone qu'il doit occuper dans le cadre (pixels). */
+  slogan: { image: ImageBitmap; zone: Rect; scale: number; pad: number };
 }
+
+/** Matériau du sweat (VRoid : « Tops ») et taille de sa texture une fois le slogan imprimé. */
+const SHIRT_MATERIAL = /Tops/i;
+const SHIRT_TEXTURE_SIZE = 2048;
+/** Débord de chaque triangle (pixels de texture) : pas de joint visible entre deux triangles voisins. */
+const TRIANGLE_BLEED = 0.75;
 
 /** Rendu d'une image du flux : SVG (AvatarRenderer) ou VRM, dans le même canvas de sortie. */
 export interface FrameRenderer {
@@ -65,7 +73,6 @@ const POSE: Partial<Record<VRMHumanBoneName, [number, number, number]>> = {
 };
 /** Images de physique jouées avant la première image : les cheveux retombent depuis la T-pose. */
 const WARMUP_FRAMES = 60;
-const FOV = 18;
 const DEG = Math.PI / 180;
 
 export async function createVrmRenderer(
@@ -153,9 +160,12 @@ export class VrmAvatarRenderer implements FrameRenderer {
     });
 
     this.scene.add(vrm.scene);
+    // Une seule lumière directionnelle d'intensité π, comme les exemples de three-vrm : couleurs de VRoid retrouvées
+    // (peau 241,212,191, comme la miniature rendue par VRoid). Une lumière ambiante s'ajoute à l'éclairage global de
+    // MToon et délave le personnage (peau saturée au blanc avec 0,4π, encore trop claire avec 0,15π).
     const light = new THREE.DirectionalLight(0xffffff, Math.PI);
     light.position.set(0.5, 1.5, 2);
-    this.scene.add(light, new THREE.AmbientLight(0xffffff, 0.4 * Math.PI));
+    this.scene.add(light);
 
     for (const [name, [x, y, z]] of Object.entries(POSE) as [VRMHumanBoneName, [number, number, number]][]) {
       vrm.humanoid.getNormalizedBoneNode(name)?.rotation.set(x, y, z);
@@ -165,7 +175,8 @@ export class VrmAvatarRenderer implements FrameRenderer {
     for (let i = 0; i < WARMUP_FRAMES; i += 1) vrm.update(1 / 30);
     vrm.scene.updateMatrixWorld(true);
 
-    this.camera = frameCamera(vrm, sources.slogan, log);
+    this.camera = createCamera(vrm, sources.camera, log);
+    printSloganOnShirt(vrm, this.camera, sources.slogan, log);
     this.motion = new VrmMotion(vrm, this.camera);
 
     this.banner = new OffscreenCanvas(sources.banner.width, sources.banner.height);
@@ -195,32 +206,137 @@ export class VrmAvatarRenderer implements FrameRenderer {
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.sources.background.close();
+    this.sources.slogan.image.close();
   }
 }
 
-/**
- * Caméra fixe, horizontale, face au personnage : haut des cheveux à y = HEAD_TOP et bas du slogan à y = SLOGAN_BOTTOM,
- * comme le cadrage du personnage SVG (le bandeau est placé en conséquence par lib/vrm-assets.ts). Résolu exactement
- * en tenant compte de la profondeur (le slogan est sur le devant du torse, plus près que le haut de la tête).
- */
-function frameCamera(vrm: VRM, slogan: VrmSources['slogan'], log: (message: string) => void): THREE.PerspectiveCamera {
-  const top = highestVertex(vrm.scene);
-  const f = AVATAR_HEIGHT / 2 / Math.tan((FOV / 2) * DEG);
-  // y_px = H/2 − (Y − cameraY)·f / (D − Z) pour un point (Y, Z) et une caméra en (0, cameraY, D) regardant vers −Z.
-  const k1 = (AVATAR_HEIGHT / 2 - HEAD_TOP) / f;
-  const k2 = (AVATAR_HEIGHT / 2 - SLOGAN_BOTTOM) / f;
-  const distance = (top.y - slogan.bottom + k1 * top.z - k2 * slogan.front) / (k1 - k2);
-  const cameraY = top.y - k1 * (distance - top.z);
-  const camera = new THREE.PerspectiveCamera(FOV, AVATAR_WIDTH / AVATAR_HEIGHT, 0.1, 20);
-  camera.position.set(0, cameraY, distance);
-  camera.lookAt(0, cameraY, 0);
+/** Caméra calculée à la préparation (lib/vrm-assets.ts) ; le journal vérifie le haut des cheveux une fois posés. */
+function createCamera(vrm: VRM, frame: VrmCamera, log: (message: string) => void): THREE.PerspectiveCamera {
+  const camera = new THREE.PerspectiveCamera(VRM_FOV, AVATAR_WIDTH / AVATAR_HEIGHT, 0.1, 20);
+  camera.position.set(0, frame.y, frame.distance);
+  camera.lookAt(0, frame.y, 0);
   camera.updateMatrixWorld(true);
-  const sloganTop = new THREE.Vector3(0, slogan.top, slogan.front).project(camera);
-  log(
-    `cadrage : haut des cheveux ${top.y.toFixed(3)} m → y = ${HEAD_TOP}, slogan ${slogan.top}–${slogan.bottom} m → ` +
-      `y = ${Math.round(((1 - sloganTop.y) / 2) * AVATAR_HEIGHT)}–${SLOGAN_BOTTOM}, caméra à ${distance.toFixed(2)} m`,
-  );
+  const top = highestVertex(vrm.scene);
+  log(`cadrage : caméra à ${frame.distance.toFixed(2)} m, haut des cheveux posés à y = ${Math.round(frameY(frame, top.y, top.z))} (visé : ${HEAD_TOP})`);
   return camera;
+}
+
+type Textured = THREE.Material & { map?: THREE.Texture | null; shadeMultiplyTexture?: THREE.Texture | null };
+
+/**
+ * Imprime le slogan dans la texture du sweat, sur le personnage posé (bras baissés, cheveux retombés) : chaque triangle
+ * visible du sweat sous la zone du slogan est projeté par la caméra, et le morceau correspondant du slogan à plat est
+ * recopié dans la texture par la transformation affine (cadre → texture) de ce triangle. Au repos, le slogan apparaît
+ * donc exactement dans sa zone du cadre, à plat, comme sur le personnage SVG ; il suit ensuite le torse (respiration).
+ */
+function printSloganOnShirt(vrm: VRM, camera: THREE.Camera, slogan: VrmSources['slogan'], log: (message: string) => void) {
+  const started = performance.now();
+  const meshes: { mesh: THREE.Mesh; material: Textured }[] = [];
+  vrm.scene.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    const materials = (Array.isArray(object.material) ? object.material : [object.material]) as Textured[];
+    const material = materials.find((item) => SHIRT_MATERIAL.test(item.name) && item.map);
+    if (material) meshes.push({ mesh: object, material });
+  });
+  const first = meshes[0];
+  const original = first?.material.map?.image as CanvasImageSource | undefined;
+  if (!first || !original) throw new Error('sweat (matériau Tops) ou sa texture introuvable');
+
+  const size = SHIRT_TEXTURE_SIZE;
+  const texture = document.createElement('canvas');
+  texture.width = size;
+  texture.height = size;
+  const ctx = texture.getContext('2d');
+  if (!ctx) throw new Error('contexte 2D indisponible');
+  ctx.drawImage(original, 0, 0, size, size);
+
+  // Triangles du sweat, posés : sommets dans le cadre (pixels), profondeur, coordonnées de texture.
+  interface Piece { screen: [number, number][]; uv: [number, number][]; depth: number }
+  const { zone } = slogan;
+  const cameraPosition = camera.getWorldPosition(new THREE.Vector3());
+  const candidates: Piece[] = [];
+  const world = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] as const;
+  const normal = new THREE.Vector3();
+  const toCamera = new THREE.Vector3();
+  for (const { mesh } of meshes) {
+    const index = mesh.geometry.getIndex();
+    const uv = mesh.geometry.getAttribute('uv');
+    if (!index || !uv) continue;
+    for (let t = 0; t + 2 < index.count; t += 3) {
+      const corners = [index.getX(t), index.getX(t + 1), index.getX(t + 2)];
+      corners.forEach((vertex, k) => mesh.getVertexPosition(vertex, world[k]!).applyMatrix4(mesh.matrixWorld));
+      normal.subVectors(world[1], world[0]).cross(toCamera.subVectors(world[2], world[0])).normalize();
+      toCamera.subVectors(cameraPosition, world[0]).normalize();
+      if (normal.dot(toCamera) < 0.2) continue;
+      const screen = world.map((point) => {
+        const ndc = point.clone().project(camera);
+        return [((ndc.x + 1) / 2) * AVATAR_WIDTH, ((1 - ndc.y) / 2) * AVATAR_HEIGHT] as [number, number];
+      });
+      const xs = screen.map(([x]) => x);
+      const ys = screen.map(([, y]) => y);
+      if (Math.max(...xs) < zone.x - 2 || Math.min(...xs) > zone.x + zone.width + 2) continue;
+      if (Math.max(...ys) < zone.y - 2 || Math.min(...ys) > zone.y + zone.height + 2) continue;
+      const centroid = new THREE.Vector3().add(world[0]).add(world[1]).add(world[2]).divideScalar(3);
+      candidates.push({
+        screen,
+        uv: corners.map((vertex) => [uv.getX(vertex) * size, uv.getY(vertex) * size] as [number, number]),
+        depth: centroid.distanceTo(cameraPosition),
+      });
+    }
+  }
+  // Pièces cachées (doublure, capuche derrière le torse) : un triangle nettement plus proche recouvre leur centre.
+  const visible = candidates.filter((piece) => {
+    const [cx, cy] = centroid2d(piece.screen);
+    return !candidates.some((other) => other.depth < piece.depth - 0.03 && insideTriangle(cx, cy, other.screen));
+  });
+
+  for (const piece of visible) {
+    const from = piece.screen.map(([x, y]) => [(x - zone.x) * slogan.scale + slogan.pad, (y - zone.y) * slogan.scale + slogan.pad] as [number, number]);
+    const transform = affine(from, piece.uv);
+    if (!transform) continue;
+    const [cx, cy] = centroid2d(piece.uv);
+    ctx.save();
+    ctx.beginPath();
+    piece.uv.forEach(([u, v], corner) => {
+      const length = Math.hypot(u - cx, v - cy) || 1;
+      const x = u + ((u - cx) / length) * TRIANGLE_BLEED;
+      const y = v + ((v - cy) / length) * TRIANGLE_BLEED;
+      if (corner === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.clip();
+    ctx.setTransform(...transform);
+    ctx.drawImage(slogan.image, 0, 0);
+    ctx.restore();
+  }
+  if (visible.length === 0) throw new Error('aucun triangle du sweat sous la zone du slogan');
+
+  // Toutes les textures qui montrent cette image (couleur, ombre MToon) passent à la version avec le slogan.
+  vrm.scene.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    for (const material of (Array.isArray(object.material) ? object.material : [object.material]) as Textured[]) {
+      for (const map of [material.map, material.shadeMultiplyTexture]) {
+        if (map && map.image === original) {
+          map.image = texture;
+          map.needsUpdate = true;
+        }
+      }
+    }
+  });
+  log(`slogan imprimé sur le sweat posé : ${visible.length} triangles (${candidates.length - visible.length} cachés), ${Math.round(performance.now() - started)} ms`);
+}
+
+function centroid2d(points: [number, number][]): [number, number] {
+  return [(points[0]![0] + points[1]![0] + points[2]![0]) / 3, (points[0]![1] + points[1]![1] + points[2]![1]) / 3];
+}
+
+function insideTriangle(x: number, y: number, [a, b, c]: [number, number][]): boolean {
+  const side = (p: [number, number], q: [number, number]) => (q[0] - p[0]) * (y - p[1]) - (q[1] - p[1]) * (x - p[0]);
+  const d1 = side(a!, b!);
+  const d2 = side(b!, c!);
+  const d3 = side(c!, a!);
+  return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
 }
 
 /** Sommet le plus haut du modèle posé (peau comprise) : haut des cheveux. */
