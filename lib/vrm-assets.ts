@@ -6,16 +6,14 @@
 import { AVATAR_HEIGHT, AVATAR_WIDTH, composeFrame, SLOGAN_BOTTOM, type Rect } from './avatar';
 import { canvas, context, drawSlogan, fetchText, rasterize, toBlob, type SloganStyle } from './avatar-assets';
 import type { DemoConfig } from './config';
-import { findPrimitive, readAccessor, readGlb, type Glb, type Primitive } from './glb';
+import { findPrimitive, readAccessor, readGlb, vrmOf, type Glb, type Primitive } from './glb';
 import { createLogger } from './log';
-import { frameY, solveVrmCamera, VRM_FRAME_ANCHOR_Y, type VrmCamera } from './vrm-frame';
+import { frameY, solveVrmCamera, VRM_FRAME_ANCHOR, VRM_SLOGAN_TOP, type BoneLandmark, type VrmCamera } from './vrm-frame';
 
 const log = createLogger('avatar');
 
 const MODEL_URL = '/avatar-vrm/otherself.vrm';
 const TOPS_MATERIAL = /Tops/i;
-/** Haut du slogan sur le sweat (mètres, espace du modèle) : haut du torse, juste sous l'encolure en V. */
-export const VRM_SLOGAN_TOP = 1.565;
 /** Slogan dessiné à plat avec 3 pixels par pixel du cadre (netteté une fois imprimé dans la texture agrandie). */
 const FLAT_OVERSAMPLING = 3;
 const FLAT_PAD = 4;
@@ -55,9 +53,14 @@ export async function buildVrmAssets(variant: VrmVariant, sloganStyle: SloganSty
   if (!response.ok) throw new Error(`${MODEL_URL} introuvable (${response.status})`);
   const model = await response.blob();
   const glb = readGlb(new Uint8Array(await model.arrayBuffer()), 'otherself.vrm');
-  const shirt = readShirt(glb);
-  const camera = solveVrmCamera(hairTop(glb), { y: VRM_FRAME_ANCHOR_Y, z: shirt.frontZ(VRM_FRAME_ANCHOR_Y) });
-  const slogan = await drawFlatSlogan(variant.bannerText, sloganStyle, Math.round(frameY(camera, VRM_SLOGAN_TOP, shirt.frontZ(VRM_SLOGAN_TOP))));
+  const anchorY = boneHeight(glb, VRM_FRAME_ANCHOR);
+  const sloganTop = boneHeight(glb, VRM_SLOGAN_TOP);
+  const shirt = readShirt(glb, anchorY);
+  const top = hairTop(glb);
+  const camera = solveVrmCamera(top, { y: anchorY, z: shirt.frontZ(anchorY) });
+  const sloganTopInFrame = Math.round(frameY(camera, sloganTop, shirt.frontZ(sloganTop)));
+  log(`repères : haut des cheveux ${top.y.toFixed(3)} m, cadrage ${anchorY.toFixed(3)} m (y = 517), haut du slogan ${sloganTop.toFixed(3)} m (y = ${sloganTopInFrame})`);
+  const slogan = await drawFlatSlogan(variant.bannerText, sloganStyle, sloganTopInFrame);
   const background = await rasterize(await fetchText(`/avatar-svg/fonds/${variant.background}.svg`), AVATAR_WIDTH, AVATAR_HEIGHT);
   // Bandeau placé comme pour le personnage SVG : sous y = SLOGAN_BOTTOM, bannerOffsetY borné.
   const layout = composeFrame({ width: 1, hairTop: 0, sloganBottom: 1, sloganBottomInFrame: SLOGAN_BOTTOM }, variant.bannerOffsetY);
@@ -75,6 +78,53 @@ export async function buildVrmAssets(variant: VrmVariant, sloganStyle: SloganSty
       `caméra à ${camera.distance.toFixed(2)} m, fond ${variant.background}, bandeau y = ${layout.banner.y}`,
   );
   return assets;
+}
+
+/** Hauteur (mètres, pose de repos) d'un repère placé entre deux os : positions des os par leurs matrices glTF. */
+function boneHeight(glb: Glb, landmark: BoneLandmark): number {
+  const bones = vrmOf(glb.json).humanoid.humanBones as Record<string, { node?: number } | undefined>;
+  const at = (name: string) => {
+    const node = bones[name]?.node;
+    if (node === undefined) throw new Error(`otherself.vrm : os ${name} absent`);
+    return nodeWorldMatrix(glb, node)[13]!;
+  };
+  const from = at(landmark.from);
+  return from + (at(landmark.to) - from) * landmark.at;
+}
+
+type Mat4 = number[];
+
+/** Matrice du nœud dans la scène (ordre de glTF : colonnes), produit des matrices locales depuis la racine. */
+function nodeWorldMatrix(glb: Glb, index: number): Mat4 {
+  const nodes = glb.json.nodes as { children?: number[]; translation?: number[]; rotation?: number[]; scale?: number[]; matrix?: number[] }[];
+  const parent = new Map<number, number>();
+  nodes.forEach((node, i) => node.children?.forEach((child) => parent.set(child, i)));
+  const local = (node: (typeof nodes)[number]): Mat4 => {
+    if (node.matrix) return node.matrix;
+    const [x = 0, y = 0, z = 0, w = 1] = node.rotation ?? [];
+    const [sx = 1, sy = 1, sz = 1] = node.scale ?? [];
+    const [tx = 0, ty = 0, tz = 0] = node.translation ?? [];
+    return [
+      (1 - 2 * (y * y + z * z)) * sx, 2 * (x * y + z * w) * sx, 2 * (x * z - y * w) * sx, 0,
+      2 * (x * y - z * w) * sy, (1 - 2 * (x * x + z * z)) * sy, 2 * (y * z + x * w) * sy, 0,
+      2 * (x * z + y * w) * sz, 2 * (y * z - x * w) * sz, (1 - 2 * (x * x + y * y)) * sz, 0,
+      tx, ty, tz, 1,
+    ];
+  };
+  const multiply = (a: Mat4, b: Mat4): Mat4 => {
+    const out: Mat4 = [];
+    for (let column = 0; column < 4; column += 1) {
+      for (let row = 0; row < 4; row += 1) {
+        let sum = 0;
+        for (let k = 0; k < 4; k += 1) sum += a[k * 4 + row]! * b[column * 4 + k]!;
+        out[column * 4 + row] = sum;
+      }
+    }
+    return out;
+  };
+  let matrix = local(nodes[index]!);
+  for (let up = parent.get(index); up !== undefined; up = parent.get(up)) matrix = multiply(local(nodes[up]!), matrix);
+  return matrix;
 }
 
 /** Haut des cheveux en pose de repos : sommet le plus haut de tous les maillages (y, et sa profondeur z). */
@@ -97,8 +147,8 @@ interface Shirt {
   frontZ(y: number): number;
 }
 
-/** Sweat : pièce du devant (composante connexe du triangle avant le plus proche du centre du torse). */
-function readShirt(glb: Glb): Shirt {
+/** Sweat : pièce du devant (composante connexe du triangle avant le plus proche du milieu de la poitrine, à y = chestY). */
+function readShirt(glb: Glb, chestY: number): Shirt {
   const found = findPrimitive(glb.json, TOPS_MATERIAL);
   if (!found) throw new Error('otherself.vrm : matériau du sweat (Tops) introuvable');
   const primitive: Primitive = found.primitive;
@@ -126,13 +176,12 @@ function readShirt(glb: Glb): Shirt {
     const nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
     return nz / (Math.hypot(nx, ny, nz) || 1);
   };
-  const middle = (VRM_SLOGAN_TOP + VRM_FRAME_ANCHOR_Y) / 2;
   let nearest: [number, number, number] | null = null;
   let nearestDistance = Infinity;
   for (const triangle of triangles) {
     if (facing(triangle) < 0.8) continue;
     const [x = 0, y = 0] = positions[triangle[0]]!;
-    const distance = x * x + (y - middle) ** 2;
+    const distance = x * x + (y - chestY) ** 2;
     if (distance < nearestDistance) {
       nearestDistance = distance;
       nearest = triangle;

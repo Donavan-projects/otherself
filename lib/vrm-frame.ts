@@ -5,11 +5,22 @@
 import { AVATAR_HEIGHT, HEAD_TOP, SLOGAN_BOTTOM } from './avatar';
 
 export const VRM_FOV = 18;
+/** Hauteur placée entre deux os du squelette humanoïde (fraction at de from vers to), en pose de repos. */
+export interface BoneLandmark {
+  from: string;
+  to: string;
+  at: number;
+}
+
 /**
  * Point du devant du sweat placé à y = SLOGAN_BOTTOM (517), le haut des cheveux étant à y = HEAD_TOP (94) : cadrage
- * validé sur Meet le 06/11 (pas de recadrage, bandeau sous le personnage). Mètres, espace de avatar/otherself.vrm.
+ * validé sur Meet le 06/11 (pas de recadrage, bandeau sous le personnage). Repéré par les os, pas en mètres, pour
+ * suivre les proportions du modèle à chaque réexport. Fractions calculées sur le modèle validé le 06/11 : elles y
+ * redonnent exactement 1,375 m (cadrage) et 1,565 m (haut du slogan).
  */
-export const VRM_FRAME_ANCHOR_Y = 1.375;
+export const VRM_FRAME_ANCHOR: BoneLandmark = { from: 'chest', to: 'upperChest', at: 0.514 };
+/** Haut du slogan : haut du torse, juste sous l'encolure en V. */
+export const VRM_SLOGAN_TOP: BoneLandmark = { from: 'upperChest', to: 'neck', at: 0.663 };
 
 export interface VrmCamera {
   /** Hauteur et distance de la caméra (mètres). */

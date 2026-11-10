@@ -75,14 +75,23 @@ const POSE: Partial<Record<VRMHumanBoneName, [number, number, number]>> = {
 const WARMUP_FRAMES = 60;
 const DEG = Math.PI / 180;
 
+/** Pages de l'extension seulement (aperçu, contrôles automatiques), jamais dans la caméra injectée. */
+export interface VrmPreviewOptions {
+  /** Accepte le rendu WebGL logiciel (contrôle visuel sans carte graphique). */
+  allowSoftwareRendering?: boolean;
+  /** Forme de bouche imposée, quel que soit le niveau de la voix. */
+  mouth?: MouthShape;
+  /** Ni clignement, ni saccade, ni mouvement de tête : captures comparables d'une image à l'autre. */
+  still?: boolean;
+}
+
 export async function createVrmRenderer(
   canvas: HTMLCanvasElement,
   sources: VrmSources,
   options: AvatarOptions,
   level: () => number = () => 0,
   log: (message: string) => void = () => {},
-  /** Pages de l'extension seulement (aperçu, contrôles automatiques) : accepte le rendu WebGL logiciel. */
-  allowSoftwareRendering = false,
+  preview: VrmPreviewOptions = {},
 ): Promise<VrmAvatarRenderer> {
   // WebGL d'abord : sans accélération graphique, inutile de charger le modèle (l'appelant revient au SVG).
   const glCanvas = document.createElement('canvas');
@@ -92,7 +101,7 @@ export async function createVrmRenderer(
     const info = gl.getExtension('WEBGL_debug_renderer_info');
     const gpu = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
     log(`WebGL : ${gpu}`);
-    if (!allowSoftwareRendering && /swiftshader|llvmpipe|softpipe|software/i.test(gpu)) throw new Error(`rendu WebGL logiciel (${gpu}) : trop lent pour l’avatar 3D`);
+    if (!preview.allowSoftwareRendering && /swiftshader|llvmpipe|softpipe|software/i.test(gpu)) throw new Error(`rendu WebGL logiciel (${gpu}) : trop lent pour l’avatar 3D`);
     renderer.setPixelRatio(1);
     renderer.setSize(AVATAR_WIDTH, AVATAR_HEIGHT, false);
     renderer.setClearColor(0x000000, 0);
@@ -110,7 +119,7 @@ export async function createVrmRenderer(
     // Cadre fixe : tout le personnage est toujours à l'image, pas de test de visibilité.
     vrm.scene.traverse((object) => (object.frustumCulled = false));
     log(`modèle VRM chargé en ${Math.round(performance.now() - started)} ms`);
-    return new VrmAvatarRenderer(canvas, renderer, vrm, sources, options, level, log);
+    return new VrmAvatarRenderer(canvas, renderer, vrm, sources, options, level, log, preview);
   } catch (error) {
     renderer.dispose();
     renderer.forceContextLoss();
@@ -141,6 +150,7 @@ export class VrmAvatarRenderer implements FrameRenderer {
     options: AvatarOptions,
     level: () => number,
     log: (message: string) => void,
+    preview: VrmPreviewOptions = {},
   ) {
     canvas.width = AVATAR_WIDTH;
     canvas.height = AVATAR_HEIGHT;
@@ -177,7 +187,7 @@ export class VrmAvatarRenderer implements FrameRenderer {
 
     this.camera = createCamera(vrm, sources.camera, log);
     printSloganOnShirt(vrm, this.camera, sources.slogan, log);
-    this.motion = new VrmMotion(vrm, this.camera);
+    this.motion = new VrmMotion(vrm, this.camera, preview);
 
     this.banner = new OffscreenCanvas(sources.banner.width, sources.banner.height);
     const bannerCtx = this.banner.getContext('2d');
@@ -393,7 +403,10 @@ class VrmMotion {
   private nextSaccade: number;
   private gazeReturn = Infinity;
 
-  constructor(vrm: VRM, camera: THREE.Camera) {
+  private readonly preview: VrmPreviewOptions;
+
+  constructor(vrm: VRM, camera: THREE.Camera, preview: VrmPreviewOptions = {}) {
+    this.preview = preview;
     this.vrm = vrm;
     this.camera = camera;
     const now = performance.now();
@@ -414,13 +427,18 @@ class VrmMotion {
 
   update(now: number, dt: number, level: number): MouthShape {
     const t = now / 1000;
-    const shape = this.mouth.update(level, now);
+    const shape = this.preview.mouth ?? this.mouth.update(level, now);
     this.speaking = approach(this.speaking, Math.min(1, level / SPEAKING_LEVEL), dt, 0.35);
 
     // Bouche et paupières.
     const targets = MOUTH_EXPRESSIONS[shape];
     for (const name of VISEMES) this.smooth(name, targets[name] ?? 0, dt, MOUTH_ATTACK, MOUTH_RELEASE);
-    this.smooth('blink', this.blink.closed(now) ? 1 : 0, dt, BLINK_CLOSE, BLINK_OPEN);
+    this.smooth('blink', !this.preview.still && this.blink.closed(now) ? 1 : 0, dt, BLINK_CLOSE, BLINK_OPEN);
+    if (this.preview.still) {
+      // Aperçu immobile : regard droit vers la caméra, tête et buste au repos.
+      this.camera.getWorldPosition(this.gazeTarget.position);
+      return shape;
+    }
 
     // Regard : vers la caméra, petites saccades ; de temps en temps un bref coup d'œil ailleurs (réflexion).
     if (now >= this.gazeReturn) {

@@ -1,8 +1,10 @@
 // Page de l'avatar 3D (prototype VRM) : aperçu animé avec une voix simulée et mesure du coût du rendu, par le même
 // chemin que la caméra injectée (lib/vrm-assets.ts puis lib/avatar-vrm.ts, bandeau peint en dernier).
 // Paramètres de l'adresse : ?speak=0 pour l'avatar silencieux (regard, respiration, clignements seuls) ; ?software=1
-// accepte le rendu WebGL logiciel (contrôle visuel sans carte graphique, trop lent pour un vrai usage).
+// accepte le rendu WebGL logiciel (contrôle visuel sans carte graphique, trop lent pour un vrai usage) ; ?mouth=A et
+// ?still=1 : voir plus bas.
 
+import { MOUTH_SHAPES } from '@/lib/avatar';
 import { createVrmRenderer } from '@/lib/avatar-vrm';
 import { loadDemoConfig } from '@/lib/config';
 import { createLogger } from '@/lib/log';
@@ -15,6 +17,10 @@ const log = createLogger('vrm');
 const params = new URLSearchParams(location.search);
 const speak = params.get('speak') !== '0';
 const allowSoftware = params.get('software') === '1';
+// Contrôle visuel des formes de bouche : ?mouth=repos|M|E|A|O impose la forme, ?still=1 fige clignements et mouvements.
+const mouthParam = params.get('mouth');
+const mouth = MOUTH_SHAPES.find((shape) => shape === mouthParam);
+const still = params.get('still') === '1';
 const canvas = document.querySelector<HTMLCanvasElement>('#avatar')!;
 const statsBox = document.querySelector<HTMLPreElement>('#stats')!;
 
@@ -44,7 +50,7 @@ try {
     { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone },
     () => simulatedLevel(performance.now()),
     log,
-    allowSoftware,
+    { allowSoftwareRendering: allowSoftware, mouth, still },
   );
 
   let frames = 0;
