@@ -8,6 +8,7 @@ const DEFAULT_LOCALE = 'fr';
 const LOCAL_CONFIG = 'config.local.json';
 const AUDIO_EXTENSIONS = ['.mp3', '.ogg', '.wav', '.webm', '.m4a'];
 const TEXT_EXTENSIONS = ['.md', '.txt'];
+const VRM_MODEL = 'avatar/otherself.vrm';
 
 // Fichiers d'exécution du pipeline voix, copiés depuis node_modules : une extension MV3
 // ne peut pas charger de code (JS ou WASM) depuis un CDN.
@@ -26,6 +27,7 @@ const VENDOR_FILES: Record<string, string> = {
 const PASSTHROUGH_FIELDS = [
   'avatar',
   'background',
+  'avatarRenderer',
   'palette',
   'hairstyle',
   'accessories',
@@ -119,6 +121,8 @@ export default defineConfig({
           files.push({ absoluteSrc: resolve(root, dir, file), relativeDest: `${dest}/${file}` });
         }
       }
+      // Prototype VRM : modèle 3D allégé (npm run vrm -- optimize), commité ; la source exportée par VRoid ne l'est pas.
+      if (existsSync(resolve(root, VRM_MODEL))) files.push({ absoluteSrc: resolve(root, VRM_MODEL), relativeDest: 'avatar-vrm/otherself.vrm' });
       for (const [dest, src] of Object.entries(VENDOR_FILES)) {
         files.push({ absoluteSrc: resolve(root, src), relativeDest: dest });
       }

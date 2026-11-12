@@ -66,10 +66,15 @@ entrypoints/
   rehearsal/           # page « faux recruteur » pour tester sans plateforme réelle
   avatar/              # page de l'avatar (aperçu animé, voix simulée)
   voices/              # banc d'essai des voix : Piper (voix, réglages, hauteur) et OpenAI, délais, écoute
+  vrm/                 # aperçu de l'avatar 3D (VRM) : voix simulée, images/s, temps de dessin
 lib/
   vad.ts  stt.ts  llm.ts  tts.ts  prompt.ts  greeting.ts
   avatar.ts            # rendu du cadre : composition, yeux et bouche animés, bandeau (monde MAIN et pages)
   avatar-assets.ts     # pages de l'extension : SVG → images de l'avatar, variante, slogan courbé
+  avatar-vrm.ts        # avatar 3D : rendu three.js + three-vrm dans le même canvas, animation, repli SVG
+  vrm-assets.ts        # avatar 3D, pages de l'extension : cadrage, slogan à plat (repris du SVG), fond
+  vrm-frame.ts         # avatar 3D : caméra et projection (sans three.js), partagées popup / page
+  glb.ts               # lecture / écriture GLB (VRM) sans dépendance (script et extension)
   conversation.ts      # tour de parole, ouverture (révélation + messageText), latence
   config.ts            # lecture de local/config.json (généré depuis config.local.json)
   page-audio.ts        # monde MAIN : lecture de la voix dans le micro injecté
@@ -88,8 +93,10 @@ lib/
 scripts/
   check-locales.ts     # vérification des fichiers _locales au build
   check-avatar-svg.ts  # vérification et correction des SVG de personnage au build
+  optimize-vrm.ts      # MANUEL (npm run vrm) : inspection et allègement du VRM exporté par VRoid
 avatar/
   gabarit.svg  otherself.svg  otherself-v1.svg  fonds/   # personnages et fonds (SVG Inkscape)
+  otherself.vrm        # avatar 3D allégé (commité) ; la source VRoid Otherself.vrm est ignorée par git
 public/fonts/          # Noto Sans Bold (OFL), police du slogan
 docs/
   spec.md  config.md  visuel-otherself.md  tournage.md
@@ -112,6 +119,7 @@ docs/
 - **Répartition bandeau / slogan** : sans cadrage automatique, le bandeau est l'élément principal (règle 1). Avec le cadrage automatique, le bandeau peut être coupé ; la transparence est alors assurée par le slogan du t-shirt et par la révélation vocale (règle 2).
 - **Désactivation** : bouton du popup (injection retirée, pistes arrêtées, partage arrêté, document offscreen fermé). Onglet fermé ou rechargé : partage et pont s'arrêtent d'eux-mêmes.
 - **Micro sur Meet** : Meet n'affiche pas toujours « Avatar IA – OtherSelf » tant qu'on ne change pas de micro dans son menu ; `devicechange` est envoyé à l'installation puis à +1 s et +3 s.
+- **Avatar 3D (`avatarRenderer: "vrm"`, rendu par défaut depuis le 12/11/2026, validé sur Meet)** : modèle VRoid (VRM 1.0) rendu par three.js + three-vrm dans un canvas WebGL hors DOM, recopié à chaque image dans le canvas 2D capturé par-dessus le fond, **bandeau peint en dernier dans le canvas 2D** (règle 1 inchangée). Le SVG est le secours automatique : rendu WebGL logiciel (SwiftShader, llvmpipe), échec du chargement ou contexte WebGL perdu → avatar SVG dans le même canvas, sans changer de piste. Textures décodées depuis le fichier par `createImageBitmap` (plugin de `GLTFLoader`), jamais par URL blob + fetch, que la CSP d'une plateforme peut bloquer. `npm run vrm -- optimize` est **manuel** (la source n'est pas commitée, le build ne doit pas en dépendre) : miniature, pantalon, chaussures, cordons de capuche et morph targets inutilisés retirés, textures ≤ 1024 px (15,5 → 5,4 Mo) ; gltf-transform n'est pas utilisé (il supprime les extensions VRMC). Cadrage (`lib/vrm-frame.ts`, calculé par le popup) : haut des cheveux à y = 94, devant du sweat à y = 517 au repère `VRM_FRAME_ANCHOR` (51,4 % de `chest` vers `upperChest`), validé sur Meet. Les repères (cadrage, haut du slogan) sont définis **par les os du squelette**, pas en mètres, pour suivre les proportions du modèle à chaque réexport ; positions des os calculées avec les matrices glTF (VRoid met des rotations sur la colonne). Slogan : **même rendu que le SVG**, paramètres repris de `buildAvatarAssets` (taille de `badge_zone_texte` dans le cadre, `data-lignes-max`, encre `badge-fond`, Noto Sans Bold, police ≈ 27 px, 3 lignes), sans courbure (le torse 3D la donne), en haut du torse (`VRM_SLOGAN_TOP` : 66,3 % de `upperChest` vers `neck`, y ≈ 380). Le popup le dessine à plat (image) ; la page l'imprime dans la texture du sweat (agrandie à 2048 px) **sur le personnage posé** : chaque triangle visible du sweat est projeté par la caméra et reçoit sa transformation affine cadre → texture. Projeter le modèle en T-pose déformait les lettres près des épaules (skinning des bras baissés). Éclairage : une seule lumière directionnelle d'intensité π, comme les exemples de three-vrm ; une lumière ambiante délave MToon (peau mesurée 241,212,191 comme la miniature de VRoid, 255,246,222 avec une ambiante de 0,4π). Les textures de couleur sont bien en sRGB (three-vrm les marque lui-même). Bouche : `MouthAnimator` inchangé, formes traduites en expressions VRM (repos et M : tout à 0, lèvres fermées ; E : ee 0,6 + ih 0,3 ; A : aa 0,8 ; O : oh 0,7 + ou 0,2), lissage 45 ms à l'ouverture, 80 ms à la fermeture. Le compteur de triangles de three.js (≈ 65 000) compte deux fois les primitives à contour MToon (≈ 35 000 triangles réels). Contrôle visuel : `vrm.html?mouth=A&still=1` (forme de bouche imposée, ni clignement ni mouvement). Physique des cheveux et anticrénelage gardés (mode allégé sans intérêt mesuré). Licence du modèle : VRM Public License 1.0 (usage commercial autorisé), hors GPL, voir `THIRD_PARTY_NOTICES.md`. **Pièces VRoid** : utiliser un modèle fait avec VRoid Studio est autorisé, mais une application qui génère des avatars à partir des pièces de VRoid (cheveux, vêtements, textures prédéfinis) demande une licence séparée de pixiv (https://vroid.pixiv.help/hc/en-us/articles/4405813333657) : un futur créateur d'avatar dans OtherSelf ne doit utiliser que des pièces qui ne viennent pas de VRoid.
 - **Licence : GPL-3.0-or-later** (`LICENSE`), imposée par eSpeak NG (GPL-3.0) embarqué dans `piper_phonemize`. Composants tiers, voix, police et images : `THIRD_PARTY_NOTICES.md`, copié avec `LICENSE` dans l'extension construite. Configuration locale : `docs/config.md`.
 
 ## Démo (priorité actuelle)
@@ -139,6 +147,7 @@ Ne pas commencer une étape avant que la précédente fonctionne.
 - Vérifier `enumerateDevices` : Meet affichait « Speaker not found » avec la liste injectée (fausse caméra, faux micro, sorties audio réelles).
 - Popup avec Activer / Pause / Reprendre la main.
 - Latence (cible 1,5 s) : seuil de silence réduit (`silenceMs`, 800 ms aujourd'hui) ; phrase d'attente préparée à l'avance, jouée dès la fin de la question pendant que le LLM répond (courte, neutre, sans rien affirmer sur le candidat).
+- Bouche pilotée par le texte (avatar 3D) : piper-tts-web ne renvoie que l'audio (`predict()`), et les modèles Piper standard n'ont pas de sortie de durées ; les identifiants de phonèmes sont accessibles par le remplacement de `session.run` déjà présent dans `lib/tts.worker.ts`. Pistes : vérifier les sorties du modèle norman (`outputNames`), réexporter la voix avec les durées, ou aligner les phonèmes sur l'audio ; puis associer phonèmes → expressions VRM, synchronisés sur la lecture réelle (`playback-started`).
 - Performances Piper : multi-thread via COOP/COEP sur les pages d'extension (gain mesuré nul en « medium », ×2 en « high ») ; demande une modification du manifeste.
 - **Autres moteurs de voix étudiés et écartés (29/10/2026) : ne pas refaire ces tests sans élément nouveau** (machine plus rapide, multi-thread, WebGPU fiable). En WebAssembly sur un thread, tous sont trop lents pour répondre en direct (à peu près le temps réel ou plus lent, contre 0,15 à 0,20 × pour Piper medium) ; mesures détaillées dans `CLAUDE.local.md`.
   - **Pocket TTS** (Kyutai, code MIT, poids CC BY 4.0 en accès conditionné ; voix Michael = VCTK p360, CC BY 4.0) : pas de portage navigateur prêt avec Michael (phonon-tts demande une conversion et des poids auto-hébergés ; l'export ONNX de KevinAHM n'a pas Michael, porte un fichier de licence CC BY-NC et charge ONNX Runtime depuis un CDN).
@@ -147,6 +156,7 @@ Ne pas commencer une étape avant que la précédente fonctionne.
   - **WebGPU** : non fiable sous Linux avec un GPU ancien ; on ne peut pas compter dessus pour les utilisateurs.
   - **LibriTTS** (Piper) : `libritts_r-medium` affiné à partir de `lessac` (à éviter pour une publication) ; `libritts-high` trop lent.
 - **Cadrage automatique des plateformes** (Framing sur Meet) : il détecte le visage cartoon, zoome et coupe le bandeau ; pour la démo, il est désactivé côté avatar. **Avec un fond virtuel de Meet**, la segmentation détecte la silhouette de l'avatar et réactive le cadrage automatique, qui coupe le bandeau puis une partie du slogan (jusqu'à « Automated » seul). Pour la démo : garder le fond de l'avatar ou désactiver le cadrage. Pistes pour plus tard : un marqueur IA proche du visage (badge au col ou sur l'épaule) qui survive au zoom, et une consigne dans le guide utilisateur.
+- Créateur d'avatar (si l'avatar 3D est retenu) : uniquement des pièces qui ne viennent pas de VRoid Studio (pixiv exige une licence séparée pour une application qui génère des avatars à partir de ses pièces, voir la décision « Avatar 3D »).
 - Publication sur le Chrome Web Store, version Firefox, i18n complète, export intégré (enregistrement avec sous-titres).
 - Lien vers une explication des droits des candidats face aux décisions automatisées (RGPD, AI Act), à faire vérifier juridiquement.
 - Avertissement clair dans le README et l'assistant : utiliser OtherSelf dans une vraie candidature, c'est probablement renoncer au poste.

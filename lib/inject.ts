@@ -3,6 +3,7 @@
 // « Avatar IA – OtherSelf ». Sans API d'extension : tourne dans le monde MAIN d'un onglet.
 
 import { AvatarRenderer, type AvatarAssets, type AvatarOptions, type MouthShape } from './avatar';
+import { createVrmRenderer, type FrameRenderer, type VrmSources } from './avatar-vrm';
 import { createLogger } from './log';
 import { audioContext } from './page-audio';
 
@@ -17,6 +18,8 @@ const log = createLogger('inject');
 
 export interface FakeMediaSources {
   avatar: AvatarAssets<ImageBitmap>;
+  /** Avatar 3D (prototype) : utilisé s'il est fourni et si WebGL est accéléré ; sinon, et en cas de panne, avatar SVG. */
+  vrm?: VrmSources | undefined;
   avatarOptions: AvatarOptions;
   /** Crée la piste du micro injecté, au premier appel de getUserMedia. */
   createAudioTrack: () => Promise<MediaStreamTrack>;
@@ -152,7 +155,7 @@ function disguise(track: MediaStreamTrack, kind: InputKind): MediaStreamTrack {
 async function createFakeTracks(sources: FakeMediaSources): Promise<FakeTracks> {
   // La bouche suit le niveau du micro injecté, c'est-à-dire la voix réellement jouée.
   let level = () => 0;
-  const video = createVideoTrack(sources.avatar, sources.avatarOptions, () => level());
+  const video = await createVideoTrack(sources, () => level());
   const audio = await sources.createAudioTrack();
   level = createLevelMeter(audio);
   return { video: video.track, stopRendering: video.stop, fps: video.fps, audio };
@@ -173,11 +176,10 @@ function createLevelMeter(track: MediaStreamTrack): () => number {
   };
 }
 
-function createVideoTrack(
-  avatar: AvatarAssets<ImageBitmap>,
-  options: AvatarOptions,
+async function createVideoTrack(
+  sources: FakeMediaSources,
   level: () => number,
-): { track: MediaStreamTrack; stop(): void; fps(): number | null } {
+): Promise<{ track: MediaStreamTrack; stop(): void; fps(): number | null }> {
   // Canvas hors DOM : la page ne voit que le flux, bandeau compris (règle 1).
   // Niveau maximal par période de statistiques : sert à régler les seuils de la bouche (lib/avatar.ts).
   let maxLevel = 0;
@@ -186,9 +188,35 @@ function createVideoTrack(
     maxLevel = Math.max(maxLevel, value);
     return value;
   };
-  const renderer = new AvatarRenderer(document.createElement('canvas'), avatar, options, measured);
-  renderer.draw();
-  const track = renderer.canvas.captureStream(FPS).getVideoTracks()[0];
+  // Avatar 3D ou SVG, dessinés dans le même canvas : la piste capturée ne change pas en cas de repli.
+  const canvas = document.createElement('canvas');
+  const svg = (): FrameRenderer => new AvatarRenderer(canvas, sources.avatar, sources.avatarOptions, measured);
+  let renderer: FrameRenderer;
+  if (sources.vrm) {
+    try {
+      renderer = await createVrmRenderer(canvas, sources.vrm, sources.avatarOptions, measured, log);
+      log('rendu : avatar 3D (VRM)');
+    } catch (error) {
+      log(`avatar 3D indisponible (${errorMessage(error)}) : avatar SVG utilisé`);
+      renderer = svg();
+    }
+  } else {
+    renderer = svg();
+  }
+  /** Image suivante ; si l'avatar 3D tombe en panne (contexte WebGL perdu…), repli définitif sur le SVG. */
+  const draw = (now: number): MouthShape => {
+    try {
+      return renderer.draw(now);
+    } catch (error) {
+      if (renderer instanceof AvatarRenderer) throw error;
+      log(`avatar 3D en panne (${errorMessage(error)}) : repli sur l'avatar SVG`);
+      renderer.dispose?.();
+      renderer = svg();
+      return renderer.draw(now);
+    }
+  };
+  draw(performance.now());
+  const track = canvas.captureStream(FPS).getVideoTracks()[0];
   if (!track) throw new Error('captureStream n\'a fourni aucune piste vidéo');
 
   // Redessin continu : un canvas figé peut ne produire aucune image dans le flux.
@@ -201,7 +229,7 @@ function createVideoTrack(
   let lastFps: number | null = null;
   const drawing = setInterval(() => {
     const start = performance.now();
-    const shape = renderer.draw(start);
+    const shape = draw(start);
     const spent = performance.now() - start;
     frames += 1;
     drawTime += spent;
@@ -232,6 +260,11 @@ function createVideoTrack(
     stop() {
       clearInterval(drawing);
       clearInterval(stats);
+      renderer.dispose?.();
     },
   };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

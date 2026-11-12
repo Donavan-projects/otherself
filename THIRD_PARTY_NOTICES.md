@@ -16,6 +16,9 @@ composants suivants. Ceux marqués « embarqué » font partie de l'extension co
 | [@ricky0123/vad-web](https://github.com/ricky0123/vad) | source du fichier `silero_vad_v5.onnx` utilisé | ISC | fichier modèle repris |
 | [Noto Sans](https://github.com/notofonts/latin-greek-cyrillic) Bold (Google LLC) | police du slogan imprimé sur l'avatar (`public/fonts/NotoSans-Bold.ttf`, texte de licence dans `public/fonts/OFL.txt`) | OFL-1.1 | embarqué |
 | [WXT](https://github.com/wxt-dev/wxt) | cadre de l'extension (petites parties à l'exécution) | MIT | embarqué en partie |
+| [three.js](https://github.com/mrdoob/three.js) (three.js authors) | rendu 3D de l'avatar VRM (prototype, `avatarRenderer: "vrm"`), dont `GLTFLoader` | MIT | embarqué |
+| [@pixiv/three-vrm](https://github.com/pixiv/three-vrm) (pixiv Inc.) | lecture et animation des modèles VRM (expressions, regard, physique des cheveux, matériaux MToon) | MIT | embarqué |
+| [sharp](https://github.com/lovell/sharp) (Lovell Fuller) | réduction des textures par le script manuel `npm run vrm` | Apache-2.0 (libvips : LGPL-3.0-or-later) | outil de développement, non distribué |
 
 ## Voix
 
@@ -38,7 +41,8 @@ ne s'applique pas à elles.**
 | --- | --- | --- |
 | `avatar/otherself.svg` (personnage v4) | illustration de base générée avec ChatGPT (OpenAI) ; tête vectorisée à partir de cette image, palette fixe, calques du gabarit ; yeux, clignement et bouches redessinés à la main | mise à disposition sans revendication de droits |
 | `avatar/fonds/bureau.svg`, `avatar/fonds/bureau-clair.svg` | image générée avec ChatGPT (OpenAI), recadrée et retouchée (désaturée, éclaircie pour `bureau-clair`), intégrée en WebP dans un SVG | mise à disposition sans revendication de droits |
-| `docs/images/otherself-apercu.png` (capture du README) | image vidéo rendue par l'extension : personnage v4 et fond `bureau` ci-dessus, slogan et bandeau dessinés par le code | mise à disposition sans revendication de droits |
+| `docs/images/otherself-apercu.png` (capture du README) | image vidéo rendue par l'extension : avatar 3D `avatar/otherself.vrm` et fond `bureau-clair` ci-dessus, slogan et bandeau dessinés par le code | personnage : licence du modèle (`avatar/otherself.vrm`, ci-dessus) ; reste de l'image mis à disposition sans revendication de droits |
+| `avatar/otherself.vrm` (avatar 3D, prototype) | modèle créé par l'auteur du projet avec [VRoid Studio](https://vroid.com/en/studio) (pixiv), à partir des éléments prédéfinis de l'application (visage, cheveux, sweat), exporté en VRM 1.0 ; allégé par `scripts/optimize-vrm.ts` (miniature, pantalon, chaussures et cordons de capuche retirés, morph targets inutilisés retirés, textures réduites à 1024 px). Le slogan du sweat est imprimé par le code à l'exécution, en Noto Sans Bold | [VRM Public License 1.0](https://vrm.dev/licenses/1.0/), selon les métadonnées du modèle : utilisation par tous, usage commercial autorisé, redistribution et modification autorisées, mention de l'auteur non requise ; usages violents, sexuels, politiques ou religieux et antisociaux non autorisés. Les éléments prédéfinis de VRoid Studio relèvent en outre des [conditions de VRoid Studio](https://vroid.pixiv.help/hc/en-us/articles/4405813333657) : l'usage, y compris commercial, d'un modèle créé avec l'application est autorisé, mais **une application qui génère des avatars à partir des pièces de VRoid demande une licence séparée de pixiv**. Un futur créateur d'avatar dans OtherSelf ne devra donc utiliser que des pièces qui ne viennent pas de VRoid |
 | `avatar/otherself-v1.svg`, `avatar/gabarit.svg`, `avatar/fonds/interieur-clair.svg` | dessinés directement en SVG pour le projet, avec Claude Code (Anthropic) | licence du dépôt (GPL-3.0-or-later) |
 
 Le texte du t-shirt et le bandeau sont dessinés par le code, en Noto Sans Bold (OFL-1.1, voir ci-dessus).
@@ -49,7 +53,8 @@ Non distribués avec l'extension : appelés directement depuis le navigateur ave
 
 - OpenAI : transcription (`gpt-live-transcribe`), réponses (`gpt-5.6-luna` par défaut) et, en option, synthèse vocale
   (`gpt-4o-mini-tts`, voix `ash` du personnage).
-- Hugging Face : téléchargement des voix Piper ci-dessus.
+- Hugging Face : téléchargement du modèle de voix Piper ci-dessus, une seule fois, sans clé ni donnée de l'entretien ou
+  du candidat ; la synthèse vocale se fait ensuite en local, dans le navigateur.
 
 ## Sources des parties GPL
 
@@ -110,6 +115,24 @@ Copyright (c) 2020-present Silero Team
 MIT License
 
 Copyright (c) 2023 Aaron
+```
+(suivi du même texte de permission MIT que ci-dessus)
+
+### MIT : three.js
+
+```
+The MIT License
+
+Copyright © 2010-2026 three.js authors
+```
+(suivi du même texte de permission MIT que ci-dessus)
+
+### MIT : @pixiv/three-vrm
+
+```
+Copyright (c) 2019-2026 pixiv Inc.
+
+MIT License
 ```
 (suivi du même texte de permission MIT que ci-dessus)
 

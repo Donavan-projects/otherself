@@ -51,12 +51,21 @@ export default defineContentScript({
         if (installed) return 'déjà actif';
         installed = true;
         const avatar = await mapAssets(sources.avatar, (file) => createImageBitmap(fileToBlob(file)));
+        const vrm = sources.vrm && {
+          model: await fileToBlob(sources.vrm.model).arrayBuffer(),
+          background: await createImageBitmap(fileToBlob(sources.vrm.background)),
+          banner: sources.vrm.banner,
+          camera: sources.vrm.camera,
+          slogan: { image: await createImageBitmap(fileToBlob(sources.vrm.slogan)), ...sources.vrm.sloganPlacement },
+        };
+        if (vrm) log(`avatar 3D reçu : modèle ${(vrm.model.byteLength / 1e6).toFixed(1)} Mo, l'avatar SVG sert de secours`);
         log(`installation (${frame} ${location.href}) : avatar ${avatar.under.width}x${avatar.under.height}, bandeau « ${sources.bannerText} » à y = ${avatar.banner.y}`);
         if (sources.debugSafeZone) log('débogage : contour de la zone de sécurité affiché');
 
         let voice: VoiceOutput | null = null;
         const media = installFakeGetUserMedia({
           avatar,
+          vrm,
           avatarOptions: { bannerText: sources.bannerText, debugSafeZone: sources.debugSafeZone },
           createAudioTrack: async () => {
             voice = createVoiceOutput(

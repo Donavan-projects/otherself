@@ -27,8 +27,8 @@ const BANNER_MIN_SQUEEZE = 0.78;
 // Cadrage de webcam : haut de la tête vers 13 % du cadre, slogan du t-shirt au milieu de la
 // poitrine (bas du slogan à y = 517). Bandeau en bas du cadre, au bas de la zone de sécurité
 // (réglable par bannerOffsetY, sans jamais remonter sur le slogan).
-const HEAD_TOP = 94;
-const SLOGAN_BOTTOM = 517;
+export const HEAD_TOP = 94;
+export const SLOGAN_BOTTOM = 517;
 // Plafond strict du bas du slogan quand le SVG le règle (data-bas-cadre sur badge_zone_texte) : le slogan sert de
 // bandeau de secours quand le cadrage automatique coupe vers y = 605, il en reste à 55 px au moins.
 // scripts/check-avatar-svg.ts refuse toute valeur hors de [SLOGAN_BOTTOM, SLOGAN_BOTTOM_MAX].
@@ -257,7 +257,7 @@ export class AvatarRenderer {
 }
 
 /** Débogage : contour pointillé de la zone de sécurité, hors de la zone redessinée. */
-function drawSafeZone(ctx: CanvasRenderingContext2D) {
+export function drawSafeZone(ctx: CanvasRenderingContext2D) {
   ctx.save();
   ctx.strokeStyle = '#ff00ff';
   ctx.lineWidth = 4;

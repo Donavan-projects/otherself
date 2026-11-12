@@ -17,6 +17,7 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | --- | --- | --- | --- |
 | `avatar` | nom de fichier | Personnage : `avatar/<avatar>.svg` (voir `avatar/gabarit.svg`) | `otherself` |
 | `background` | nom de fichier | Fond : `avatar/fonds/<background>.svg` | `bureau-clair` (autres fonds : `bureau`, `interieur-clair`) |
+| `avatarRenderer` | `vrm` / `svg` | Rendu de l'avatar. `vrm` : modèle 3D `avatar/otherself.vrm` (VRoid), animé en WebGL, slogan imprimé sur le sweat ; sans accélération graphique (rendu WebGL logiciel) ou en cas d'échec, l'avatar SVG prend le relais automatiquement. `svg` : avatar dessiné en 2D seul. Les champs `avatar`, `palette`, `hairstyle` et `accessories` ne concernent que le SVG (la voix reste celle du personnage SVG `avatar`, et le slogan du sweat reprend sa zone, ses lignes et son encre) | `vrm` |
 | `palette` | objet | Variante de couleurs sans redessiner : classe de la palette du SVG → couleur CSS. Exemple : `{ "peau": "#a86f4c", "cheveux": "#151010", "vetement": "#5b6470", "barbe": "none" }`. Classes : `peau`, `peau-trait`, `cheveux`, `cheveux-trait`, `sourcils`, `barbe`, `vetement` (surchemise), `vetement-2` (t-shirt), `vetement-trait`, `iris`, `levres`, `badge-fond` (encre du slogan)… | Couleurs du SVG |
 | `hairstyle` | nom | Coiffure : sous-groupe `coiffure_<nom>` du SVG | `principale` |
 | `accessories` | liste de noms | Accessoires affichés : sous-groupes `accessoire_<nom>` | aucun |
@@ -27,7 +28,7 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | `messageText` | texte | Mode « message » : déclaration prononcée juste après la révélation, avant de répondre aux questions | Révélation seule |
 | `cv` | md, txt | CV et notes du candidat, seule source des réponses (règle 5) | Avertissement au build ; l'avatar dit ne pas pouvoir répondre |
 | `openaiApiKey` | `sk-…` | Clé OpenAI (transcription et LLM) | Pipeline voix inactif, avertissement au build |
-| `voice` | identifiant Piper | Voix Piper de l'avatar, téléchargée une seule fois depuis Hugging Face (voir ci-dessous) | Voix du personnage : attribut `data-voix` du SVG (`en_US-norman-medium` pour `otherself`) |
+| `voice` | identifiant Piper | Voix Piper de l'avatar : modèle téléchargé une seule fois depuis Hugging Face (aucune donnée de l'entretien ni du candidat envoyée), puis synthèse en local dans le navigateur (voir ci-dessous) | Voix du personnage : attribut `data-voix` du SVG (`en_US-norman-medium` pour `otherself`) |
 | `ttsProvider` | `piper`, `openai` | Synthèse vocale : Piper (local, gratuit) ou OpenAI (même clé, payante, en streaming) | `piper` |
 | `openaiVoice` | voix OpenAI | Voix de la synthèse OpenAI (`ash`, `onyx`…) | Voix du personnage : attribut `data-voix-openai` du SVG (`ash`) |
 | `openaiTtsModel` | modèle OpenAI | Modèle de synthèse OpenAI | `gpt-4o-mini-tts` |
