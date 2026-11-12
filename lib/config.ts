@@ -9,7 +9,7 @@ export interface DemoConfig {
   avatar: string;
   /** Fond : avatar/fonds/<background>.svg. */
   background: string;
-  /** Rendu de l'avatar : svg (dessin 2D, par défaut) ou vrm (modèle 3D avatar/otherself.vrm, prototype ; repli sur svg). */
+  /** Rendu de l'avatar : vrm (modèle 3D avatar/otherself.vrm, par défaut ; repli automatique sur le SVG) ou svg (dessin 2D seul). */
   avatarRenderer: 'svg' | 'vrm';
   /** Variante de couleurs : classe de la palette du SVG → couleur (« none » pour masquer, ex. barbe). */
   palette: Record<string, string>;
@@ -60,7 +60,7 @@ export const DEFAULT_BANNER_TEXT = 'Candidat automatisé, comme vous.';
 const DEFAULTS: DemoConfig = {
   avatar: 'otherself',
   background: 'bureau-clair',
-  avatarRenderer: 'svg',
+  avatarRenderer: 'vrm',
   palette: {},
   hairstyle: 'principale',
   accessories: [],
@@ -122,7 +122,7 @@ export async function loadDemoConfig(): Promise<DemoConfig> {
   config.pitchSemitones = clampPitch(raw.pitchSemitones);
   config.avatar = safeName(raw.avatar) ?? DEFAULTS.avatar;
   config.background = safeName(raw.background) ?? DEFAULTS.background;
-  config.avatarRenderer = raw.avatarRenderer === 'vrm' ? 'vrm' : 'svg';
+  config.avatarRenderer = raw.avatarRenderer === 'svg' ? 'svg' : 'vrm';
   config.palette = Object.fromEntries(
     Object.entries(raw.palette && typeof raw.palette === 'object' ? raw.palette : {}).filter(
       ([name, color]) => safeName(name) !== null && typeof color === 'string' && /^[#\w(),.% -]+$/.test(color),

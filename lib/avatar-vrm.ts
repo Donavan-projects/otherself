@@ -1,4 +1,4 @@
-// Rendu de l'avatar 3D (prototype VRM) dans le canvas 1280×720 de la caméra injectée. Tourne dans le monde MAIN de
+// Rendu de l'avatar 3D (VRM) dans le canvas 1280×720 de la caméra injectée. Tourne dans le monde MAIN de
 // l'onglet (voie A) comme dans les pages de l'extension. three.js dessine le modèle dans un canvas WebGL hors DOM, à
 // fond transparent, recopié à chaque image dans le canvas 2D capturé, par-dessus le fond ; le bandeau est peint en
 // dernier dans ce canvas 2D (règle 1), exactement comme pour l'avatar SVG (lib/avatar.ts).

@@ -1,4 +1,4 @@
-// Page de l'avatar 3D (prototype VRM) : aperçu animé avec une voix simulée et mesure du coût du rendu, par le même
+// Page de l'avatar 3D (VRM) : aperçu animé avec une voix simulée et mesure du coût du rendu, par le même
 // chemin que la caméra injectée (lib/vrm-assets.ts puis lib/avatar-vrm.ts, bandeau peint en dernier).
 // Paramètres de l'adresse : ?speak=0 pour l'avatar silencieux (regard, respiration, clignements seuls) ; ?software=1
 // accepte le rendu WebGL logiciel (contrôle visuel sans carte graphique, trop lent pour un vrai usage) ; ?mouth=A et

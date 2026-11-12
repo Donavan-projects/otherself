@@ -1,4 +1,4 @@
-// Cadrage de l'avatar 3D (prototype VRM), sans three.js : partagé par la préparation (lib/vrm-assets.ts, qui doit
+// Cadrage de l'avatar 3D (VRM), sans three.js : partagé par la préparation (lib/vrm-assets.ts, qui doit
 // connaître l'échelle pour donner au slogan la taille de celui du SVG) et par le rendu (lib/avatar-vrm.ts).
 // Caméra fixe, horizontale, face au personnage, en (0, cameraY, distance) regardant vers −Z.
 

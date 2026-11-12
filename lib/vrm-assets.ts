@@ -1,4 +1,4 @@
-// Préparation de l'avatar 3D (prototype VRM) dans une page de l'extension : lit avatar/otherself.vrm (allégé par
+// Préparation de l'avatar 3D (VRM) dans une page de l'extension : lit avatar/otherself.vrm (allégé par
 // npm run vrm), calcule le cadrage, dessine le slogan (bannerText) à plat dans les coordonnées du cadre, rastérise le
 // fond. Le slogan est imprimé dans la texture du sweat par la page (lib/avatar-vrm.ts), sur le personnage posé. La page
 // de la plateforme ne reçoit que le modèle et des images (jamais la configuration ni la clé API).
