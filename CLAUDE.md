@@ -128,6 +128,8 @@ L'objectif immédiat est une démo vidéo filmable, pas un produit. Le projet co
 
 Tout le code de la démo est écrit en TypeScript dans l'extension (rendu de l'avatar + modules `lib/`), pas en script séparé, pour être réutilisé tel quel dans le projet complet.
 
+**Nouvelle direction (13/11/2026)** : avant le tournage, suivre `docs/feuille-de-route.md` (fiabilité et désactivation, états, identité visuelle avec badge IA, ton). Ses étapes se font dans l'ordre, une à la fois. Les règles non négociables de ce fichier font foi tant qu'elles n'ont pas été modifiées explicitement.
+
 ### Étapes (dans cet ordre, une à la fois)
 
 1. **Faux recruteur** : fait. Page `rehearsal` qui demande caméra et micro, affiche le flux reçu et lit des questions à voix haute.
@@ -135,7 +137,7 @@ Tout le code de la démo est écrit en TypeScript dans l'extension (rendu de l'a
 3. **Test d'injection** : fait, voie A retenue (testée sur Google Meet).
 4. **Pipeline voix, avec le mode « message »** : fait. Son du recruteur → VAD → STT → LLM → Piper, la voix générée comme piste du micro injecté. Test sur Meet : `rehearsal` ne peut pas servir de recruteur (sa voix vient de la synthèse vocale du système, qui ne passe pas par le son de l'onglet).
 5. **Visuel OtherSelf** : fait, selon `docs/visuel-otherself.md` (avatar cartoon original en SVG à la place de la photo, variantes et fond choisis dans `config.local.json`, `bannerText` configurable, bouche animée par la voix). Le bandeau garde les contraintes de la règle 1.
-6. **Tournage** : enregistrement de la session (simple enregistrement d'écran) pour la vidéo et le post LinkedIn.
+6. **Tournage** : après les étapes de `docs/feuille-de-route.md`. Enregistrement de la session (simple enregistrement d'écran) pour la vidéo et le post LinkedIn.
 
 Ne pas commencer une étape avant que la précédente fonctionne.
 
