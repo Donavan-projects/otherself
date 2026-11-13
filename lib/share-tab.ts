@@ -142,15 +142,19 @@ export interface TabShare {
   stop(): void;
 }
 
-/** Affiche le bouton ; au clic, partage de l'onglet et envoi de son son. */
-export function offerTabShare(onChunk: (pcm: string, at: number) => void): TabShare {
+/**
+ * Affiche le bouton ; au clic, partage de l'onglet et envoi de son son. Tant que sending()
+ * est faux (pause), le partage reste ouvert mais aucun son ne part.
+ */
+export function offerTabShare(onChunk: (pcm: string, at: number) => void, sending: () => boolean = () => true): TabShare {
   const getDisplayMedia = pristineGetDisplayMedia();
   let stopListening: (() => void) | null = null;
   let stopped = false;
 
   // Shadow DOM : le style de la page ne touche pas le bouton.
   const host = document.createElement('div');
-  host.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:2147483647;';
+  // Au-dessus du bouton Pause / Reprendre (lib/page-controls.ts).
+  host.style.cssText = 'position:fixed;left:16px;bottom:64px;z-index:2147483647;';
   const shadow = host.attachShadow({ mode: 'closed' });
   const button = document.createElement('button');
   button.textContent = BUTTON_TEXT;
@@ -207,7 +211,7 @@ export function offerTabShare(onChunk: (pcm: string, at: number) => void): TabSh
         }
         if (surface && surface !== 'browser') log(`partage de l’onglet : ATTENTION, surface « ${surface} » au lieu de l’onglet`);
         host.remove();
-        stopListening = listen(audio, onChunk, () => {
+        stopListening = listen(audio, onChunk, sending, () => {
           stopListening = null;
           show('partage arrêté');
         });
@@ -235,7 +239,12 @@ export function offerTabShare(onChunk: (pcm: string, at: number) => void): TabSh
 }
 
 /** Envoie le son de la piste partagée ; renvoie de quoi l'arrêter. */
-function listen(track: MediaStreamTrack, onChunk: (pcm: string, at: number) => void, onEnded: () => void): () => void {
+function listen(
+  track: MediaStreamTrack,
+  onChunk: (pcm: string, at: number) => void,
+  sending: () => boolean,
+  onEnded: () => void,
+): () => void {
   const ctx = audioContext();
   if (ctx.state !== 'running') void ctx.resume();
   const settings = track.getSettings() as MediaTrackSettings & { suppressLocalAudioPlayback?: boolean };
@@ -245,7 +254,7 @@ function listen(track: MediaStreamTrack, onChunk: (pcm: string, at: number) => v
       `annulation d'écho ${String(settings.echoCancellation)}, réduction de bruit ${String(settings.noiseSuppression)}, ` +
       `gain auto ${String(settings.autoGainControl)} (attendu : false partout)`,
   );
-  const level = { sumSquares: 0, samples: 0, peak: 0, blocks: 0 };
+  const level = { sumSquares: 0, samples: 0, peak: 0, blocks: 0, held: 0 };
   let firstBlock = true;
   let stopBlocks: (() => void) | null = null;
   let ended = false;
@@ -256,6 +265,11 @@ function listen(track: MediaStreamTrack, onChunk: (pcm: string, at: number) => v
         `partage de l’onglet : premier bloc audio traité par la page (${input.length} échantillons à ${sampleRate} Hz, ` +
           `envoyés à ${SHARE_SAMPLE_RATE} Hz vers le pipeline)`,
       );
+    }
+    // Pause : rien ne part vers le pipeline, le partage reste ouvert pour la reprise.
+    if (!sending()) {
+      level.held += 1;
+      return;
     }
     level.blocks += 1;
     for (const sample of input) {
@@ -276,9 +290,11 @@ function listen(track: MediaStreamTrack, onChunk: (pcm: string, at: number) => v
     const rms = level.samples ? Math.sqrt(level.sumSquares / level.samples) : 0;
     log(
       `bilan du partage de l’onglet sur ${REPORT_INTERVAL_MS / 1000} s : niveau ${rms > 0 ? `${(20 * Math.log10(rms)).toFixed(0)} dBFS` : 'silence'} ` +
-        `(crête ${level.peak.toFixed(2)}), ${level.blocks} bloc(s) envoyé(s) au pont, contexte audio ${ctx.state}`,
+        `(crête ${level.peak.toFixed(2)}), ${level.blocks} bloc(s) envoyé(s) au pont` +
+        `${level.held ? `, ${level.held} bloc(s) gardé(s) dans la page (pause)` : ''}, contexte audio ${ctx.state}`,
     );
     level.blocks = 0;
+    level.held = 0;
     level.sumSquares = 0;
     level.samples = 0;
     level.peak = 0;

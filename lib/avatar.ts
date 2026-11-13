@@ -222,6 +222,11 @@ export class AvatarRenderer {
     drawBanner(bannerCtx, { x: 0, y: 0, width: assets.banner.width, height: assets.banner.height }, options.bannerText);
   }
 
+  /** La prochaine image sera entière (le canvas a reçu autre chose entre-temps, l'image de pause par exemple). */
+  invalidate() {
+    this.complete = false;
+  }
+
   /**
    * Dessine une image : le cadre entier la première fois, ensuite seulement la zone des yeux
    * et de la bouche (le reste ne bouge pas). Le bandeau est toujours peint en dernier.

@@ -14,7 +14,10 @@ export type FromPage =
   | { type: 'mic-ready' }
   /** La voix de l'avatar (re)commence à sortir dans le micro injecté. */
   | { type: 'playback-started'; responseId: number; at: number }
-  | { type: 'playback-idle'; responseId: number };
+  | { type: 'playback-idle'; responseId: number }
+  /** Pause (voix coupée, pipeline arrêté) ou reprise ; at : Date.now du clic, pour mesurer les délais. */
+  | { type: 'pause'; at: number }
+  | { type: 'resume'; at: number };
 
 /** De l'extension vers la page. */
 export type ToPage =

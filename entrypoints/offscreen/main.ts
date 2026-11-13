@@ -62,6 +62,8 @@ function measureBridgeAudio(samples: Int16Array) {
 let conversation: Conversation | null = null;
 let warnedNotReady = false;
 let micReady = false;
+/** Pause reçue avant que le pipeline soit prêt : appliquée à sa création. */
+let pausedAt: number | null = null;
 let connectionCount = 0;
 /** Page (document) de la plateforme reliée en dernier : une autre page = un autre entretien. */
 let currentPage: string | undefined;
@@ -83,7 +85,12 @@ browser.runtime.onConnect.addListener((connected) => {
   );
   micReady = false;
   conversation?.setMicReady(false);
-  if (!samePage) conversation?.reset('nouvelle page de la plateforme');
+  if (!samePage) {
+    conversation?.reset('nouvelle page de la plateforme');
+    // Nouvelle page : elle part sans pause (la page renvoie son état à chaque connexion du pont).
+    pausedAt = null;
+    conversation?.resume(Date.now());
+  }
   connected.onMessage.addListener((message: FromPage) => {
     switch (message.type) {
       case 'audio': {
@@ -102,6 +109,15 @@ browser.runtime.onConnect.addListener((connected) => {
         break;
       case 'playback-idle':
         conversation?.onPlaybackIdle(message.responseId);
+        break;
+      case 'pause':
+        pausedAt = message.at;
+        if (conversation) conversation.pause(message.at);
+        else log(`pause ${Date.now() - message.at} ms après le clic, pipeline pas encore prêt : appliquée à sa création`);
+        break;
+      case 'resume':
+        pausedAt = null;
+        conversation?.resume(message.at);
         break;
     }
   });
@@ -154,6 +170,7 @@ async function start() {
     },
   });
   conversation.setMicReady(micReady);
+  if (pausedAt !== null) conversation.pause(pausedAt);
   log('pipeline voix prêt : en attente du recruteur');
 }
 

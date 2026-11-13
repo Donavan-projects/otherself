@@ -77,6 +77,18 @@ export class Vad {
     return new ort.Tensor('float32', new Float32Array(2 * 128), [2, 1, 128]);
   }
 
+  /** Pause : oublie la prise de parole en cours et l'audio en attente (aucune fin de parole ne sera signalée). */
+  reset() {
+    this.queue = this.queue.then(() => {
+      this.context = new Float32Array(CONTEXT_SAMPLES);
+      this.state = Vad.emptyState();
+      this.pending = new Float32Array(0);
+      this.speaking = false;
+      this.voicedMs = 0;
+      this.silentMs = 0;
+    });
+  }
+
   get isSpeaking() {
     return this.speaking;
   }

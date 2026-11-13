@@ -6,17 +6,27 @@
 import { PAGE_TAG, type FromPage, type PageEnvelope } from '@/lib/bridge-messages';
 import { installFakeGetUserMedia } from '@/lib/inject';
 import { mapAssets } from '@/lib/avatar';
-import { fileToBlob, type SerializedSources } from '@/lib/injection-sources';
+import { fileToBlob, pauseText, type SerializedSources } from '@/lib/injection-sources';
 import { createLogger } from '@/lib/log';
 import { createVoiceOutput, type VoiceOutput } from '@/lib/page-audio';
+import { createPageControls } from '@/lib/page-controls';
 import { createPreview, type Preview } from '@/lib/preview';
 import { offerTabShare } from '@/lib/share-tab';
 
 declare global {
   interface Window {
-    __otherSelf?: { install(sources: SerializedSources): Promise<string>; uninstall(): string; preview?: Preview | undefined };
+    __otherSelf?: {
+      install(sources: SerializedSources): Promise<string>;
+      uninstall(): string;
+      /** Pause (vrai) ou reprise (faux) ; clickAt : Date.now du clic, pour mesurer les délais. */
+      setPaused(paused: boolean, clickAt: number): string;
+      state(): OtherSelfState;
+      preview?: Preview | undefined;
+    };
   }
 }
+
+type OtherSelfState = 'inactive' | 'active' | 'paused';
 
 const log = createLogger('inject');
 
@@ -38,12 +48,20 @@ export default defineContentScript({
     }
     let installed = false;
     let uninstallers: (() => void)[] = [];
+    /** Pause / reprise de l'installation en cours ; null tant qu'elle n'est pas prête. */
+    let pauseControl: { paused: boolean; set(paused: boolean, clickAt: number): string } | null = null;
     window.__otherSelf = {
+      state: () => (!installed ? 'inactive' : pauseControl?.paused ? 'paused' : 'active'),
+      setPaused(paused, clickAt) {
+        if (!pauseControl) return installed ? 'installation en cours' : 'jamais activé';
+        return pauseControl.set(paused, clickAt);
+      },
       uninstall() {
         if (!installed) return 'déjà inactif';
         for (const undo of uninstallers.reverse()) undo();
         uninstallers = [];
         installed = false;
+        pauseControl = null;
         log(`désactivé (${frame} ${location.href})`);
         return 'désactivé';
       },
@@ -67,6 +85,7 @@ export default defineContentScript({
           avatar,
           vrm,
           avatarOptions: { bannerText: sources.bannerText, debugSafeZone: sources.debugSafeZone },
+          pauseText: pauseText(sources.language),
           createAudioTrack: async () => {
             voice = createVoiceOutput(
               (responseId, at) => sendToExtension({ type: 'playback-started', responseId, at }),
@@ -91,8 +110,39 @@ export default defineContentScript({
         });
         // Le pipeline voix n'est relié qu'au cadre principal. Son du recruteur : partage de
         // l'onglet par la page, son compris (bouton, getDisplayMedia), sans permission d'extension.
+        // Pause : la voix se tait, le son du recruteur ne part plus (partage gardé ouvert), puis
+        // l'image « Avatar en pause » remplace l'avatar. Les pistes de la plateforme restent vivantes.
+        let paused = false;
+        const controls = isTop ? createPageControls(sources.language, (clickAt) => void pauseControl?.set(!paused, clickAt)) : null;
+        uninstallers.push(() => controls?.remove());
+        pauseControl = {
+          get paused() {
+            return paused;
+          },
+          set(value, clickAt) {
+            if (value === paused) return value ? 'déjà en pause' : 'déjà actif';
+            if (value) {
+              // 1. Voix en cours coupée dans le micro injecté.
+              const hadVoice = voice !== null;
+              voice?.stop();
+              paused = true;
+              if (hadVoice) log(`pause : voix coupée dans le micro injecté ${Date.now() - clickAt} ms après le clic`);
+              // 2. Pipeline d'écoute : plus de son envoyé, le document offscreen s'arrête.
+              if (isTop) sendToExtension({ type: 'pause', at: clickAt });
+              // 3. Rendu : image fixe.
+              media.setPaused(true, clickAt);
+            } else {
+              paused = false;
+              media.setPaused(false, clickAt);
+              if (isTop) sendToExtension({ type: 'resume', at: clickAt });
+            }
+            controls?.update(paused);
+            log(`${paused ? 'pause' : 'reprise'} (${frame}) : traitée ${Date.now() - clickAt} ms après le clic`);
+            return paused ? 'en pause' : 'actif';
+          },
+        };
         if (isTop) {
-          const share = offerTabShare((pcm, at) => sendToExtension({ type: 'audio', pcm, at }));
+          const share = offerTabShare((pcm, at) => sendToExtension({ type: 'audio', pcm, at }), () => !paused);
           uninstallers.push(() => share.stop());
         }
         if (isTop) {
@@ -103,8 +153,12 @@ export default defineContentScript({
             const message = envelope.message;
             if (message.type === 'hello') {
               if (voice) sendToExtension({ type: 'mic-ready' });
+              // Pont relié de nouveau (réactivation) : le pipeline apprend que l'avatar est en pause.
+              if (paused) sendToExtension({ type: 'pause', at: Date.now() });
             } else if (message.type === 'speak') {
-              if (voice) voice.speak(message.responseId, message.pcm, message.sampleRate);
+              // Voix déjà en route au moment de la pause : jamais jouée.
+              if (paused) log('pause : voix reçue du pipeline ignorée');
+              else if (voice) voice.speak(message.responseId, message.pcm, message.sampleRate);
               else log('voix reçue avant que la plateforme ait demandé le micro : ignorée');
             } else if (message.type === 'stop') {
               voice?.stop();
