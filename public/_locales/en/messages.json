@@ -9,7 +9,7 @@
     "message": "Open rehearsal"
   },
   "popupOpenAvatar": {
-    "message": "Open avatar"
+    "message": "Avatar test page"
   },
   "popupOpenVoices": {
     "message": "Voice test bench"
@@ -66,7 +66,7 @@
     "message": "Enable on this tab"
   },
   "popupDeactivate": {
-    "message": "Remove completely from this tab"
+    "message": "Remove completely"
   },
   "popupPreview": {
     "message": "Avatar preview"
@@ -75,9 +75,48 @@
     "message": "Close preview"
   },
   "popupPause": {
-    "message": "Pause the avatar"
+    "message": "Pause"
   },
   "popupResume": {
-    "message": "Resume (disclosure reminder)"
+    "message": "Resume"
+  },
+  "popupStateInactive": {
+    "message": "Inactive"
+  },
+  "popupStateActive": {
+    "message": "Active"
+  },
+  "popupStatePaused": {
+    "message": "Paused"
+  },
+  "popupDevTools": {
+    "message": "Developer tools"
+  },
+  "popupActivating": {
+    "message": "Preparing the avatar…"
+  },
+  "popupHintShare": {
+    "message": "Click the OtherSelf button in the page to share the tab's audio."
+  },
+  "popupHintPermissions": {
+    "message": "Allow the camera and microphone for this site (padlock in the address bar)."
+  },
+  "popupUnavailable": {
+    "message": "OtherSelf can't run on this page."
+  },
+  "popupRemoved": {
+    "message": "Avatar removed. Pick your camera and microphone in the platform settings."
+  },
+  "popupErrorGeneric": {
+    "message": "Something went wrong. Reload the page and try again."
+  },
+  "popupPreviewHintWaiting": {
+    "message": "The platform hasn't asked for the camera yet."
+  },
+  "popupPreviewHintOpen": {
+    "message": "Opens a window showing the image sent to the platform, unmirrored and without sound."
+  },
+  "popupPreviewHintClose": {
+    "message": "Closes the preview window."
   }
 }

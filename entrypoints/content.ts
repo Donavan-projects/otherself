@@ -22,6 +22,8 @@ declare global {
       /** Pause (vrai) ou reprise (faux) ; clickAt : Date.now du clic, pour mesurer les délais. */
       setPaused(paused: boolean, clickAt: number): string;
       state(): OtherSelfState;
+      /** Popup : vrai si le son de l'onglet est partagé (cadre principal). */
+      sharing?(): boolean;
       preview?: Preview | undefined;
     };
   }
@@ -146,7 +148,11 @@ export default defineContentScript({
         };
         if (isTop) {
           const share = offerTabShare((pcm, at) => sendToExtension({ type: 'audio', pcm, at }), () => !paused);
-          uninstallers.push(() => share.stop());
+          window.__otherSelf!.sharing = () => share.listening();
+          uninstallers.push(() => {
+            share.stop();
+            window.__otherSelf!.sharing = undefined;
+          });
         }
         if (isTop) {
           const onMessage = (event: MessageEvent) => {
