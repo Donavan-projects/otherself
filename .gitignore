@@ -18,3 +18,5 @@ CLAUDE.local.md
 avatar/Otherself.vrm
 # Sources VRoid des modèles en préparation (ex. android-source.vrm) : jamais commitées.
 avatar/*-source.vrm
+# Images sources des fonds (générées, avant recadrage et intégration en SVG) : jamais commitées.
+avatar/fonds/*.png
