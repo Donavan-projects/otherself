@@ -39,6 +39,12 @@ const BARGE_IN_CHECK_MS = 50;
 const OPENING_BARGE_IN_MS = 2000;
 /** Marge (latence réseau) avant de considérer la révélation comme entendue. */
 const HEARD_MARGIN_MS = 300;
+/**
+ * Délai maximal entre le premier envoi de la voix à la page et le début réel de sa lecture. D'habitude
+ * 20 à 100 ms (pont, puis 20 ms d'avance à la lecture) ; au-delà, la voix est tenue pour perdue (erreur
+ * dans la page, micro retiré) et l'avatar quitte « en réflexion ».
+ */
+const PLAYBACK_START_TIMEOUT_MS = 4000;
 /** Écart minimal entre deux hochements de l'avatar à l'écoute. */
 const NOD_MIN_GAP_MS = 1500;
 
@@ -72,6 +78,10 @@ interface Response {
   /** Début de la lecture dans la page (premier playback-started de ce tour). */
   playbackStartedAt?: number;
   timings: { transcript?: number; firstToken?: number; firstAudio?: number };
+  /** Voix envoyée à la page, pas forcément encore jouée (Date.now du premier envoi). */
+  sentAt?: number;
+  /** La voix envoyée n'a jamais commencé à jouer dans le délai prévu : la réponse ne compte plus pour l'état. */
+  playbackTimedOut?: boolean;
 }
 
 export class Conversation {
@@ -608,6 +618,14 @@ export class Conversation {
       return false;
     }
     if (response.timings.firstAudio === undefined) response.timings.firstAudio = Date.now() - response.questionEndAt;
+    if (response.sentAt === undefined) {
+      response.sentAt = Date.now();
+      setTimeout(() => {
+        if (response.played || response.controller.signal.aborted || this.current !== response) return;
+        response.playbackTimedOut = true;
+        this.updateState(`voix envoyée à la page mais jamais jouée après ${PLAYBACK_START_TIMEOUT_MS} ms (réponse ${response.id})`);
+      }, PLAYBACK_START_TIMEOUT_MS);
+    }
     this.link.speak(response.id, audio);
     return true;
   }
@@ -621,6 +639,8 @@ export class Conversation {
    * Déduit l'état de l'avatar de la conversation et le transmet s'il a changé. Priorités : pause,
    * voix de l'avatar en cours (même si le recruteur parle par-dessus, tant que l'interruption n'est
    * pas confirmée), recruteur qui parle, réponse en préparation (ou entre deux phrases déjà jouées), inactif.
+   * Une réponse entièrement envoyée mais pas encore jouée reste « en réflexion » jusqu'au début réel de la
+   * lecture, au plus PLAYBACK_START_TIMEOUT_MS après le premier envoi.
    */
   private updateState(reason: string) {
     const response = this.current;
@@ -629,6 +649,7 @@ export class Conversation {
     else if (this.avatarSpeakingSince !== null) next = 'parole';
     else if (this.vad?.isSpeaking) next = 'ecoute';
     else if (response && !response.finished) next = response.played ? 'parole' : 'reflexion';
+    else if (response && response.sentAt !== undefined && !response.played && !response.playbackTimedOut) next = 'reflexion';
     else next = 'inactif';
     if (next === this.avatarState) return;
     const previous = this.avatarState;
