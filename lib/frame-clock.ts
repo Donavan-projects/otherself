@@ -1,8 +1,9 @@
 // Rythme du dessin de l'avatar, qui ne doit pas être ralenti quand l'onglet de la plateforme
 // passe en arrière-plan : Chrome ralentit alors les minuteurs de la page (1 par seconde, puis
 // 1 par minute après 5 minutes masqué). Trois horloges, dans l'ordre :
-// 1. minuteur dans un worker (URL blob) : les workers ne sont pas ralentis ;
-// 2. si la CSP de la page refuse le blob, horloge Web Audio (ScriptProcessorNode relié à une
+// 1. minuteur dans un worker (URL blob) : les workers ne sont pas ralentis. Jamais tenté sur une
+//    page qui impose les Trusted Types (lib/trusted-types.ts) : Chrome y logue une erreur ;
+// 2. si la page refuse le worker, horloge Web Audio (ScriptProcessorNode relié à une
 //    destination MediaStream privée, jamais à ctx.destination : rien n'est joué dans l'onglet) ;
 // 3. en dernier recours, setInterval (ralenti en arrière-plan).
 // Une horloge qui ne bat pas dans la seconde est abandonnée pour la suivante. Monde MAIN.
@@ -31,8 +32,16 @@ interface Ticker {
   stop(): void;
 }
 
-/** Appelle onTick environ fps fois par seconde ; onChange signale l'horloge en service. */
-export function startFrameClock(fps: number, onTick: () => void, onChange: (kind: FrameClockKind, reason: string) => void): FrameClock {
+/**
+ * Appelle onTick environ fps fois par seconde ; onChange signale l'horloge en service.
+ * skipWorker : raison de ne pas tenter le worker (Trusted Types imposés), ou null.
+ */
+export function startFrameClock(
+  fps: number,
+  onTick: () => void,
+  onChange: (kind: FrameClockKind, reason: string) => void,
+  skipWorker: string | null = null,
+): FrameClock {
   const intervalMs = 1000 / fps;
   let stopped = false;
   let current: Ticker | null = null;
@@ -85,7 +94,8 @@ export function startFrameClock(fps: number, onTick: () => void, onChange: (kind
       if (!ticked) fail(`${name} muet après ${WATCHDOG_MS} ms`);
     }, WATCHDOG_MS);
   };
-  start(0, 'démarrage');
+  if (skipWorker) start(1, `worker non tenté : ${skipWorker}`);
+  else start(0, 'démarrage');
 
   return {
     kind: () => kind,

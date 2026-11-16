@@ -12,6 +12,7 @@ import { createVoiceOutput, type VoiceOutput } from '@/lib/page-audio';
 import { createPageControls } from '@/lib/page-controls';
 import { createPreview, type Preview } from '@/lib/preview';
 import { offerTabShare } from '@/lib/share-tab';
+import { trustedTypesEnforcement } from '@/lib/trusted-types';
 
 declare global {
   interface Window {
@@ -68,6 +69,8 @@ export default defineContentScript({
       async install(sources) {
         if (installed) return 'déjà actif';
         installed = true;
+        // Politique de la page lue dès l'activation : le rythme du dessin en dépend (lib/frame-clock.ts).
+        void trustedTypesEnforcement();
         const avatar = await mapAssets(sources.avatar, (file) => createImageBitmap(fileToBlob(file)));
         const vrm = sources.vrm && {
           model: await fileToBlob(sources.vrm.model).arrayBuffer(),

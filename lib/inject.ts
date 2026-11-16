@@ -5,6 +5,7 @@
 import { AVATAR_HEIGHT, AVATAR_WIDTH, AvatarRenderer, drawBanner, type AvatarAssets, type AvatarOptions, type MouthShape, type Rect } from './avatar';
 import { createVrmRenderer, type FrameRenderer, type VrmSources } from './avatar-vrm';
 import { startFrameClock } from './frame-clock';
+import { trustedTypesEnforcement } from './trusted-types';
 import { createLogger } from './log';
 import { audioContext } from './page-audio';
 
@@ -247,6 +248,7 @@ async function createVideoTrack(
   /** Clic de pause ou de reprise pas encore suivi d'une image : délai logué à la première image dessinée. */
   let pendingClick: { at: number; label: string } | null = null;
 
+  const trustedTypes = await trustedTypesEnforcement();
   // Redessin continu : un canvas figé peut ne produire aucune image dans le flux. Le rythme
   // vient d'une horloge que Chrome ne ralentit pas en arrière-plan (lib/frame-clock.ts) ;
   // requestAnimationFrame s'arrêterait dès que l'onglet est masqué.
@@ -293,6 +295,7 @@ async function createVideoTrack(
       if (start - last >= STATS_INTERVAL_MS) report(start);
     },
     (kind, reason) => log(`rythme du dessin : horloge ${kind} (${reason})`),
+    trustedTypes,
   );
 
   const { width, height } = track.getSettings();
