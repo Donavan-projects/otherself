@@ -69,6 +69,10 @@ Ces trois choix se tiennent : à décider et valider ensemble.
 - Décider quelles formes séparées de l'androïde garder à l'allègement (57 formes, dont sourcils, yeux et bouche
   séparés ; l'allègement ne garde aujourd'hui que les 14 des expressions standard). Par exemple les sourcils seuls,
   pour remplacer `angry` en réflexion (étape 2), qui plisse aussi les yeux et abaisse la bouche.
+- Quand l'androïde devient le modèle par défaut : remplacer l'avatar SVG de secours, qui ne lui ressemble plus, par
+  des images générées à partir du modèle 3D. Un script rend à l'avance, avec le GPU de la machine, le visage au repos,
+  les formes de bouche, les yeux fermés et le regard de côté ; le rendu de secours les superpose comme le SVG
+  aujourd'hui (fond, visage, yeux, bouche, bandeau en dernier). À relancer à chaque changement de modèle.
 - Les repères de cadrage sont définis par les os (`lib/vrm-frame.ts`) : ils devraient suivre un nouveau modèle,
   à revérifier quand même.
 

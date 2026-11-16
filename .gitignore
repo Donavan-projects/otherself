@@ -16,3 +16,5 @@ CLAUDE.local.md
 
 # Modèle VRM exporté par VRoid (source, 15 Mo) : seul avatar/otherself.vrm, allégé, est commité.
 avatar/Otherself.vrm
+# Sources VRoid des modèles en préparation (ex. android-source.vrm) : jamais commitées.
+avatar/*-source.vrm

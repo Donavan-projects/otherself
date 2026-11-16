@@ -22,7 +22,8 @@ export interface StateStyle {
   glanceChance: number;
   /**
    * Regard posé hors de la caméra pour tout l'état : côté (signe tiré à l'entrée) et vers le haut. Angle de la cible
-   * vue de la tête, pas des yeux : le regard VRoid (lookAt « bone ») ne tourne les yeux que de 8 à 12° pour 90°.
+   * vue de la tête, pas des yeux : le regard VRoid (lookAt « bone ») ne tourne les yeux que de 8 à 12° pour 90°
+   * (androïde : 8 à 10,2°, réglages vérifiés en capture sur lui comme sur l'ancien modèle).
    */
   gazeAsideYaw: number;
   gazeAsideUp: number;
