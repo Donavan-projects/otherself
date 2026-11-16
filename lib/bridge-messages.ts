@@ -2,6 +2,8 @@
 // offscreen. Les données audio voyagent en base64 (les ports d'extension
 // sérialisent en JSON).
 
+import type { AvatarState } from './avatar-states';
+
 export const PORT_NAME = 'otherself-tab';
 /** Clé des messages window.postMessage entre monde MAIN et monde isolé. */
 export const PAGE_TAG = '__otherSelfBridge';
@@ -25,7 +27,11 @@ export type ToPage =
   | { type: 'hello' }
   /** Voix de l'avatar : PCM float 32 bits mono. */
   | { type: 'speak'; responseId: number; pcm: string; sampleRate: number }
-  | { type: 'stop' };
+  | { type: 'stop' }
+  /** État de l'avatar décidé par lib/conversation.ts ; at : Date.now du changement. */
+  | { type: 'state'; state: AvatarState; previous: AvatarState; at: number; reason: string }
+  /** Hochement de l'avatar à l'écoute (courte pause du recruteur). */
+  | { type: 'nod'; at: number };
 
 /** Du document offscreen vers le pont (en plus de ToPage). */
 export type FromOffscreen = ToPage | { type: 'log'; line: string };

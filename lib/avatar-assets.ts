@@ -3,6 +3,7 @@
 // config.local.json, rastérise les calques à l'échelle du cadre, écrit le slogan courbé sur le
 // t-shirt. La page de la plateforme ne reçoit que des images (jamais la configuration ni la clé API).
 
+import { SVG_GAZE_ASIDE } from './avatar-states';
 import { composeFrame, mapAssets, AVATAR_HEIGHT, AVATAR_WIDTH, MOUTH_SHAPES, SLOGAN_BOTTOM_MAX, SLOGAN_BOTTOM_MIN, type AvatarAssets, type FrameLayout, type MouthShape, type Rect, type Sprite } from './avatar';
 import type { DemoConfig } from './config';
 import { createLogger } from './log';
@@ -124,10 +125,13 @@ export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ asset
   // Parties animées et plan du dessus, découpés à leur emprise.
   const sprite = async (names: string[]): Promise<Sprite<HTMLCanvasElement>> => crop(await layer(names), layout);
   const over = await sprite(OVER_LAYERS);
-  const eyes = { open: await sprite(['yeux_ouverts']), closed: await sprite(['yeux_fermes']) };
+  const eyes = { open: await sprite(['yeux_ouverts']), closed: await sprite(['yeux_fermes']), aside: undefined as Sprite<HTMLCanvasElement> | undefined };
+  // Regard de côté (état « en réflexion ») : iris décalés dans le contour de l'œil.
+  const asideDoc = lookAside(character);
+  if (asideDoc) eyes.aside = crop(await rasterize(withLayers(asideDoc, ['yeux_ouverts']), width, height), layout);
   const mouths = {} as Record<MouthShape, Sprite<HTMLCanvasElement>>;
   for (const shape of MOUTH_SHAPES) mouths[shape] = await sprite([MOUTH_LAYERS[shape]]);
-  const region = union([eyes.open, eyes.closed, ...MOUTH_SHAPES.map((shape) => mouths[shape])]);
+  const region = union([eyes.open, eyes.closed, ...(eyes.aside ? [eyes.aside] : []), ...MOUTH_SHAPES.map((shape) => mouths[shape])]);
 
   const assets = await mapAssets<HTMLCanvasElement, Blob>(
     { under, over, eyes, mouths, region, banner: layout.banner },
@@ -188,6 +192,28 @@ function chooseSubgroups(doc: Document, prefix: string, chosen: string[]) {
 }
 
 /** SVG où seuls les calques nommés sont visibles (les autres, et les repères, sont masqués). */
+/**
+ * Copie du personnage aux iris décalés (regard de côté et vers le haut) : les cercles des groupes
+ * découpés par le contour de l'œil, dans le calque yeux_ouverts, sont déplacés d'une fraction du
+ * rayon du plus grand (l'iris). null si le dessin n'a pas cette structure.
+ */
+function lookAside(doc: Document): Document | null {
+  const copy = doc.cloneNode(true) as Document;
+  const eyes = copy.getElementById('yeux_ouverts');
+  const groups = eyes ? [...eyes.querySelectorAll('g[clip-path]')].filter((group) => group.querySelector(':scope > circle')) : [];
+  if (groups.length === 0) return null;
+  for (const group of groups) {
+    const circles = [...group.querySelectorAll(':scope > circle')];
+    const radius = Math.max(...circles.map((circle) => Number(circle.getAttribute('r')) || 0));
+    const dx = SVG_GAZE_ASIDE.x * radius;
+    const dy = SVG_GAZE_ASIDE.y * radius;
+    for (const circle of circles) {
+      circle.setAttribute('transform', `translate(${dx} ${dy}) ${circle.getAttribute('transform') ?? ''}`.trim());
+    }
+  }
+  return copy;
+}
+
 function withLayers(doc: Document, names: string[]): string {
   const copy = doc.cloneNode(true) as Document;
   for (const group of copy.querySelectorAll('g')) {

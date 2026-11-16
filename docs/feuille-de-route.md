@@ -66,6 +66,9 @@ Ces trois choix se tiennent : à décider et valider ensemble.
 - Meshy AI (ou autre) seulement comme planche d'inspiration, pas comme source du modèle : un modèle généré n'a
   pas les expressions VRM nécessaires.
 - Repasser par `npm run vrm -- optimize` ; viser une taille proche de l'actuelle (5,4 Mo).
+- Décider quelles formes séparées de l'androïde garder à l'allègement (57 formes, dont sourcils, yeux et bouche
+  séparés ; l'allègement ne garde aujourd'hui que les 14 des expressions standard). Par exemple les sourcils seuls,
+  pour remplacer `angry` en réflexion (étape 2), qui plisse aussi les yeux et abaisse la bouche.
 - Les repères de cadrage sont définis par les os (`lib/vrm-frame.ts`) : ils devraient suivre un nouveau modèle,
   à revérifier quand même.
 
@@ -82,6 +85,9 @@ Ces trois choix se tiennent : à décider et valider ensemble.
 - Lisible dans une vignette d'environ 320×180 ; toujours visible de face et dans les mouvements de tête.
 - Texte court et configurable, jamais vide : « Avatar IA » par défaut (variante anglaise « AI avatar »).
 - Avatar SVG de secours : badge équivalent, dessiné dans le canvas.
+- Le badge sert aussi de voyant d'état : petite lumière au col, sur la languette du nouveau modèle, dont la couleur
+  suit l'état (écoute, réflexion, parole ; états de l'étape 2). Toujours lisible et jamais éteint, puisqu'il reste le
+  marqueur IA.
 
 **Modification de la règle 1 de `CLAUDE.md`** (à faire explicitement, la règle actuelle impose le bandeau).
 Proposition :

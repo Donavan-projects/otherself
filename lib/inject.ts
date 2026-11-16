@@ -4,6 +4,7 @@
 
 import { AVATAR_HEIGHT, AVATAR_WIDTH, AvatarRenderer, drawBanner, type AvatarAssets, type AvatarOptions, type MouthShape, type Rect } from './avatar';
 import { createVrmRenderer, type FrameRenderer, type VrmSources } from './avatar-vrm';
+import type { AvatarState } from './avatar-states';
 import { startFrameClock } from './frame-clock';
 import { trustedTypesEnforcement } from './trusted-types';
 import { createLogger } from './log';
@@ -25,6 +26,8 @@ export interface FakeMediaSources {
   avatarOptions: AvatarOptions;
   /** Texte de l'image « Avatar en pause » (le bandeau y reste, règle 1). */
   pauseText: string;
+  /** État de départ de l'avatar ; « parole » pour un banc sans pipeline (bouche pilotée par le son de test). */
+  initialState?: AvatarState;
   /** Crée la piste du micro injecté, au premier appel de getUserMedia. */
   createAudioTrack: () => Promise<MediaStreamTrack>;
 }
@@ -35,6 +38,8 @@ interface FakeTracks {
   stopRendering(): void;
   /** Pause : image fixe « Avatar en pause » (bandeau compris) au lieu de l'avatar, au même rythme. */
   setPaused(paused: boolean, clickAt?: number): void;
+  setAvatarState(state: AvatarState): void;
+  nod(): void;
   /** Images par seconde dessinées sur la dernière période de statistiques. */
   fps(): number | null;
 }
@@ -53,6 +58,10 @@ export interface FakeMediaHandle {
    * seule l'image change. clickAt (Date.now du clic) sert à mesurer le délai.
    */
   setPaused(paused: boolean, clickAt?: number): void;
+  /** État de l'avatar décidé par le pipeline (lib/avatar-states.ts), appliqué aussi au rendu créé plus tard. */
+  setAvatarState(state: AvatarState): void;
+  /** Hochement de l'avatar à l'écoute. */
+  nod(): void;
 }
 
 // Nom affiché par la plateforme pour la caméra, le micro et les pistes injectées.
@@ -72,6 +81,7 @@ export function installFakeGetUserMedia(sources: FakeMediaSources): FakeMediaHan
   let enumerations = 0;
   /** Appliqué aussi aux pistes créées plus tard (pause demandée avant que la plateforme ait demandé la caméra). */
   let paused = false;
+  let avatarState: AvatarState = sources.initialState ?? 'inactif';
 
   proto.getUserMedia = async function (this: MediaDevices, constraints?: MediaStreamConstraints) {
     log(`getUserMedia intercepté : ${JSON.stringify(constraints ?? {})}`);
@@ -79,6 +89,7 @@ export function installFakeGetUserMedia(sources: FakeMediaSources): FakeMediaHan
     fake ??= createFakeTracks(sources).then((tracks) => {
       created = tracks;
       if (paused) tracks.setPaused(true);
+      tracks.setAvatarState(avatarState);
       return tracks;
     });
     const { video, audio } = await fake;
@@ -126,6 +137,11 @@ export function installFakeGetUserMedia(sources: FakeMediaSources): FakeMediaHan
       paused = value;
       created?.setPaused(value, clickAt);
     },
+    setAvatarState(state) {
+      avatarState = state;
+      created?.setAvatarState(state);
+    },
+    nod: () => created?.nod(),
     uninstall() {
       for (const timer of [...repeats, check]) clearTimeout(timer);
       proto.getUserMedia = originalGetUserMedia;
@@ -179,7 +195,15 @@ async function createFakeTracks(sources: FakeMediaSources): Promise<FakeTracks> 
   const video = await createVideoTrack(sources, () => level());
   const audio = await sources.createAudioTrack();
   level = createLevelMeter(audio);
-  return { video: video.track, stopRendering: video.stop, setPaused: video.setPaused, fps: video.fps, audio };
+  return {
+    video: video.track,
+    stopRendering: video.stop,
+    setPaused: video.setPaused,
+    setAvatarState: video.setAvatarState,
+    nod: video.nod,
+    fps: video.fps,
+    audio,
+  };
 }
 
 /** Niveau RMS instantané d'une piste audio (analyseur, jamais relié aux haut-parleurs). */
@@ -200,7 +224,14 @@ function createLevelMeter(track: MediaStreamTrack): () => number {
 async function createVideoTrack(
   sources: FakeMediaSources,
   level: () => number,
-): Promise<{ track: MediaStreamTrack; stop(): void; setPaused(paused: boolean, clickAt?: number): void; fps(): number | null }> {
+): Promise<{
+  track: MediaStreamTrack;
+  stop(): void;
+  setPaused(paused: boolean, clickAt?: number): void;
+  setAvatarState(state: AvatarState): void;
+  nod(): void;
+  fps(): number | null;
+}> {
   // Canvas hors DOM : la page ne voit que le flux, bandeau compris (règle 1).
   // Niveau maximal par période de statistiques : sert à régler les seuils de la bouche (lib/avatar.ts).
   let maxLevel = 0;
@@ -224,6 +255,9 @@ async function createVideoTrack(
   } else {
     renderer = svg();
   }
+  /** État courant, redonné au SVG en cas de repli. */
+  let avatarState: AvatarState = sources.initialState ?? 'inactif';
+  renderer.setState?.(avatarState);
   /** Image suivante ; si l'avatar 3D tombe en panne (contexte WebGL perdu…), repli définitif sur le SVG. */
   const draw = (now: number): MouthShape => {
     try {
@@ -233,6 +267,7 @@ async function createVideoTrack(
       log(`avatar 3D en panne (${errorMessage(error)}) : repli sur l'avatar SVG`);
       renderer.dispose?.();
       renderer = svg();
+      renderer.setState?.(avatarState);
       return renderer.draw(now);
     }
   };
@@ -311,6 +346,11 @@ async function createVideoTrack(
       if (clickAt !== undefined) pendingClick = { at: clickAt, label: value ? 'pause' : 'reprise' };
       log(value ? 'pause : image « Avatar en pause » à la place de l’avatar (pistes de la plateforme inchangées)' : 'reprise : avatar de nouveau dessiné');
     },
+    setAvatarState(state) {
+      avatarState = state;
+      renderer.setState?.(state);
+    },
+    nod: () => renderer.nod?.(),
     stop() {
       clock.stop();
       renderer.dispose?.();

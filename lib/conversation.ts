@@ -4,6 +4,7 @@
 // L'ouverture (révélation puis messageText) part à la fin de la première prise de parole
 // du recruteur, sans attendre la transcription, puis vient la réponse à sa question.
 
+import type { AvatarState } from './avatar-states';
 import type { DemoConfig } from './config';
 import { takeChunks } from './chunks';
 import { isGreetingOnly } from './greeting';
@@ -19,6 +20,7 @@ const log = createLogger('llm');
 const logStt = createLogger('stt');
 const logTts = createLogger('tts');
 const logVad = createLogger('vad');
+const logState = createLogger('etat');
 
 /** Audio gardé avant le début de parole confirmé, pour ne pas couper le premier mot. */
 const PREROLL_MS = 600;
@@ -37,11 +39,17 @@ const BARGE_IN_CHECK_MS = 50;
 const OPENING_BARGE_IN_MS = 2000;
 /** Marge (latence réseau) avant de considérer la révélation comme entendue. */
 const HEARD_MARGIN_MS = 300;
+/** Écart minimal entre deux hochements de l'avatar à l'écoute. */
+const NOD_MIN_GAP_MS = 1500;
 
 /** Vers la page : lecture de la voix dans le micro injecté. */
 export interface PageLink {
   speak(responseId: number, audio: SpeechAudio): void;
   stop(): void;
+  /** Nouvel état de l'avatar (lib/avatar-states.ts), seulement quand il change. */
+  state(state: AvatarState, previous: AvatarState, reason: string): void;
+  /** Hochement : courte pause du recruteur pendant l'écoute. */
+  nod(): void;
 }
 
 interface Response {
@@ -104,6 +112,9 @@ export class Conversation {
   /** Durée de la révélation seule (début de l'ouverture), en ms d'audio. */
   private disclosureMs = Infinity;
   private vad!: Vad;
+  /** État de l'avatar : déduit de la conversation à chaque événement (updateState), jamais posé à la main. */
+  private avatarState: AvatarState = 'inactif';
+  private lastNodAt = 0;
 
   private constructor(
     private readonly config: DemoConfig,
@@ -141,6 +152,7 @@ export class Conversation {
     conversation.vad = await Vad.create(config.silenceMs, {
       onSpeechStart: (startedAt) => conversation.onSpeechStart(startedAt),
       onSpeechEnd: (lastVoiceAt, durationMs) => void conversation.onSpeechEnd(lastVoiceAt, durationMs),
+      onShortPause: () => conversation.onShortPause(),
     });
     log(`ouverture : « ${conversation.opening} »`);
     void conversation.ensureTranscriber();
@@ -169,6 +181,7 @@ export class Conversation {
     this.spoken.length = 0;
     if (this.bargeIn) clearInterval(this.bargeIn.timer);
     this.bargeIn = null;
+    this.updateState(reason);
   }
 
   /**
@@ -189,6 +202,7 @@ export class Conversation {
     this.carried = '';
     this.transcriber?.clear();
     this.vad.reset();
+    this.updateState('pause demandée');
     log(`pause : pipeline d’écoute arrêté ${Date.now() - clickAt} ms après le clic (son du recruteur ignoré, aucune réponse)`);
   }
 
@@ -198,6 +212,7 @@ export class Conversation {
     this.paused = false;
     // Révélation jamais entendue : l'ouverture complète est encore à venir, pas besoin de rappel.
     if (this.revealed) this.reminderPending = true;
+    this.updateState('reprise');
     log(
       `reprise ${Date.now() - clickAt} ms après le clic : ` +
         (this.revealed ? 'rappel court de la révélation avant la prochaine réponse' : 'ouverture complète toujours à venir'),
@@ -258,6 +273,7 @@ export class Conversation {
 
   private onSpeechStart(startedAt: number) {
     this.speechStartedAt = startedAt;
+    this.updateState('le recruteur parle');
     const opening = this.inOpening;
     if (this.avatarSpeakingSince !== null || opening) {
       // Garde-fou : la voix de l'avatar ne doit jamais revenir dans le son capturé.
@@ -317,6 +333,7 @@ export class Conversation {
     if (bargeIn && !bargeIn.confirmed) {
       clearInterval(bargeIn.timer);
       this.transcriber?.clear();
+      this.updateState('parole brève par-dessus l’avatar ignorée');
       logVad(
         `parole de ${Math.round(durationMs)} ms par-dessus l’avatar, sous le seuil d’interruption (${bargeIn.threshold} ms` +
           `${bargeIn.threshold > this.config.bargeInMs ? ', relevé pendant l’ouverture' : ''}) : ignorée (écho, bruit ou bref acquiescement)`,
@@ -336,12 +353,14 @@ export class Conversation {
         this.waitingForMicLogged = true;
         log('le recruteur a parlé, mais la plateforme n’a pas encore demandé le micro : ouverture et réponse en attente');
       }
+      this.updateState('fin de la question, micro de la plateforme pas encore prêt');
       this.carried = join(this.carried, await transcript);
       return;
     }
 
     if (this.paused) return;
     const response = this.startResponse(lastVoiceAt);
+    this.updateState('fin de la question : transcription et réponse');
     // Règle 2 : l'ouverture part tout de suite (déjà synthétisée), avant toute réponse.
     const opening = response.includesOpening ? this.sendOpening(response) : Promise.resolve();
     const text = await transcript;
@@ -360,6 +379,7 @@ export class Conversation {
       response.finished = true;
       // Rien n'a été envoyé : aucune fin de lecture ne viendra libérer ce tour.
       if (!response.includesOpening && this.current === response) this.current = null;
+      this.updateState('aucune question à traiter');
       return;
     }
     // Simple salutation au premier tour : l'ouverture sert de réponse, rien n'est demandé au LLM.
@@ -368,6 +388,7 @@ export class Conversation {
       log(`salutation seule (« ${question} ») : l’ouverture sert de réponse, tour non envoyé au LLM`);
       await opening;
       response.finished = true;
+      this.updateState('salutation : ouverture seule');
       return;
     }
     await this.answer(response, question, opening);
@@ -396,6 +417,7 @@ export class Conversation {
     this.link.stop();
     this.avatarSpeakingSince = null;
     this.current = null;
+    this.updateState(`réponse interrompue : ${reason}`);
     // Pas encore de réponse entendue : la question sera reprise avec la suite du recruteur.
     if (!response.answerSent) this.carried = join(response.question, this.carried);
     log(`réponse ${response.id} interrompue : ${reason}`);
@@ -525,6 +547,7 @@ export class Conversation {
     }
     await speaker;
     response.finished = true;
+    this.updateState(signal.aborted ? 'réponse abandonnée' : 'réponse entièrement envoyée');
     this.logAnswer(response, signal.aborted);
   }
 
@@ -589,6 +612,38 @@ export class Conversation {
     return true;
   }
 
+  /** État courant de l'avatar (renvoyé à la page à chaque connexion du pont). */
+  get state(): AvatarState {
+    return this.avatarState;
+  }
+
+  /**
+   * Déduit l'état de l'avatar de la conversation et le transmet s'il a changé. Priorités : pause,
+   * voix de l'avatar en cours (même si le recruteur parle par-dessus, tant que l'interruption n'est
+   * pas confirmée), recruteur qui parle, réponse en préparation (ou entre deux phrases déjà jouées), inactif.
+   */
+  private updateState(reason: string) {
+    const response = this.current;
+    let next: AvatarState;
+    if (this.paused) next = 'pause';
+    else if (this.avatarSpeakingSince !== null) next = 'parole';
+    else if (this.vad?.isSpeaking) next = 'ecoute';
+    else if (response && !response.finished) next = response.played ? 'parole' : 'reflexion';
+    else next = 'inactif';
+    if (next === this.avatarState) return;
+    const previous = this.avatarState;
+    this.avatarState = next;
+    logState(`${previous} → ${next} (${reason})`);
+    this.link.state(next, previous, reason);
+  }
+
+  /** Courte pause du recruteur (VAD) : hochement si l'avatar écoute. */
+  private onShortPause() {
+    if (this.avatarState !== 'ecoute' || Date.now() - this.lastNodAt < NOD_MIN_GAP_MS) return;
+    this.lastNodAt = Date.now();
+    this.link.nod();
+  }
+
   private markRevealed() {
     this.revealed = true;
     this.reminderPending = false;
@@ -600,6 +655,7 @@ export class Conversation {
     if (response?.id !== responseId) return;
     this.avatarSpeakingSince = at;
     response.playbackStartedAt ??= at;
+    this.updateState('début de la lecture de la voix');
     if (response.played) return;
     response.played = true;
     const { transcript, firstToken, firstAudio } = response.timings;
@@ -625,6 +681,7 @@ export class Conversation {
       this.markRevealed();
     }
     if (response.finished) this.current = null;
+    this.updateState('fin de la lecture de la voix');
   }
 }
 

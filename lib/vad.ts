@@ -16,6 +16,8 @@ const POSITIVE_THRESHOLD = 0.5;
 const NEGATIVE_THRESHOLD = 0.35;
 /** Parole continue nécessaire pour confirmer un début (évite les bruits brefs). */
 const MIN_SPEECH_MS = 250;
+/** Silence au milieu d'une prise de parole compté comme courte pause (hochement de l'avatar). */
+const SHORT_PAUSE_MS = 250;
 /** Bilan périodique : trames analysées et probabilité de parole maximale (diagnostic). */
 const REPORT_INTERVAL_MS = 10000;
 
@@ -31,6 +33,8 @@ export interface VadEvents {
   onSpeechStart(startedAt: number): void;
   /** Fin de parole ; `lastVoiceAt` = dernier son (Date.now), avant le silence d'attente. */
   onSpeechEnd(lastVoiceAt: number, durationMs: number): void;
+  /** Courte pause (SHORT_PAUSE_MS de silence) au milieu d'une prise de parole, une fois par silence. */
+  onShortPause?(): void;
 }
 
 export class Vad {
@@ -45,6 +49,8 @@ export class Vad {
   private firstVoiceAt = 0;
   private lastVoiceAt = 0;
   private readonly report = { frames: 0, maxProbability: 0, first: true };
+  /** Courte pause déjà signalée pour ce silence (une seule par silence). */
+  private pauseReported = false;
 
   private constructor(
     private readonly session: ort.InferenceSession,
@@ -144,6 +150,7 @@ export class Vad {
       if (this.voicedMs === 0) this.firstVoiceAt = frameAt - FRAME_MS;
       this.voicedMs += FRAME_MS;
       this.silentMs = 0;
+      this.pauseReported = false;
       this.lastVoiceAt = frameAt;
       if (!this.speaking && this.voicedMs >= MIN_SPEECH_MS) {
         this.speaking = true;
@@ -155,6 +162,11 @@ export class Vad {
     if (probability < NEGATIVE_THRESHOLD || !this.speaking) {
       this.silentMs += FRAME_MS;
       if (!this.speaking && this.silentMs >= MIN_SPEECH_MS) this.voicedMs = 0;
+      // Courte pause au milieu d'une prise de parole : l'avatar à l'écoute peut hocher la tête.
+      if (this.speaking && !this.pauseReported && this.silentMs >= SHORT_PAUSE_MS && this.silentMs < this.silenceMs) {
+        this.pauseReported = true;
+        this.events.onShortPause?.();
+      }
       if (this.speaking && this.silentMs >= this.silenceMs) {
         this.speaking = false;
         const duration = this.lastVoiceAt - this.firstVoiceAt;

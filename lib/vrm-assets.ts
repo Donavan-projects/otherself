@@ -47,10 +47,16 @@ export type VrmVariant = Pick<DemoConfig, 'background' | 'bannerText' | 'bannerO
  * Prépare l'avatar 3D. Le slogan reprend celui du personnage SVG (sloganStyle, de buildAvatarAssets) : même zone dans
  * le cadre, mêmes lignes, même police, même encre.
  */
-export async function buildVrmAssets(variant: VrmVariant, sloganStyle: SloganStyle): Promise<VrmAssets<Blob>> {
+/**
+ * modelName : page de test seulement (vrm.html?model=), autre fichier copié à la main dans avatar-vrm/
+ * du build (ex. android-source) ; jamais dans la caméra injectée, qui prend toujours otherself.vrm.
+ */
+export async function buildVrmAssets(variant: VrmVariant, sloganStyle: SloganStyle, modelName?: string): Promise<VrmAssets<Blob>> {
   const started = performance.now();
-  const response = await fetch(browser.runtime.getURL(MODEL_URL as '/'));
-  if (!response.ok) throw new Error(`${MODEL_URL} introuvable (${response.status})`);
+  if (modelName !== undefined && !/^[\w-]+$/.test(modelName)) throw new Error(`nom de modèle invalide : ${modelName}`);
+  const url = modelName ? `/avatar-vrm/${modelName}.vrm` : MODEL_URL;
+  const response = await fetch(browser.runtime.getURL(url as '/'));
+  if (!response.ok) throw new Error(`${url} introuvable (${response.status})`);
   const model = await response.blob();
   const glb = readGlb(new Uint8Array(await model.arrayBuffer()), 'otherself.vrm');
   const anchorY = boneHeight(glb, VRM_FRAME_ANCHOR);
