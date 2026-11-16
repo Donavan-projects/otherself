@@ -66,12 +66,18 @@
     "message": "Enable on this tab"
   },
   "popupDeactivate": {
-    "message": "Disable on this tab"
+    "message": "Remove completely from this tab"
   },
   "popupPreview": {
     "message": "Avatar preview"
   },
   "popupPreviewClose": {
     "message": "Close preview"
+  },
+  "popupPause": {
+    "message": "Pause the avatar"
+  },
+  "popupResume": {
+    "message": "Resume (disclosure reminder)"
   }
 }

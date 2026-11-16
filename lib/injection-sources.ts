@@ -15,6 +15,13 @@ export interface SerializedSources {
   vrm?: VrmAssets<SerializedFile> | undefined;
   bannerText: string;
   debugSafeZone: boolean;
+  /** Langue des textes affichés dans la page (bouton Pause / Reprendre, image de pause). */
+  language: 'fr' | 'en';
+}
+
+/** Texte de l'image fixe affichée pendant la pause (bandeau conservé, règle 1). */
+export function pauseText(language: 'fr' | 'en'): string {
+  return language === 'fr' ? 'Avatar en pause' : 'Avatar paused';
 }
 
 export function bytesToBase64(bytes: ArrayBuffer): string {

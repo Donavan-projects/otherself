@@ -44,6 +44,8 @@ const TRIANGLE_BLEED = 0.75;
 export interface FrameRenderer {
   readonly canvas: HTMLCanvasElement;
   draw(now?: number): MouthShape;
+  /** Prochaine image entière (après la pause, le canvas contient une autre image). */
+  invalidate?(): void;
   dispose?(): void;
 }
 

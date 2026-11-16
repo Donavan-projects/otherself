@@ -89,6 +89,12 @@ export class Conversation {
   private readonly spoken: string[] = [];
   /** Règle 2 : vrai seulement quand la révélation a été entièrement prononcée. */
   private revealed = false;
+  /** Reprise après une pause : rappel court de la révélation avant la prochaine réponse, jusqu'à ce qu'il soit entendu. */
+  private reminderPending = false;
+  /** Pause : son du recruteur ignoré, aucune réponse. */
+  private paused = false;
+  /** Durée du rappel court, en ms d'audio. */
+  private shortDisclosureMs = Infinity;
   /** Question restée sans réponse audible (recruteur qui reprend la parole). */
   private carried = '';
   private readonly history: ChatMessage[] = [];
@@ -122,7 +128,12 @@ export class Conversation {
       logTts(`ouverture prête (${audio.length} phrase(s)), pas encore jouée : en attente de la première prise de parole du recruteur`);
       return audio;
     })();
-    this.shortDisclosureAudio = this.openingAudio.then(() => voice.synthesize(shortDisclosureText(config.language, config.candidateName)));
+    this.shortDisclosureAudio = this.openingAudio
+      .then(() => voice.synthesize(shortDisclosureText(config.language, config.candidateName)))
+      .then((audio) => {
+        this.shortDisclosureMs = (audio.samples.length / audio.sampleRate) * 1000;
+        return audio;
+      });
   }
 
   static async create(config: DemoConfig, voice: TtsEngine, cv: string, link: PageLink): Promise<Conversation> {
@@ -153,10 +164,44 @@ export class Conversation {
     this.transcriber?.clear();
     if (this.revealed || this.nextId > 0) log(`nouvel entretien (${reason}) : historique effacé, l’ouverture sera rejouée`);
     this.revealed = false;
+    this.reminderPending = false;
     this.openingPlays = 0;
     this.spoken.length = 0;
     if (this.bargeIn) clearInterval(this.bargeIn.timer);
     this.bargeIn = null;
+  }
+
+  /**
+   * Pause demandée par l'utilisateur (popup ou bouton de la page) : réponse en cours abandonnée,
+   * voix coupée, prise de parole en cours oubliée. clickAt : Date.now du clic.
+   */
+  pause(clickAt: number) {
+    if (this.paused) return;
+    this.interrupt('pause demandée par l’utilisateur');
+    // Même sans réponse en cours : coupe le retour audio et ce que la page jouerait encore.
+    this.link.stop();
+    this.paused = true;
+    if (this.bargeIn) clearInterval(this.bargeIn.timer);
+    this.bargeIn = null;
+    this.capturing = false;
+    this.preroll = [];
+    this.prerollSamples = 0;
+    this.carried = '';
+    this.transcriber?.clear();
+    this.vad.reset();
+    log(`pause : pipeline d’écoute arrêté ${Date.now() - clickAt} ms après le clic (son du recruteur ignoré, aucune réponse)`);
+  }
+
+  /** Reprise : la prochaine réponse commence par le rappel court de la révélation (règle 2). */
+  resume(clickAt: number) {
+    if (!this.paused) return;
+    this.paused = false;
+    // Révélation jamais entendue : l'ouverture complète est encore à venir, pas besoin de rappel.
+    if (this.revealed) this.reminderPending = true;
+    log(
+      `reprise ${Date.now() - clickAt} ms après le clic : ` +
+        (this.revealed ? 'rappel court de la révélation avant la prochaine réponse' : 'ouverture complète toujours à venir'),
+    );
   }
 
   private ensureTranscriber(): Promise<void> {
@@ -180,6 +225,7 @@ export class Conversation {
   private audioLogged = false;
 
   onAudio(samples: Int16Array, receivedAt: number) {
+    if (this.paused) return;
     if (!this.audioLogged) {
       this.audioLogged = true;
       logVad(
@@ -199,10 +245,15 @@ export class Conversation {
     this.vad.push(resample(int16ToFloat(samples), STT_SAMPLE_RATE, VAD_SAMPLE_RATE), receivedAt);
   }
 
+  /** Révélation (complète ou rappel après une pause) encore à faire entendre. */
+  private get openingPending(): boolean {
+    return !this.revealed || this.reminderPending;
+  }
+
   /** Ouverture envoyée à la page et pas encore entendue en entier (lecture commencée ou imminente). */
   private get inOpening(): boolean {
     const response = this.current;
-    return Boolean(response?.includesOpening && response.openingSent && !this.revealed && !response.answerSent);
+    return Boolean(response?.includesOpening && response.openingSent && this.openingPending && !response.answerSent);
   }
 
   private onSpeechStart(startedAt: number) {
@@ -259,6 +310,7 @@ export class Conversation {
   }
 
   private async onSpeechEnd(lastVoiceAt: number, durationMs: number) {
+    if (this.paused) return;
     this.capturing = false;
     const bargeIn = this.bargeIn;
     this.bargeIn = null;
@@ -273,6 +325,7 @@ export class Conversation {
     }
     const endDetectedAt = Date.now();
     const transcript = this.transcribe(endDetectedAt).then((text) => {
+      if (this.paused) return '';
       if (!this.isEcho(text)) return text;
       logStt(`transcription reprenant les mots de l’avatar : écho ignoré (« ${text} »)`);
       return '';
@@ -287,6 +340,7 @@ export class Conversation {
       return;
     }
 
+    if (this.paused) return;
     const response = this.startResponse(lastVoiceAt);
     // Règle 2 : l'ouverture part tout de suite (déjà synthétisée), avant toute réponse.
     const opening = response.includesOpening ? this.sendOpening(response) : Promise.resolve();
@@ -322,17 +376,20 @@ export class Conversation {
   private interrupt(reason: string) {
     const response = this.current;
     if (!response) return;
-    // Révélation déjà entendue en entier avant la coupure : elle ne sera pas rejouée.
-    if (response.includesOpening && !this.revealed && response.playbackStartedAt !== undefined) {
+    // Révélation (ou rappel après une pause) déjà entendue en entier avant la coupure : elle ne sera pas rejouée.
+    if (response.includesOpening && this.openingPending && response.playbackStartedAt !== undefined) {
+      const reminder = this.revealed;
+      const neededMs = reminder ? this.shortDisclosureMs : this.disclosureMs;
+      const what = reminder ? 'rappel de la révélation' : 'révélation';
       const heardMs = Date.now() - response.playbackStartedAt;
-      if (heardMs >= this.disclosureMs + HEARD_MARGIN_MS) {
-        this.revealed = true;
+      if (heardMs >= neededMs + HEARD_MARGIN_MS) {
+        this.markRevealed();
         logTts(
-          `révélation entendue en entier avant l’interruption (${Math.round(heardMs)} ms de lecture, révélation ${Math.round(this.disclosureMs)} ms) : ` +
-            'elle ne sera pas rejouée',
+          `${what} entendu(e) en entier avant l’interruption (${Math.round(heardMs)} ms de lecture, ${what} ${Math.round(neededMs)} ms) : ` +
+            'pas rejoué(e)',
         );
       } else {
-        logTts(`révélation coupée après ${Math.round(heardMs)} ms sur ${Math.round(this.disclosureMs)} ms : elle sera rejouée au tour suivant`);
+        logTts(`${what} coupé(e) après ${Math.round(heardMs)} ms sur ${Math.round(neededMs)} ms : rejoué(e) au tour suivant`);
       }
     }
     response.controller.abort();
@@ -365,7 +422,7 @@ export class Conversation {
       controller: new AbortController(),
       questionEndAt,
       question: '',
-      includesOpening: !this.revealed,
+      includesOpening: this.openingPending,
       openingSent: false,
       played: false,
       answerSent: false,
@@ -386,7 +443,13 @@ export class Conversation {
   private async sendOpening(response: Response) {
     let audio: SpeechAudio[];
     let text: string;
-    if (this.openingPlays < MAX_OPENING_PLAYS) {
+    if (this.revealed) {
+      // Reprise après une pause : la révélation complète a déjà été entendue, le rappel court suffit.
+      audio = [await this.shortDisclosureAudio];
+      text = shortDisclosureText(this.config.language, this.config.candidateName);
+      this.remember(text);
+      log(`reprise après une pause : rappel court de la révélation (réponse ${response.id})`);
+    } else if (this.openingPlays < MAX_OPENING_PLAYS) {
       audio = await this.openingAudio;
       text = this.opening;
       this.openingPlays += 1;
@@ -526,6 +589,11 @@ export class Conversation {
     return true;
   }
 
+  private markRevealed() {
+    this.revealed = true;
+    this.reminderPending = false;
+  }
+
   /** La page a commencé à jouer la réponse : c'est la latence perçue par le recruteur. */
   onPlaybackStarted(responseId: number, at: number) {
     const response = this.current;
@@ -548,9 +616,13 @@ export class Conversation {
     const response = this.current;
     if (response?.id !== responseId) return;
     this.avatarSpeakingSince = null;
-    if (response.includesOpening && response.openingSent && !this.revealed) {
-      this.revealed = true;
-      logTts('révélation entièrement prononcée (elle ne sera plus jouée dans cet entretien)');
+    if (response.includesOpening && response.openingSent && this.openingPending) {
+      logTts(
+        this.revealed
+          ? 'rappel de la révélation entièrement prononcé (après la pause)'
+          : 'révélation entièrement prononcée (elle ne sera plus jouée dans cet entretien, sauf rappel après une pause)',
+      );
+      this.markRevealed();
     }
     if (response.finished) this.current = null;
   }

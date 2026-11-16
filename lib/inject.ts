@@ -2,8 +2,10 @@
 // le canvas de l'avatar comme caméra et la piste audio fournie comme micro, sous le nom
 // « Avatar IA – OtherSelf ». Sans API d'extension : tourne dans le monde MAIN d'un onglet.
 
-import { AvatarRenderer, type AvatarAssets, type AvatarOptions, type MouthShape } from './avatar';
+import { AVATAR_HEIGHT, AVATAR_WIDTH, AvatarRenderer, drawBanner, type AvatarAssets, type AvatarOptions, type MouthShape, type Rect } from './avatar';
 import { createVrmRenderer, type FrameRenderer, type VrmSources } from './avatar-vrm';
+import { startFrameClock } from './frame-clock';
+import { trustedTypesEnforcement } from './trusted-types';
 import { createLogger } from './log';
 import { audioContext } from './page-audio';
 
@@ -21,6 +23,8 @@ export interface FakeMediaSources {
   /** Avatar 3D (prototype) : utilisé s'il est fourni et si WebGL est accéléré ; sinon, et en cas de panne, avatar SVG. */
   vrm?: VrmSources | undefined;
   avatarOptions: AvatarOptions;
+  /** Texte de l'image « Avatar en pause » (le bandeau y reste, règle 1). */
+  pauseText: string;
   /** Crée la piste du micro injecté, au premier appel de getUserMedia. */
   createAudioTrack: () => Promise<MediaStreamTrack>;
 }
@@ -29,6 +33,8 @@ interface FakeTracks {
   video: MediaStreamTrack;
   audio: MediaStreamTrack;
   stopRendering(): void;
+  /** Pause : image fixe « Avatar en pause » (bandeau compris) au lieu de l'avatar, au même rythme. */
+  setPaused(paused: boolean, clickAt?: number): void;
   /** Images par seconde dessinées sur la dernière période de statistiques. */
   fps(): number | null;
 }
@@ -42,6 +48,11 @@ export interface FakeMediaHandle {
   previewTrack(): MediaStreamTrack | null;
   /** Aperçu : images par seconde du flux envoyé. */
   sentFps(): number | null;
+  /**
+   * Pause : les pistes remises à la page restent vivantes (la plateforme ne voit aucune coupure),
+   * seule l'image change. clickAt (Date.now du clic) sert à mesurer le délai.
+   */
+  setPaused(paused: boolean, clickAt?: number): void;
 }
 
 // Nom affiché par la plateforme pour la caméra, le micro et les pistes injectées.
@@ -59,11 +70,17 @@ export function installFakeGetUserMedia(sources: FakeMediaSources): FakeMediaHan
   /** Pistes remises à la page : arrêtées à la désactivation (la page voit « ended »). */
   const handedOut: MediaStreamTrack[] = [];
   let enumerations = 0;
+  /** Appliqué aussi aux pistes créées plus tard (pause demandée avant que la plateforme ait demandé la caméra). */
+  let paused = false;
 
   proto.getUserMedia = async function (this: MediaDevices, constraints?: MediaStreamConstraints) {
     log(`getUserMedia intercepté : ${JSON.stringify(constraints ?? {})}`);
     if (!constraints?.video && !constraints?.audio) return originalGetUserMedia.call(this, constraints);
-    fake ??= createFakeTracks(sources).then((tracks) => (created = tracks));
+    fake ??= createFakeTracks(sources).then((tracks) => {
+      created = tracks;
+      if (paused) tracks.setPaused(true);
+      return tracks;
+    });
     const { video, audio } = await fake;
     // Des clones : la page peut arrêter ses pistes sans couper les sources.
     const tracks: MediaStreamTrack[] = [];
@@ -105,6 +122,10 @@ export function installFakeGetUserMedia(sources: FakeMediaSources): FakeMediaHan
     sendingVideo,
     previewTrack: () => (created && sendingVideo() ? created.video.clone() : null),
     sentFps: () => created?.fps() ?? null,
+    setPaused(value, clickAt) {
+      paused = value;
+      created?.setPaused(value, clickAt);
+    },
     uninstall() {
       for (const timer of [...repeats, check]) clearTimeout(timer);
       proto.getUserMedia = originalGetUserMedia;
@@ -158,7 +179,7 @@ async function createFakeTracks(sources: FakeMediaSources): Promise<FakeTracks> 
   const video = await createVideoTrack(sources, () => level());
   const audio = await sources.createAudioTrack();
   level = createLevelMeter(audio);
-  return { video: video.track, stopRendering: video.stop, fps: video.fps, audio };
+  return { video: video.track, stopRendering: video.stop, setPaused: video.setPaused, fps: video.fps, audio };
 }
 
 /** Niveau RMS instantané d'une piste audio (analyseur, jamais relié aux haut-parleurs). */
@@ -179,7 +200,7 @@ function createLevelMeter(track: MediaStreamTrack): () => number {
 async function createVideoTrack(
   sources: FakeMediaSources,
   level: () => number,
-): Promise<{ track: MediaStreamTrack; stop(): void; fps(): number | null }> {
+): Promise<{ track: MediaStreamTrack; stop(): void; setPaused(paused: boolean, clickAt?: number): void; fps(): number | null }> {
   // Canvas hors DOM : la page ne voit que le flux, bandeau compris (règle 1).
   // Niveau maximal par période de statistiques : sert à régler les seuils de la bouche (lib/avatar.ts).
   let maxLevel = 0;
@@ -219,30 +240,31 @@ async function createVideoTrack(
   const track = canvas.captureStream(FPS).getVideoTracks()[0];
   if (!track) throw new Error('captureStream n\'a fourni aucune piste vidéo');
 
-  // Redessin continu : un canvas figé peut ne produire aucune image dans le flux.
-  // setInterval plutôt que requestAnimationFrame, qui s'arrête si l'onglet est masqué.
+  // Image « Avatar en pause », préparée une fois, bandeau compris (règle 1).
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('contexte 2D indisponible');
+  const pauseFrame = createPauseFrame(sources.pauseText, sources.vrm?.banner ?? sources.avatar.banner, sources.avatarOptions.bannerText);
+  let paused = false;
+  /** Clic de pause ou de reprise pas encore suivi d'une image : délai logué à la première image dessinée. */
+  let pendingClick: { at: number; label: string } | null = null;
+
+  const trustedTypes = await trustedTypesEnforcement();
+  // Redessin continu : un canvas figé peut ne produire aucune image dans le flux. Le rythme
+  // vient d'une horloge que Chrome ne ralentit pas en arrière-plan (lib/frame-clock.ts) ;
+  // requestAnimationFrame s'arrêterait dès que l'onglet est masqué.
   let frames = 0;
   let drawTime = 0;
   let maxDrawTime = 0;
   const shapes = new Map<MouthShape, number>();
   let last = performance.now();
   let lastFps: number | null = null;
-  const drawing = setInterval(() => {
-    const start = performance.now();
-    const shape = draw(start);
-    const spent = performance.now() - start;
-    frames += 1;
-    drawTime += spent;
-    maxDrawTime = Math.max(maxDrawTime, spent);
-    shapes.set(shape, (shapes.get(shape) ?? 0) + 1);
-  }, 1000 / FPS);
-  const stats = setInterval(() => {
-    const now = performance.now();
+  const report = (now: number) => {
     lastFps = (frames * 1000) / (now - last);
     const mouth = [...shapes].map(([shape, count]) => `${shape} ${count}`).join(', ');
     log(
-      `vidéo : ${lastFps.toFixed(1)} images/s, dessin ${(drawTime / Math.max(1, frames)).toFixed(2)} ms ` +
-        `en moyenne (max ${maxDrawTime.toFixed(1)} ms), bouche : ${mouth} (niveau max ${maxLevel.toFixed(3)})`,
+      `vidéo : ${lastFps.toFixed(1)} images/s (horloge ${clock.kind()}, onglet ${document.visibilityState === 'visible' ? 'visible' : 'masqué'}), ` +
+        `dessin ${(drawTime / Math.max(1, frames)).toFixed(2)} ms en moyenne (max ${maxDrawTime.toFixed(1)} ms), ` +
+        (paused ? 'image « Avatar en pause »' : `bouche : ${mouth} (niveau max ${maxLevel.toFixed(3)})`),
     );
     frames = 0;
     drawTime = 0;
@@ -250,19 +272,66 @@ async function createVideoTrack(
     maxLevel = 0;
     shapes.clear();
     last = now;
-  }, STATS_INTERVAL_MS);
+  };
+  const clock = startFrameClock(
+    FPS,
+    () => {
+      const start = performance.now();
+      if (paused) {
+        ctx.drawImage(pauseFrame, 0, 0);
+      } else {
+        const shape = draw(start);
+        shapes.set(shape, (shapes.get(shape) ?? 0) + 1);
+      }
+      const spent = performance.now() - start;
+      frames += 1;
+      drawTime += spent;
+      maxDrawTime = Math.max(maxDrawTime, spent);
+      if (pendingClick) {
+        log(`${pendingClick.label} : première image dessinée ${Date.now() - pendingClick.at} ms après le clic`);
+        pendingClick = null;
+      }
+      // Bilan porté par l'horloge elle-même : un setInterval serait ralenti en arrière-plan.
+      if (start - last >= STATS_INTERVAL_MS) report(start);
+    },
+    (kind, reason) => log(`rythme du dessin : horloge ${kind} (${reason})`),
+    trustedTypes,
+  );
 
   const { width, height } = track.getSettings();
   log(`piste vidéo créée depuis le canvas (${width}x${height} @ ${FPS} fps)`);
   return {
     track,
     fps: () => lastFps,
+    setPaused(value, clickAt) {
+      if (value === paused) return;
+      paused = value;
+      // L'avatar SVG ne redessine que la zone du visage : il repart d'une image entière.
+      if (!value) renderer.invalidate?.();
+      if (clickAt !== undefined) pendingClick = { at: clickAt, label: value ? 'pause' : 'reprise' };
+      log(value ? 'pause : image « Avatar en pause » à la place de l’avatar (pistes de la plateforme inchangées)' : 'reprise : avatar de nouveau dessiné');
+    },
     stop() {
-      clearInterval(drawing);
-      clearInterval(stats);
+      clock.stop();
       renderer.dispose?.();
     },
   };
+}
+
+/** Image fixe de la pause : fond sombre, texte centré, bandeau à sa place habituelle, peint en dernier. */
+function createPauseFrame(text: string, banner: Rect, bannerText: string): OffscreenCanvas {
+  const frame = new OffscreenCanvas(AVATAR_WIDTH, AVATAR_HEIGHT);
+  const ctx = frame.getContext('2d', { alpha: false });
+  if (!ctx) throw new Error('contexte 2D hors écran indisponible');
+  ctx.fillStyle = '#20242c';
+  ctx.fillRect(0, 0, AVATAR_WIDTH, AVATAR_HEIGHT);
+  ctx.fillStyle = '#f2f2f2';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 72px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(text, AVATAR_WIDTH / 2, AVATAR_HEIGHT * 0.45, banner.width);
+  drawBanner(ctx, banner, bannerText);
+  return frame;
 }
 
 function errorMessage(error: unknown): string {

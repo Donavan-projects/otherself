@@ -1,0 +1,152 @@
+# Feuille de route : nouvelle direction d'OtherSelf
+
+Document de travail du 13/11/2026. Il complète `CLAUDE.md` sans le remplacer : tant que les règles non négociables
+n'ont pas été modifiées (voir étape 3), ce sont elles qui font foi.
+
+## Direction
+
+- **OtherSelf n'est pas toi.** C'est un autre qui te représente, clairement artificiel. Il peut avoir sa propre
+  personnalité, mais ce qu'il affirme vient toujours de tes notes : **ton libre, faits verrouillés**.
+- **Un look assumé non humain.** Le personnage s'éloigne volontairement du réalisme : ses défauts (raideur,
+  bouche approximative) se lisent comme un style, et son apparence participe à la transparence.
+- **Une transparence plus discrète mais plus robuste.** Un badge IA près du visage, imprimé sur le modèle,
+  remplace le grand bandeau. Il survit aux recadrages des plateformes. La révélation vocale reste inchangée.
+- **Positionnement.** L'entretien automatisé reste la démonstration et le cœur du message. Les réunions et
+  présentations sont évoquées comme une perspective, pas comme un usage mis en avant : face à des humains,
+  les règles 2, 3 et 5 s'appliquent sans exception.
+
+## Étapes, dans l'ordre
+
+### 1. Fiabilité et désactivation
+
+Objectif : pouvoir couper l'avatar à tout moment, instantanément, sans manipulation dans la plateforme.
+
+- Un seul geste (popup, et si possible bouton dans la page) arrête dans l'ordre : la voix en cours, le pipeline
+  d'écoute, puis le rendu.
+- Aujourd'hui, après désactivation, le popup demande de « réactiver la vraie caméra et le vrai micro dans les
+  réglages de la plateforme ». À étudier : rendre la vraie caméra et le vrai micro directement dans les pistes
+  injectées (même `MediaStreamTrack` côté plateforme, source remplacée), pour que la plateforme ne voie aucune
+  coupure. À défaut, afficher une image fixe « Avatar en pause » et couper le son.
+- Garder 30 images/s (rythme `setInterval` de `lib/inject.ts`) dans tous les états. Problème connu : onglet de la
+  plateforme en arrière-plan, Chrome ralentit les minuteurs et le dessin tombe à 1 image/s (remonte à 30 avec
+  l'aperçu Picture-in-Picture ouvert). À corriger ici, par exemple avec un rythme qui n'est pas ralenti (minuteur
+  dans un worker, ou piste générée côté worker).
+- Critère de fin : sur Meet, désactiver puis réactiver trois fois de suite sans recharger l'onglet, sans gel
+  d'image ni son résiduel ; temps de coupure de la voix mesuré dans les logs.
+
+### 2. Machine à états
+
+Objectif : rendre l'avatar vivant avec une logique simple, sans IA supplémentaire.
+
+| État | Déclencheur | Comportement de l'avatar |
+|---|---|---|
+| Inactif | activation, fin d'une réponse sans question en attente | respiration, clignements, regard qui flâne |
+| À l'écoute | VAD : le recruteur parle | regard vers la caméra, tête légèrement inclinée, petits hochements |
+| En réflexion | fin de la question → attente STT et LLM | regard détourné, bouche fermée, léger mouvement de tête |
+| En conversation | début de la lecture de la voix (`playback-started`) | bouche synchronisée, gestes de tête plus marqués |
+| En pause / désactivé | geste de l'étape 1 | image fixe « Avatar en pause » ou vraie caméra |
+
+- Les transitions sont émises par `lib/conversation.ts` (une seule source de vérité), le rendu
+  (`lib/avatar-vrm.ts`, et le SVG de secours) ne fait que réagir.
+- Transitions lissées (quelques centaines de ms), pas de saut de pose.
+- L'état apparaît dans les logs (`[etat] ecoute → reflexion`) pour vérifier les temps sur Meet.
+- Cette interface d'événements prépare l'étape 6.
+
+### 3. Identité visuelle : plan serré, badge, look non humain
+
+Ces trois choix se tiennent : à décider et valider ensemble.
+
+**Modèle (travail dans VRoid Studio).**
+- Silhouette, coiffure et palette reconnaissables, volontairement non réalistes (couleur ou matière de peau non
+  naturelle, traits simplifiés, yeux plus graphiques, élément signature).
+- Garder le squelette humanoïde et les expressions VRM dont dépend l'animation : `aa`, `ee`, `ih`, `oh`, `ou`,
+  clignements, regard. Vérifier chaque export avec `vrm.html?mouth=A&still=1` (puis E, O).
+- Remplacer autant que possible les pièces prédéfinies de VRoid par des textures et pièces faites maison :
+  identité plus propre, et pas de dépendance à la licence pixiv si un créateur d'avatar voit le jour.
+- Meshy AI (ou autre) seulement comme planche d'inspiration, pas comme source du modèle : un modèle généré n'a
+  pas les expressions VRM nécessaires.
+- Repasser par `npm run vrm -- optimize` ; viser une taille proche de l'actuelle (5,4 Mo).
+- Les repères de cadrage sont définis par les os (`lib/vrm-frame.ts`) : ils devraient suivre un nouveau modèle,
+  à revérifier quand même.
+
+**Plan serré.**
+- Cadrer tête et épaules : quand le visage remplit déjà l'image, le cadrage automatique des plateformes n'a plus
+  de raison de zoomer.
+- Conséquences : le slogan du sweat sort du cadre (à retirer ou déplacer), les défauts du visage se voient plus,
+  d'où l'intérêt du look non humain.
+- Valider sur Meet avec et sans cadrage automatique, avec et sans fond virtuel.
+
+**Badge IA.**
+- Imprimé dans la texture du modèle (col ou épaule), comme le slogan l'est aujourd'hui : il suit les mouvements
+  et l'éclairage.
+- Lisible dans une vignette d'environ 320×180 ; toujours visible de face et dans les mouvements de tête.
+- Texte court et configurable, jamais vide : « Avatar IA » par défaut (variante anglaise « AI avatar »).
+- Avatar SVG de secours : badge équivalent, dessiné dans le canvas.
+
+**Modification de la règle 1 de `CLAUDE.md`** (à faire explicitement, la règle actuelle impose le bandeau).
+Proposition :
+
+> 1. **Marqueur IA incrusté** : un badge IA fait partie de chaque image du flux vidéo injecté (imprimé sur
+>    l'avatar 3D, dessiné dans le canvas pour l'avatar SVG), jamais en superposition DOM masquable, placé près du
+>    visage (col ou épaule) pour survivre aux recadrages des plateformes, lisible dans une vignette d'environ
+>    320×180. Son texte est configurable (`badgeText`, « Avatar IA » par défaut), jamais vide ni désactivable.
+>    L'apparence volontairement non humaine de l'avatar et la révélation vocale (règle 2) complètent ce marqueur.
+
+### 4. Personnalité (ton uniquement)
+
+- Une seule personnalité pour la démo, plus affirmée qu'aujourd'hui : par exemple directe et chaleureuse, avec un
+  peu d'esprit.
+- Définie dans le prompt (`lib/prompt.ts`) comme une section « ton » séparée de la section « faits », pour
+  qu'aucune consigne de style ne puisse affaiblir la règle 5.
+- Le personnage parle de lui comme d'un avatar qui représente le candidat, à la troisième personne quand il
+  rapporte un fait (« d'après ses notes, il a… »). À tester : la formulation la plus naturelle à l'oral.
+- La voix (Piper, hauteur) peut être ajustée pour coller au personnage, toujours générique (règle 4).
+
+**Structure des réponses** (retour d'InterviewCoach.AI du 13/11/2026, score 40/100 : réponses brèves, vagues,
+sans structure STAR ni résultats chiffrés). Cause principale : les limites de longueur du paragraphe « Style » de
+`lib/prompt.ts` (une phrase de plus au maximum, 15 mots par phrase, trois éléments au plus).
+- Longueur adaptée au type de question : réponse courte pour une question factuelle ou fermée ; pour une question
+  comportementale (« racontez une fois où… », « comment avez-vous géré… »), un seul exemple tiré des notes en
+  quatre à six phrases courtes : contexte, rôle et actions du candidat, résultat chiffré si les notes en donnent un.
+- Toujours une première phrase courte qui répond directement (bonne pour la latence : elle part en synthèse
+  pendant que la suite s'écrit).
+- Un exemple bien raconté plutôt que plusieurs cités.
+- Faits concrets (chiffres, dates, résultats nommés) plutôt que qualités générales ; aucune affirmation vague sans
+  le fait qui l'appuie. Sans résultat dans les notes, la réponse s'arrête sur l'action (règle 5).
+- Phrases de 20 mots au plus ; garder au plus trois éléments et deux noms de projet par réponse.
+- Mots de liaison : il n'y en a aucun aujourd'hui, ce qui accentue le côté robotique. À tester dans le cadre du ton :
+  quelques transitions naturelles et rares (« en fait », « concrètement », « du coup » ou leurs équivalents
+  anglais), jamais en ouverture systématique, puis vérifier qu'une plateforme d'évaluation ne les compte pas comme
+  des hésitations. Le reproche « filler words » vient sans doute d'ailleurs (transcription, formulations floues) :
+  relire les logs `Recruteur : …` / `Avatar : …` de la session.
+- « Polite, calm and composed » est retiré du paragraphe « Style » : le ton relève de la section « ton » ci-dessus.
+- Notes du candidat : proposer un modèle (pour chaque expérience clé : contexte, rôle, actions, résultat chiffré ;
+  trois à cinq histoires couvrent la plupart des questions comportementales), la qualité des réponses étant
+  plafonnée par celle des notes.
+- Durée cible d'une réponse longue : 20 à 30 secondes, acceptable pour la vidéo de démo.
+
+- Critère de fin : le jeu « entretien » de la page `voices` sur une dizaine de questions, dont des questions
+  pièges sans réponse dans les notes et des questions comportementales ; aucune invention, ton reconnaissable,
+  réponses comportementales structurées. Puis une session InterviewCoach.AI à comparer au 40/100 du 13/11/2026.
+
+### 5. Communication
+
+- README et post : entretien automatisé comme démonstration principale ; une phrase sur les autres usages possibles
+  (réunions, présentations), présentés comme une piste.
+- Mettre à jour l'image d'aperçu et la description de l'avatar dans le README après l'étape 3.
+- Mettre à jour la section « Mission » de `CLAUDE.md` pour refléter le personnage distinct.
+
+### 6. Interface entre moteur conversationnel et rendu (sans connecteur)
+
+- Formaliser ce qui existe déjà : le moteur reçoit le texte entendu et émet du texte à dire et des événements
+  d'état (étape 2) ; le rendu ne connaît que ces événements et l'audio.
+- Un seul fichier de types décrit ce contrat, pour qu'un autre moteur (agent externe, autre service) puisse un
+  jour le remplacer.
+- Pas de connecteur pour la démo. Tout moteur futur reste soumis aux règles 2, 3 et 5.
+
+## Hors périmètre pour l'instant
+
+- Bouche pilotée par les phonèmes (reste dans « Projet (reporté) »).
+- Plusieurs personnalités au choix.
+- Connecteurs vers d'autres agents.
+- Usage en réunion avec des humains comme fonctionnalité mise en avant.

@@ -36,6 +36,57 @@ const status = (message: string) => {
 // Aperçu de l'avatar en Picture-in-Picture (tournage) : lib/preview-popup.ts.
 const preview = setupPreviewButton(document.querySelector<HTMLButtonElement>('#preview')!, status);
 
+// Pause / Reprendre : l'avatar s'arrête (voix, écoute, puis image fixe « Avatar en pause ») sans
+// toucher aux pistes remises à la plateforme ; le document offscreen reste ouvert (Piper chargé).
+const pauseButton = document.querySelector<HTMLButtonElement>('#pause')!;
+let pauseState: 'inactive' | 'active' | 'paused' = 'inactive';
+
+async function refreshPause() {
+  let state: typeof pauseState = 'inactive';
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id !== undefined) {
+      const results = await browser.scripting.executeScript({
+        target: { tabId: tab.id, allFrames: true },
+        world: 'MAIN',
+        func: () => window.__otherSelf?.state() ?? 'inactive',
+      });
+      const states = results.map((result) => result.result);
+      state = states.includes('paused') ? 'paused' : states.includes('active') ? 'active' : 'inactive';
+    }
+  } catch {
+    // Page où l'extension ne peut pas s'injecter : bouton inactif.
+  }
+  pauseState = state;
+  pauseButton.disabled = state === 'inactive';
+  pauseButton.textContent = browser.i18n.getMessage(state === 'paused' ? 'popupResume' : 'popupPause');
+}
+
+async function togglePause(clickAt: number) {
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id === undefined) throw new Error('aucun onglet actif');
+  const pause = pauseState !== 'paused';
+  const results = await browser.scripting.executeScript({
+    target: { tabId: tab.id, allFrames: true },
+    world: 'MAIN',
+    func: (paused: boolean, at: number) => window.__otherSelf?.setPaused(paused, at) ?? 'jamais activé',
+    args: [pause, clickAt],
+  });
+  status(
+    `${pause ? 'pause' : 'reprise'} ${Date.now() - clickAt} ms après le clic\n` +
+      results.map((result) => `cadre ${result.frameId} : ${String(result.result)}`).join('\n'),
+  );
+}
+
+pauseButton.addEventListener('click', () => {
+  const clickAt = Date.now();
+  pauseButton.disabled = true;
+  togglePause(clickAt)
+    .catch((error: unknown) => status(`échec : ${error instanceof Error ? error.message : String(error)}`))
+    .finally(() => void refreshPause());
+});
+void refreshPause();
+
 /** Avatar préparé ici (page de l'extension), puis remis à la page sous forme d'images seulement. */
 async function loadSources(): Promise<SerializedSources> {
   const config = await loadDemoConfig();
@@ -54,6 +105,7 @@ async function loadSources(): Promise<SerializedSources> {
     vrm,
     bannerText: config.bannerText,
     debugSafeZone: config.debugSafeZone,
+    language: config.language,
   };
 }
 
@@ -98,7 +150,11 @@ async function activate() {
   );
 }
 
-/** Arrêt propre : injection et partage de l'onglet retirés, pipeline voix arrêté. */
+/**
+ * Retrait complet : injection et partage de l'onglet retirés, pipeline voix arrêté. Les pistes
+ * remises à la plateforme sont arrêtées : elle devra reprendre la vraie caméra et le vrai micro
+ * (Pause, elle, ne coupe rien côté plateforme).
+ */
 async function deactivate() {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (tab?.id === undefined) throw new Error('aucun onglet actif');
@@ -132,6 +188,7 @@ deactivateButton.addEventListener('click', () => {
     .finally(() => {
       deactivateButton.disabled = false;
       void preview.refresh();
+      void refreshPause();
     });
 });
 
@@ -143,5 +200,6 @@ activateButton.addEventListener('click', () => {
     .finally(() => {
       activateButton.disabled = false;
       void preview.refresh();
+      void refreshPause();
     });
 });

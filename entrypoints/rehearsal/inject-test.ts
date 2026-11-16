@@ -6,6 +6,7 @@ import { mapAssets } from '@/lib/avatar';
 import { buildAvatarAssets } from '@/lib/avatar-assets';
 import { loadDemoConfig, localUrl } from '@/lib/config';
 import { installFakeGetUserMedia } from '@/lib/inject';
+import { pauseText } from '@/lib/injection-sources';
 import { createLogger } from '@/lib/log';
 import { createTestAudioTrack } from '@/lib/test-audio';
 import { buildVrmAssets } from '@/lib/vrm-assets';
@@ -43,6 +44,7 @@ export async function setupInjectionTest() {
     avatar,
     vrm,
     avatarOptions: { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone },
+    pauseText: pauseText(config.language),
     createAudioTrack: () => createTestAudioTrack(audio),
   });
 }
