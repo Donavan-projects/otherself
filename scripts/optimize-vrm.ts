@@ -1,12 +1,13 @@
 // Inspecte et allège le modèle VRM exporté par VRoid Studio. Script MANUEL : le fichier source
-// (avatar/Otherself.vrm) n'est pas commité, seul le résultat (avatar/otherself.vrm) l'est.
+// (avatar/android-source.vrm) n'est pas commité, seul le résultat (avatar/otherself.vrm) l'est.
 //   npm run vrm -- inspect [fichier]                 rapport seul (licence, expressions, poids)
 //   npm run vrm -- optimize [source] [destination]   allège puis affiche les deux rapports
 //
 // Allègement, sans toucher au squelette ni à la physique :
 // - miniature retirée (meta.thumbnailImage), inutile au rendu ;
 // - primitives des vêtements jamais à l'image retirées (pantalon, chaussures : cadrage en buste) ;
-// - morph targets que n'utilise aucune expression retirés (VRoid en exporte 57 sur le visage) ;
+// - morph targets que n'utilise aucune expression retirés (VRoid en exporte 57 sur le visage), sauf ceux de
+//   KEPT_MORPHS (sourcils seuls, pilotés directement par le rendu plus tard) ;
 // - textures ramenées à 1024 px au plus (PNG, sans perte au-delà de la réduction) ;
 // - accesseurs, matériaux, textures et images devenus inutiles retirés, binaire réempaqueté.
 // gltf-transform n'est pas utilisé : il supprime les extensions qu'il ne connaît pas (VRMC_*), dont les
@@ -16,7 +17,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import sharp from 'sharp';
 import { readAccessor, readGlb as parseGlb, vrmOf, writeGlb as serializeGlb, type BufferView, type Expression, type Glb, type GltfMaterial, type Json, type Primitive, type Vrm } from '../lib/glb.ts';
 
-const DEFAULT_SOURCE = 'avatar/Otherself.vrm';
+const DEFAULT_SOURCE = 'avatar/android-source.vrm';
 const DEFAULT_DESTINATION = 'avatar/otherself.vrm';
 /** Matériaux dont les primitives sont retirées : jamais visibles dans un cadrage en buste. */
 const DROPPED_MATERIALS = [/Bottoms/i, /Shoes/i];
@@ -24,9 +25,14 @@ const MAX_TEXTURE_SIZE = 1024;
 /**
  * Cordons de la capuche retirés : ils pendent au milieu du torse, devant le slogan (lib/vrm-assets.ts).
  * Repérés comme petites pièces séparées du haut (moins de 64 sommets), devant le torse, près du milieu, dans sa
- * moitié haute. Mettre à false pour les garder.
+ * moitié haute. Désactivé pour l'androïde (veste sans capuche) : la règle pourrait retirer la languette du col.
  */
-const REMOVE_DRAWSTRINGS = true;
+const REMOVE_DRAWSTRINGS = false;
+/**
+ * Morph targets gardés même si aucune expression ne les utilise : sourcils seuls de VRoid (Fcl_BRW_*), pour
+ * remplacer angry en réflexion (étape 2), qui plisse aussi les yeux et abaisse la bouche.
+ */
+const KEPT_MORPHS = [/^Fcl_BRW_/];
 const TOPS_MATERIAL = /Tops/i;
 
 const readGlb = (path: string): Glb => parseGlb(new Uint8Array(readFileSync(path)), path);
@@ -148,8 +154,15 @@ async function optimize(source: Glb): Promise<Glb> {
   // 2 bis. Cordons de la capuche (indices du haut réécrits, sommets laissés : three-vrm retire ceux qui ne servent plus).
   const replacedIndices = REMOVE_DRAWSTRINGS ? removeDrawstrings({ json, bin: source.bin }) : null;
 
-  // 3. Morph targets utilisés par au moins une expression, par maillage.
+  // 3. Morph targets utilisés par au moins une expression, par maillage, et ceux de KEPT_MORPHS.
   const usedTargets = new Map<number, Set<number>>();
+  json.meshes.forEach((mesh, meshIndex) => {
+    (mesh.extras?.targetNames ?? []).forEach((name, index) => {
+      if (!KEPT_MORPHS.some((pattern) => pattern.test(name))) return;
+      if (!usedTargets.has(meshIndex)) usedTargets.set(meshIndex, new Set());
+      usedTargets.get(meshIndex)!.add(index);
+    });
+  });
   for (const expression of expressions) {
     for (const bind of expression.morphTargetBinds ?? []) {
       const mesh = json.nodes[bind.node ?? -1]?.mesh;

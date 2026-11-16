@@ -93,6 +93,8 @@ voyant et la révélation vocale (règle 2).
 - Conséquences : le slogan sort du cadre et est retiré de la veste (décision du 16/11), les défauts du visage se
   voient plus, d'où l'intérêt du look non humain.
 - Valider sur Meet avec et sans cadrage automatique, avec et sans fond virtuel.
+- Refaire la comparaison du flou du fond Atrium (4 px retenu en 3a, contre 8 px), la partie visible du fond changeant
+  avec le plan serré.
 
 **Badge IA.**
 - Imprimé dans la texture du modèle (col ou épaule), comme le slogan l'est aujourd'hui : il suit les mouvements
@@ -104,6 +106,7 @@ voyant et la révélation vocale (règle 2).
   suit l'état de l'étape 2 : bleu pour inactif et écoute, ambre pour réflexion, vert pour parole. Toujours lisible et
   jamais éteint, puisqu'il reste le marqueur IA.
 - Le bandeau est retiré une fois le badge en place (3c), après la modification de la règle 1.
+- Vérifier que le voyant bleu se distingue des bandes lumineuses turquoise du fond Atrium.
 
 **Modification de la règle 1 de `CLAUDE.md`** (à faire explicitement, la règle actuelle impose le bandeau).
 Proposition :
