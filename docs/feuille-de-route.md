@@ -56,6 +56,17 @@ Objectif : rendre l'avatar vivant avec une logique simple, sans IA supplémentai
 
 Ces trois choix se tiennent : à décider et valider ensemble.
 
+**Décisions (16/11/2026).** Étape découpée en sous-étapes, une branche chacune, testée sur Meet avant fusion :
+- **3a** : l'androïde devient le modèle par défaut, avec un nouveau fond (Atrium) ;
+- **3b** : plan serré, et slogan retiré de la veste ;
+- **3c** : modification de la règle 1 de `CLAUDE.md`, puis badge « IA » (« AI » en anglais) au col avec voyant
+  d'état (bleu : inactif et écoute ; ambre : réflexion ; vert : parole ; jamais éteint), puis retrait du bandeau ;
+- **3e** : secours généré à partir du modèle 3D à la place de l'avatar SVG.
+
+L'ancienne partie « contraste » (3d) est absorbée par le nouveau fond, sauf si le contraste pose encore problème.
+Le slogan « Automated candidate, just like you. » est retiré de l'avatar : la transparence repose sur le badge, le
+voyant et la révélation vocale (règle 2).
+
 **Modèle (travail dans VRoid Studio).**
 - Silhouette, coiffure et palette reconnaissables, volontairement non réalistes (couleur ou matière de peau non
   naturelle, traits simplifiés, yeux plus graphiques, élément signature).
@@ -79,19 +90,20 @@ Ces trois choix se tiennent : à décider et valider ensemble.
 **Plan serré.**
 - Cadrer tête et épaules : quand le visage remplit déjà l'image, le cadrage automatique des plateformes n'a plus
   de raison de zoomer.
-- Conséquences : le slogan du sweat sort du cadre (à retirer ou déplacer), les défauts du visage se voient plus,
-  d'où l'intérêt du look non humain.
+- Conséquences : le slogan sort du cadre et est retiré de la veste (décision du 16/11), les défauts du visage se
+  voient plus, d'où l'intérêt du look non humain.
 - Valider sur Meet avec et sans cadrage automatique, avec et sans fond virtuel.
 
 **Badge IA.**
 - Imprimé dans la texture du modèle (col ou épaule), comme le slogan l'est aujourd'hui : il suit les mouvements
   et l'éclairage.
 - Lisible dans une vignette d'environ 320×180 ; toujours visible de face et dans les mouvements de tête.
-- Texte court et configurable, jamais vide : « Avatar IA » par défaut (variante anglaise « AI avatar »).
+- Texte court et configurable, jamais vide : « IA » par défaut (variante anglaise « AI ») ; décision du 16/11.
 - Avatar SVG de secours : badge équivalent, dessiné dans le canvas.
 - Le badge sert aussi de voyant d'état : petite lumière au col, sur la languette du nouveau modèle, dont la couleur
-  suit l'état (écoute, réflexion, parole ; états de l'étape 2). Toujours lisible et jamais éteint, puisqu'il reste le
-  marqueur IA.
+  suit l'état de l'étape 2 : bleu pour inactif et écoute, ambre pour réflexion, vert pour parole. Toujours lisible et
+  jamais éteint, puisqu'il reste le marqueur IA.
+- Le bandeau est retiré une fois le badge en place (3c), après la modification de la règle 1.
 
 **Modification de la règle 1 de `CLAUDE.md`** (à faire explicitement, la règle actuelle impose le bandeau).
 Proposition :
@@ -99,7 +111,8 @@ Proposition :
 > 1. **Marqueur IA incrusté** : un badge IA fait partie de chaque image du flux vidéo injecté (imprimé sur
 >    l'avatar 3D, dessiné dans le canvas pour l'avatar SVG), jamais en superposition DOM masquable, placé près du
 >    visage (col ou épaule) pour survivre aux recadrages des plateformes, lisible dans une vignette d'environ
->    320×180. Son texte est configurable (`badgeText`, « Avatar IA » par défaut), jamais vide ni désactivable.
+>    320×180. Son texte est configurable (`badgeText`, « IA » par défaut, « AI » en anglais), jamais vide ni
+>    désactivable.
 >    L'apparence volontairement non humaine de l'avatar et la révélation vocale (règle 2) complètent ce marqueur.
 
 ### 4. Personnalité (ton uniquement)
