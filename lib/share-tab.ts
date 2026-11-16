@@ -140,6 +140,8 @@ function pristineGetDisplayMedia(): GetDisplayMedia {
 export interface TabShare {
   /** Retire le bouton et arrête le partage en cours. */
   stop(): void;
+  /** Vrai si le son de l'onglet est partagé (lu par la page), pause comprise. */
+  listening(): boolean;
 }
 
 /**
@@ -229,6 +231,7 @@ export function offerTabShare(onChunk: (pcm: string, at: number) => void, sendin
 
   show('activation');
   return {
+    listening: () => stopListening !== null,
     stop() {
       stopped = true;
       host.remove();

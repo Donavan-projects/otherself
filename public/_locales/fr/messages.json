@@ -9,7 +9,7 @@
     "message": "Ouvrir la répétition"
   },
   "popupOpenAvatar": {
-    "message": "Ouvrir l'avatar"
+    "message": "Page de test de l'avatar"
   },
   "popupOpenVoices": {
     "message": "Banc d'essai des voix"
@@ -66,7 +66,7 @@
     "message": "Activer sur cet onglet"
   },
   "popupDeactivate": {
-    "message": "Retirer complètement de cet onglet"
+    "message": "Retirer complètement"
   },
   "popupPreview": {
     "message": "Aperçu de l'avatar"
@@ -75,9 +75,48 @@
     "message": "Fermer l'aperçu"
   },
   "popupPause": {
-    "message": "Mettre l'avatar en pause"
+    "message": "Mettre en pause"
   },
   "popupResume": {
-    "message": "Reprendre (rappel de la révélation)"
+    "message": "Reprendre"
+  },
+  "popupStateInactive": {
+    "message": "Inactif"
+  },
+  "popupStateActive": {
+    "message": "Actif"
+  },
+  "popupStatePaused": {
+    "message": "En pause"
+  },
+  "popupDevTools": {
+    "message": "Outils de développement"
+  },
+  "popupActivating": {
+    "message": "Préparation de l'avatar…"
+  },
+  "popupHintShare": {
+    "message": "Cliquez sur le bouton OtherSelf dans la page pour partager le son de l'onglet."
+  },
+  "popupHintPermissions": {
+    "message": "Autorisez la caméra et le micro pour ce site (cadenas de la barre d’adresse)."
+  },
+  "popupUnavailable": {
+    "message": "OtherSelf ne peut pas agir sur cette page."
+  },
+  "popupRemoved": {
+    "message": "Avatar retiré. Choisissez votre caméra et votre micro dans les réglages de la plateforme."
+  },
+  "popupErrorGeneric": {
+    "message": "L'opération a échoué. Rechargez la page puis réessayez."
+  },
+  "popupPreviewHintWaiting": {
+    "message": "La plateforme n'a pas encore demandé la caméra."
+  },
+  "popupPreviewHintOpen": {
+    "message": "Ouvre une fenêtre avec l'image envoyée à la plateforme, à l'endroit et sans son."
+  },
+  "popupPreviewHintClose": {
+    "message": "Ferme la fenêtre d'aperçu."
   }
 }

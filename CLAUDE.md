@@ -61,7 +61,7 @@ entrypoints/
   content.ts           # monde MAIN : injection getUserMedia, partage du son de l'onglet, voix de l'avatar
   bridge.content.ts    # monde isolé : relais page ↔ document offscreen
   offscreen/           # pipeline voix (VAD, STT, LLM, Piper)
-  popup/               # boutons Activer, Pause / Reprendre, Retirer complètement
+  popup/               # pastille d'état, Activer, Pause / Reprendre, aperçu, Retirer complètement ; outils de dév. repliés
   options/             # assistant de setup : clé API, CV, voix
   rehearsal/           # page « faux recruteur » pour tester sans plateforme réelle
   avatar/              # page de l'avatar (aperçu animé, voix simulée)
