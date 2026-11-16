@@ -2,6 +2,8 @@
 // (lib/avatar-assets.ts), yeux et bouche animés, bandeau incrusté. Tourne dans le monde MAIN
 // de l'onglet (voie A) comme dans les pages de l'extension (aperçu, banc d'essai).
 
+import { STATE_STYLES, type AvatarState } from './avatar-states';
+
 export const AVATAR_WIDTH = 1280;
 export const AVATAR_HEIGHT = 720;
 
@@ -103,7 +105,8 @@ export interface AvatarAssets<T> {
   under: T;
   /** Sourcils et cheveux de devant, par-dessus les yeux. */
   over: Sprite<T>;
-  eyes: { open: Sprite<T>; closed: Sprite<T> };
+  /** aside : iris décalés (regard de côté, état « en réflexion ») ; absent si le dessin ne s'y prête pas. */
+  eyes: { open: Sprite<T>; closed: Sprite<T>; aside?: Sprite<T> | undefined };
   mouths: Record<MouthShape, Sprite<T>>;
   /** Zone redessinée à chaque image : yeux et bouches. */
   region: Rect;
@@ -116,7 +119,11 @@ export async function mapAssets<A, B>(assets: AvatarAssets<A>, convert: (image: 
   return {
     under: await convert(assets.under),
     over: await sprite(assets.over),
-    eyes: { open: await sprite(assets.eyes.open), closed: await sprite(assets.eyes.closed) },
+    eyes: {
+      open: await sprite(assets.eyes.open),
+      closed: await sprite(assets.eyes.closed),
+      aside: assets.eyes.aside && (await sprite(assets.eyes.aside)),
+    },
     mouths: Object.fromEntries(mouths) as Record<MouthShape, Sprite<B>>,
     region: assets.region,
     banner: assets.banner,
@@ -147,6 +154,13 @@ export class MouthAnimator {
   private since = 0;
   private nextOpen: 'A' | 'O' = 'A';
 
+  /** Bouche au repos, niveau oublié : rien ne bouge en sortant de l'état « en parole ». */
+  reset() {
+    this.level = 0;
+    this.shape = 'repos';
+    this.since = 0;
+  }
+
   update(rawLevel: number, now: number): MouthShape {
     this.level += (rawLevel - this.level) * (rawLevel > this.level ? LEVEL_ATTACK : LEVEL_RELEASE);
     let wanted: MouthShape;
@@ -174,16 +188,25 @@ const DOUBLE_BLINK_GAP_MS = 180;
 export class BlinkAnimator {
   private next: number;
   private closedUntil = 0;
+  private min = BLINK_MIN_MS;
+  private max = BLINK_MAX_MS;
 
   constructor(now: number) {
     this.next = now + randomBetween(BLINK_MIN_MS, BLINK_MAX_MS);
+  }
+
+  /** Intervalle entre deux clignements (état de l'avatar) ; le prochain clignement est retiré dans ce nouvel intervalle. */
+  setRange(min: number, max: number, now: number) {
+    this.min = min;
+    this.max = max;
+    this.next = Math.min(this.next, now + randomBetween(min, max));
   }
 
   closed(now: number): boolean {
     if (now >= this.next) {
       this.closedUntil = now + BLINK_CLOSED_MS;
       const double = Math.random() < DOUBLE_BLINK_CHANCE;
-      this.next = double ? this.closedUntil + DOUBLE_BLINK_GAP_MS : now + randomBetween(BLINK_MIN_MS, BLINK_MAX_MS);
+      this.next = double ? this.closedUntil + DOUBLE_BLINK_GAP_MS : now + randomBetween(this.min, this.max);
     }
     return now < this.closedUntil;
   }
@@ -204,8 +227,16 @@ export class AvatarRenderer {
   private readonly blink: BlinkAnimator;
   private readonly level: () => number;
   private complete = false;
+  /** État de l'avatar (lib/avatar-states.ts), version réduite : bouche, clignements, regard de côté. */
+  private state: AvatarState;
 
-  constructor(canvas: HTMLCanvasElement, assets: AvatarAssets<ImageBitmap>, options: AvatarOptions, level: () => number = () => 0) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    assets: AvatarAssets<ImageBitmap>,
+    options: AvatarOptions,
+    level: () => number = () => 0,
+    state: AvatarState = 'inactif',
+  ) {
     canvas.width = AVATAR_WIDTH;
     canvas.height = AVATAR_HEIGHT;
     const ctx = canvas.getContext('2d', { alpha: false });
@@ -216,10 +247,19 @@ export class AvatarRenderer {
     this.options = options;
     this.level = level;
     this.blink = new BlinkAnimator(performance.now());
+    this.state = state;
+    this.blink.setRange(STATE_STYLES[state].blinkMinMs, STATE_STYLES[state].blinkMaxMs, performance.now());
     this.banner = new OffscreenCanvas(assets.banner.width, assets.banner.height);
     const bannerCtx = this.banner.getContext('2d');
     if (!bannerCtx) throw new Error('contexte 2D hors écran indisponible');
     drawBanner(bannerCtx, { x: 0, y: 0, width: assets.banner.width, height: assets.banner.height }, options.bannerText);
+  }
+
+  setState(state: AvatarState) {
+    if (state === this.state) return;
+    this.state = state;
+    if (state !== 'parole') this.mouth.reset();
+    this.blink.setRange(STATE_STYLES[state].blinkMinMs, STATE_STYLES[state].blinkMaxMs, performance.now());
   }
 
   /** La prochaine image sera entière (le canvas a reçu autre chose entre-temps, l'image de pause par exemple). */
@@ -240,8 +280,10 @@ export class AvatarRenderer {
       ctx.drawImage(assets.under, 0, 0);
       if (this.options.debugSafeZone) drawSafeZone(ctx);
     }
-    const eyes = this.blink.closed(now) ? assets.eyes.closed : assets.eyes.open;
-    const shape = this.mouth.update(this.level(), now);
+    const aside = STATE_STYLES[this.state].gazeAsideYaw > 0 ? assets.eyes.aside : undefined;
+    const eyes = this.blink.closed(now) ? assets.eyes.closed : (aside ?? assets.eyes.open);
+    // La bouche ne vit qu'en parlant.
+    const shape = this.state === 'parole' ? this.mouth.update(this.level(), now) : 'repos';
     const mouth = assets.mouths[shape];
     ctx.drawImage(eyes.image, eyes.x, eyes.y);
     ctx.drawImage(mouth.image, mouth.x, mouth.y);

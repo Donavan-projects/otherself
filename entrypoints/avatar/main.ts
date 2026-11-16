@@ -1,8 +1,9 @@
 // Page de l'avatar : aperçu du rendu animé, avec une voix simulée (syllabes et silences)
-// pour voir bouche et clignements sans plateforme.
+// pour voir bouche et clignements sans plateforme, avec les états enchaînés (?state= pour en imposer un).
 
 import { AvatarRenderer, mapAssets } from '@/lib/avatar';
 import { buildAvatarAssets } from '@/lib/avatar-assets';
+import { DemoCycle, isAvatarState } from '@/lib/avatar-states';
 import { loadDemoConfig } from '@/lib/config';
 import { createLogger } from '@/lib/log';
 
@@ -14,20 +15,18 @@ const config = await loadDemoConfig();
 const { assets } = await buildAvatarAssets(config);
 const bitmaps = await mapAssets(assets, (blob) => createImageBitmap(blob));
 
-/** Niveau simulé : 3 s de parole (4 à 6 syllabes par seconde), puis 1,5 s de silence. */
-function simulatedLevel(now: number): number {
-  const t = (now / 1000) % 4.5;
-  if (t > 3) return 0;
-  const syllable = Math.max(0, Math.sin(t * Math.PI * 2 * 2.6 + Math.sin(t * 7) * 1.5));
-  return syllable * (0.08 + 0.12 * Math.abs(Math.sin(t * 1.7 + 1)));
-}
-
-const renderer = new AvatarRenderer(canvas, bitmaps, { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone }, () =>
-  simulatedLevel(performance.now()),
-);
+// États enchaînés comme dans un entretien (lib/avatar-states.ts) ; ?state= impose un état.
+const params = new URLSearchParams(location.search);
+const forced = params.get('state');
+const cycle = new DemoCycle();
+let current = cycle.update(performance.now());
+const renderer = new AvatarRenderer(canvas, bitmaps, { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone }, () => current.level);
 let frames = 0;
 let last = performance.now();
 setInterval(() => {
+  const demo = cycle.update(performance.now());
+  current = isAvatarState(forced) ? { ...demo, state: forced, level: forced === 'parole' ? cycle.update(5300 + (performance.now() % 3500)).level : 0 } : demo;
+  renderer.setState(current.state);
   renderer.draw();
   frames += 1;
   const now = performance.now();

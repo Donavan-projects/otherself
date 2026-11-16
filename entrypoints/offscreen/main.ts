@@ -85,6 +85,8 @@ browser.runtime.onConnect.addListener((connected) => {
   );
   micReady = false;
   conversation?.setMicReady(false);
+  // La page (nouvelle ou rechargée) apprend l'état courant de l'avatar.
+  if (conversation) post({ type: 'state', state: conversation.state, previous: conversation.state, at: Date.now(), reason: 'pont relié' });
   if (!samePage) {
     conversation?.reset('nouvelle page de la plateforme');
     // Nouvelle page : elle part sans pause (la page renvoie son état à chaque connexion du pont).
@@ -168,6 +170,8 @@ async function start() {
       post({ type: 'stop' });
       monitor?.stop();
     },
+    state: (state, previous, reason) => post({ type: 'state', state, previous, at: Date.now(), reason }),
+    nod: () => post({ type: 'nod', at: Date.now() }),
   });
   conversation.setMicReady(micReady);
   if (pausedAt !== null) conversation.pause(pausedAt);

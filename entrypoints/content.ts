@@ -32,6 +32,7 @@ declare global {
 type OtherSelfState = 'inactive' | 'active' | 'paused';
 
 const log = createLogger('inject');
+const logState = createLogger('etat');
 
 function sendToExtension(message: FromPage) {
   const envelope: PageEnvelope = { [PAGE_TAG]: 'to-ext', message };
@@ -171,6 +172,11 @@ export default defineContentScript({
               else log('voix reçue avant que la plateforme ait demandé le micro : ignorée');
             } else if (message.type === 'stop') {
               voice?.stop();
+            } else if (message.type === 'state') {
+              logState(`${message.previous} → ${message.state} reçu ${Date.now() - message.at} ms après le changement (${message.reason})`);
+              media.setAvatarState(message.state);
+            } else if (message.type === 'nod') {
+              media.nod();
             }
           };
           window.addEventListener('message', onMessage);

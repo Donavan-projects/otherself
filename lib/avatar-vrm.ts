@@ -23,6 +23,17 @@ import {
   type Rect,
 } from './avatar';
 import { affine, frameY, VRM_FOV, type VrmCamera } from './vrm-frame';
+import {
+  BLINK_EXPRESSION_COMPENSATION,
+  HEAD_FOLLOW_ASIDE,
+  NOD_MS,
+  RELAXED_MOUTH_DAMPING,
+  STATE_FADE,
+  STATE_STYLES,
+  STYLE_KEYS,
+  type AvatarState,
+  type StateStyle,
+} from './avatar-states';
 
 /** Ce que le rendu reçoit dans la page : modèle (slogan déjà imprimé), fond, bandeau, caméra (lib/vrm-frame.ts). */
 export interface VrmSources {
@@ -46,6 +57,10 @@ export interface FrameRenderer {
   draw(now?: number): MouthShape;
   /** Prochaine image entière (après la pause, le canvas contient une autre image). */
   invalidate?(): void;
+  /** État de l'avatar (lib/avatar-states.ts) : le rendu fond ses réglages vers ceux de l'état. */
+  setState?(state: AvatarState): void;
+  /** Hochement (état « à l'écoute »). */
+  nod?(): void;
   dispose?(): void;
 }
 
@@ -83,8 +98,14 @@ export interface VrmPreviewOptions {
   allowSoftwareRendering?: boolean;
   /** Forme de bouche imposée, quel que soit le niveau de la voix. */
   mouth?: MouthShape;
-  /** Ni clignement, ni saccade, ni mouvement de tête : captures comparables d'une image à l'autre. */
+  /** Ni clignement, ni saccade, ni dérive de la tête : captures comparables d'une image à l'autre (posture de l'état gardée). */
   still?: boolean;
+  /** État imposé (?state=), quel que soit celui que reçoit le rendu. */
+  state?: AvatarState;
+  /** Poids d'angry imposé (?angry=), pour comparer en capture. */
+  angry?: number;
+  /** Paupières fermées (vrai) ou ouvertes (faux) imposées (?blink=1|0), pour vérifier le mélange avec les expressions. */
+  blink?: boolean;
 }
 
 export async function createVrmRenderer(
@@ -211,6 +232,14 @@ export class VrmAvatarRenderer implements FrameRenderer {
     if (this.options.debugSafeZone) drawSafeZone(ctx);
     ctx.drawImage(this.banner, sources.banner.x, sources.banner.y);
     return shape;
+  }
+
+  setState(state: AvatarState) {
+    this.motion.setState(state);
+  }
+
+  nod() {
+    this.motion.nod();
   }
 
   dispose() {
@@ -386,7 +415,7 @@ const approach = (current: number, target: number, dt: number, timeConstant: num
 
 const randomBetween = (min: number, max: number) => min + Math.random() * (max - min);
 
-/** Mouvements du personnage, image par image. */
+/** Mouvements du personnage, image par image, selon l'état de l'avatar (lib/avatar-states.ts). */
 class VrmMotion {
   private readonly vrm: VRM;
   private readonly camera: THREE.Camera;
@@ -399,11 +428,17 @@ class VrmMotion {
   /** Parole lissée, de 0 à 1 : hochements et respiration plus rapide quand l'avatar parle. */
   private speaking = 0;
   private breathPhase = 0;
-  // Regard : décalage courant (rad), visé, et date du prochain changement.
+  // Regard : petites saccades autour de la direction de l'état (décalage courant et visé, rad).
   private gaze = { yaw: 0, pitch: 0 };
   private gazeWanted = { yaw: 0, pitch: 0 };
   private nextSaccade: number;
   private gazeReturn = Infinity;
+  private state: AvatarState;
+  /** Réglages courants, fondus vers ceux de l'état (STATE_FADE). */
+  private readonly style: StateStyle;
+  /** Côté du regard en réflexion, tiré à l'entrée dans l'état. */
+  private asideSign = 1;
+  private nodStart = -Infinity;
 
   private readonly preview: VrmPreviewOptions;
 
@@ -411,8 +446,11 @@ class VrmMotion {
     this.preview = preview;
     this.vrm = vrm;
     this.camera = camera;
+    this.state = preview.state ?? 'inactif';
+    this.style = { ...this.target() };
     const now = performance.now();
     this.blink = new BlinkAnimator(now);
+    this.blink.setRange(this.style.blinkMinMs, this.style.blinkMaxMs, now);
     this.nextSaccade = now + randomBetween(800, 2500);
     for (const name of ['neck', 'head', 'spine', 'chest', 'upperChest', 'leftShoulder', 'rightShoulder', 'leftUpperArm', 'rightUpperArm'] as const) {
       const bone = vrm.humanoid.getNormalizedBoneNode(name);
@@ -427,57 +465,113 @@ class VrmMotion {
     }
   }
 
+  /** Réglages visés : ceux de l'état, avec les forçages de la page de test (?angry=). */
+  private target(): StateStyle {
+    const style = STATE_STYLES[this.state];
+    return this.preview.angry === undefined ? style : { ...style, angry: this.preview.angry };
+  }
+
+  setState(state: AvatarState) {
+    // Page de test : état imposé par l'adresse.
+    if (this.preview.state || state === this.state) return;
+    this.state = state;
+    const now = performance.now();
+    if (state === 'reflexion') this.asideSign = Math.random() < 0.5 ? -1 : 1;
+    // La bouche ne vit qu'en parlant : hors de cet état, elle repart du repos (pas de reste après une reprise).
+    if (state !== 'parole') this.mouth.reset();
+    const style = STATE_STYLES[state];
+    this.blink.setRange(style.blinkMinMs, style.blinkMaxMs, now);
+    // Nouvelle direction du regard sans attendre la saccade suivante.
+    this.nextSaccade = now;
+    this.gazeReturn = Infinity;
+  }
+
+  nod() {
+    if (STATE_STYLES[this.state].nod > 0) this.nodStart = performance.now();
+  }
+
   update(now: number, dt: number, level: number): MouthShape {
     const t = now / 1000;
-    const shape = this.preview.mouth ?? this.mouth.update(level, now);
-    this.speaking = approach(this.speaking, Math.min(1, level / SPEAKING_LEVEL), dt, 0.35);
+    const still = this.preview.still === true;
+    const target = this.target();
+    // Fondu des réglages vers l'état (immédiat pour une capture figée).
+    for (const key of STYLE_KEYS) this.style[key] = still ? target[key] : approach(this.style[key], target[key], dt, STATE_FADE);
+    const style = this.style;
+    const talking = this.state === 'parole';
+    const shape = this.preview.mouth ?? (talking ? this.mouth.update(level, now) : 'repos');
+    this.speaking = approach(this.speaking, talking ? Math.min(1, level / SPEAKING_LEVEL) : 0, dt, 0.35);
 
-    // Bouche et paupières.
+    // Bouche, expressions et paupières.
     const targets = MOUTH_EXPRESSIONS[shape];
     for (const name of VISEMES) this.smooth(name, targets[name] ?? 0, dt, MOUTH_ATTACK, MOUTH_RELEASE);
-    this.smooth('blink', !this.preview.still && this.blink.closed(now) ? 1 : 0, dt, BLINK_CLOSE, BLINK_OPEN);
-    if (this.preview.still) {
-      // Aperçu immobile : regard droit vers la caméra, tête et buste au repos.
-      this.camera.getWorldPosition(this.gazeTarget.position);
-      return shape;
-    }
+    // Expressions VRoid (Fcl_ALL_*) : elles touchent aussi bouche et paupières, d'où des poids faibles,
+    // relaxed atténué quand la bouche s'ouvre et un clignement réduit d'autant que les yeux sont déjà plissés.
+    const openness = Math.max(...VISEMES.map((name) => this.weights.get(name) ?? 0));
+    const relaxed = style.relaxed * (1 - RELAXED_MOUTH_DAMPING * Math.min(1, openness / 0.8));
+    this.setExpression('relaxed', relaxed);
+    this.setExpression('angry', style.angry);
+    const closed = this.preview.blink ?? (!still && this.blink.closed(now));
+    const squint = relaxed * BLINK_EXPRESSION_COMPENSATION.relaxed + style.angry * BLINK_EXPRESSION_COMPENSATION.angry;
+    this.smooth('blink', closed ? Math.max(0, 1 - squint) : 0, dt, BLINK_CLOSE, BLINK_OPEN);
 
-    // Regard : vers la caméra, petites saccades ; de temps en temps un bref coup d'œil ailleurs (réflexion).
-    if (now >= this.gazeReturn) {
-      this.gazeWanted = { yaw: randomBetween(-1, 1) * DEG, pitch: randomBetween(-0.7, 0.7) * DEG };
-      this.gazeReturn = Infinity;
-    }
-    if (now >= this.nextSaccade) {
-      if (Math.random() < 0.15) {
-        this.gazeWanted = { yaw: (Math.random() < 0.5 ? -1 : 1) * randomBetween(5, 9) * DEG, pitch: randomBetween(1, 5) * DEG };
-        this.gazeReturn = now + randomBetween(500, 1100);
-      } else {
-        this.gazeWanted = { yaw: randomBetween(-1.5, 1.5) * DEG, pitch: randomBetween(-1, 1) * DEG };
+    // Regard : direction de l'état (caméra, ou de côté et vers le haut en réflexion), petites saccades autour.
+    if (!still) {
+      if (now >= this.gazeReturn) {
+        this.gazeWanted = { yaw: randomBetween(-1, 1) * DEG, pitch: randomBetween(-0.7, 0.7) * DEG };
+        this.gazeReturn = Infinity;
       }
-      this.nextSaccade = now + randomBetween(1200, 3500);
+      if (now >= this.nextSaccade) {
+        if (Math.random() < STATE_STYLES[this.state].glanceChance) {
+          this.gazeWanted = { yaw: (Math.random() < 0.5 ? -1 : 1) * randomBetween(5, 9) * DEG, pitch: randomBetween(1, 5) * DEG };
+          this.gazeReturn = now + randomBetween(500, 1100);
+        } else {
+          this.gazeWanted = {
+            yaw: randomBetween(-style.gazeJitterYaw, style.gazeJitterYaw) * DEG,
+            pitch: randomBetween(-style.gazeJitterPitch, style.gazeJitterPitch) * DEG,
+          };
+        }
+        const { saccadeMinMs, saccadeMaxMs } = STATE_STYLES[this.state];
+        this.nextSaccade = now + randomBetween(saccadeMinMs, saccadeMaxMs);
+      }
+      this.gaze.yaw = approach(this.gaze.yaw, this.gazeWanted.yaw, dt, 0.03);
+      this.gaze.pitch = approach(this.gaze.pitch, this.gazeWanted.pitch, dt, 0.03);
     }
-    this.gaze.yaw = approach(this.gaze.yaw, this.gazeWanted.yaw, dt, 0.03);
-    this.gaze.pitch = approach(this.gaze.pitch, this.gazeWanted.pitch, dt, 0.03);
+    const asideYaw = this.asideSign * style.gazeAsideYaw * DEG;
+    const asideUp = style.gazeAsideUp * DEG;
+    const jitterYaw = still ? 0 : this.gaze.yaw;
+    const jitterPitch = still ? 0 : this.gaze.pitch;
+    const gazeYaw = asideYaw + jitterYaw;
+    const gazePitch = asideUp + jitterPitch;
     const head = this.bones.head;
     if (head) {
       head.getWorldPosition(this.gazeTarget.position);
       const toCamera = this.camera.getWorldPosition(new THREE.Vector3()).sub(this.gazeTarget.position);
       const distance = toCamera.length();
       this.gazeTarget.position.add(toCamera);
-      this.gazeTarget.position.x += Math.tan(this.gaze.yaw) * distance;
-      this.gazeTarget.position.y += Math.tan(this.gaze.pitch) * distance;
+      this.gazeTarget.position.x += Math.tan(gazeYaw) * distance;
+      this.gazeTarget.position.y += Math.tan(gazePitch) * distance;
     }
 
-    // Tête : dérive lente au repos, suit un peu le regard ; hochements et inclinaisons en parlant.
+    // Tête : posture de l'état (inclinaison), dérive lente, suit un peu le regard ; hochements en écoutant,
+    // mouvements plus marqués en parlant. Capture figée : posture seule, sans dérive.
     const s = this.speaking;
-    const yaw = 2.2 * DEG * drift(t, 0.3, 0.05, 0.13, 0.31) + 0.3 * this.gaze.yaw + s * 1.2 * DEG * drift(t, 2.1, 0.4, 0.9);
-    const pitch = 1.4 * DEG * drift(t, 1.7, 0.07, 0.19) - 0.25 * this.gaze.pitch + s * 1.6 * DEG * drift(t, 0.8, 1.6, 2.7);
-    const roll = 1.2 * DEG * drift(t, 4.2, 0.04, 0.11) + s * 1.0 * DEG * drift(t, 3.3, 0.35, 0.8);
+    const motion = still ? 0 : 1;
+    const elapsed = now - this.nodStart;
+    const nod = elapsed >= 0 && elapsed < NOD_MS ? Math.sin((Math.PI * elapsed) / NOD_MS) * style.nod * DEG : 0;
+    const yaw = motion * (style.headDrift * 2.2 * DEG * drift(t, 0.3, 0.05, 0.13, 0.31) + s * 1.2 * DEG * drift(t, 2.1, 0.4, 0.9)) + 0.3 * jitterYaw + HEAD_FOLLOW_ASIDE * asideYaw;
+    const pitch =
+      motion * (style.headDrift * 1.4 * DEG * drift(t, 1.7, 0.07, 0.19) + s * 1.6 * DEG * drift(t, 0.8, 1.6, 2.7)) -
+      0.25 * jitterPitch -
+      HEAD_FOLLOW_ASIDE * asideUp +
+      style.headPitch * DEG +
+      nod;
+    const roll = motion * (style.headDrift * 1.2 * DEG * drift(t, 4.2, 0.04, 0.11) + s * 1.0 * DEG * drift(t, 3.3, 0.35, 0.8)) + style.headTilt * DEG;
     this.turn('neck', pitch * 0.4, yaw * 0.4, roll * 0.4);
     this.turn('head', pitch * 0.6, yaw * 0.6, roll * 0.6);
+    if (still) return shape;
 
-    // Respiration : environ 15 par minute au repos, un peu plus en parlant ; poitrine et épaules.
-    this.breathPhase += dt * 2 * Math.PI * (0.24 + 0.08 * s);
+    // Respiration : rythme de l'état, un peu plus rapide en parlant ; poitrine et épaules.
+    this.breathPhase += dt * 2 * Math.PI * (style.breathRate + 0.08 * s);
     const breath = (1 - Math.cos(this.breathPhase)) / 2;
     this.turn('upperChest', -0.9 * DEG * breath, 0, 0);
     this.turn('chest', -0.4 * DEG * breath, 0, 0);
@@ -491,11 +585,15 @@ class VrmMotion {
     return shape;
   }
 
+  private setExpression(name: VRMExpressionPresetName, value: number) {
+    this.weights.set(name, value);
+    this.vrm.expressionManager?.setValue(name, value);
+  }
+
   private smooth(name: VRMExpressionPresetName, target: number, dt: number, rising: number, falling: number) {
     const current = this.weights.get(name) ?? 0;
     const next = approach(current, target, dt, target > current ? rising : falling);
-    this.weights.set(name, next);
-    this.vrm.expressionManager?.setValue(name, next);
+    this.setExpression(name, next);
   }
 
   /** Rotation ajoutée à la pose de repos de l'os. */
