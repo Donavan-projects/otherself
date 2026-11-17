@@ -1,5 +1,5 @@
 // Page de l'avatar 3D (VRM) : aperçu animé et mesure du coût du rendu, par le même chemin que la caméra injectée
-// (lib/vrm-assets.ts puis lib/avatar-vrm.ts, bandeau peint en dernier). Sans paramètre, les états s'enchaînent comme
+// (lib/vrm-assets.ts puis lib/avatar-vrm.ts, marqueur IA peint en dernier). Sans paramètre, les états s'enchaînent comme
 // dans un entretien (écoute avec hochements, réflexion, parole avec une voix simulée, inactif : lib/avatar-states.ts).
 // Paramètres de l'adresse :
 // - ?state=inactif|ecoute|reflexion|parole : état imposé (voix simulée en « parole ») ;
@@ -61,10 +61,8 @@ try {
     {
       model: await assets.model.arrayBuffer(),
       background: await createImageBitmap(assets.background),
-      banner: assets.banner,
       camera: assets.camera,
     },
-    { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone },
     () => current.level,
     log,
     {
@@ -79,7 +77,7 @@ try {
   renderer.setState(current.state);
   const marking = new AiMarking(await createImageBitmap(await renderMarkingText(config.badgeText)));
   const ctx = canvas.getContext('2d')!;
-  const pauseFrame = showPause ? createPauseFrame(pauseText(config.language), assets.banner, config.bannerText) : null;
+  const pauseFrame = showPause ? createPauseFrame(pauseText(config.language)) : null;
 
   let frames = 0;
   let total = 0;

@@ -4,7 +4,7 @@ Une extension de navigateur qui explore la symétrie des entretiens de recruteme
 
 ![Avatar OtherSelf : personnage 3D en style dessin animé, cheveux bruns en bataille, barbe courte, sweat à capuche noir portant l'inscription « Automated candidate, just like you. », devant un bureau ouvert flou ; en bas de l'image, le même texte sur un bandeau jaune.](docs/images/otherself-apercu.png)
 
-*Image vidéo envoyée par l'extension (1280 × 720) : avatar 3D créé avec VRoid Studio, rendu dans le navigateur ; le slogan du sweat et le bandeau sont dessinés par le code. Voir [Licence et crédits](#licence-et-crédits).*
+*Image vidéo envoyée par l'extension (1280 × 720) : avatar 3D créé avec VRoid Studio, rendu dans le navigateur ; le slogan du sweat et le bandeau sont dessinés par le code. Voir [Licence et crédits](#licence-et-crédits). Capture de la version précédente de l'avatar : slogan et bandeau ont depuis été remplacés par un marquage « IA » sur la veste et un voyant d'état ; nouvelle capture à venir.*
 
 > **Statut : prototype de démonstration.** Ce dépôt accompagne une vidéo de démonstration. Un projet complet, utilisable par tous sans compétences techniques, ne sera développé que si le sujet suscite de l'intérêt. Aucun support n'est garanti.
 
@@ -26,7 +26,7 @@ flowchart LR
   T --> R["Réponse à partir du CV<br/>OpenAI"]
   R --> V["Voix de synthèse<br/>Piper, locale"]
   H["Hugging Face<br/>modèle de voix Piper<br/>téléchargé une fois"] -.->|"modèle de voix seulement"| V
-  V --> A["Avatar animé + bandeau<br/>local"]
+  V --> A["Avatar animé + marqueur IA<br/>local"]
   A -->|"caméra et micro injectés"| P
 ```
 
@@ -59,7 +59,7 @@ Chargez `.output/chrome-mv3` dans `chrome://extensions` (mode développeur, « C
 
 ## État d'avancement
 
-- Fait : page de répétition, injection caméra et micro, pipeline voix (écoute, transcription, réponse, synthèse vocale, révélation et déclaration configurable), bandeau incrusté, testé sur Google Meet.
+- Fait : page de répétition, injection caméra et micro, pipeline voix (écoute, transcription, réponse, synthèse vocale, révélation et déclaration configurable), marqueur IA incrusté (marquage sur la veste et voyant d'état sur la languette du col), testé sur Google Meet.
 - Fait : avatar 3D (modèle VRoid rendu avec three.js) : synchronisation labiale sur la voix, clignements, regard, mouvements de tête, respiration, physique des cheveux, plan serré (tête et épaules) ; avatar 2D (SVG) en secours automatique. Testé sur Google Meet.
 - En cours : tournage de la démo.
 - Plus tard, si le sujet intéresse : bouche pilotée par les phonèmes plutôt que par le volume de la voix, assistant de configuration pour les non-techniciens.
@@ -72,4 +72,4 @@ Merci aux projets sur lesquels OtherSelf repose : [three.js](https://github.com/
 
 **Avatar 3D.** Le personnage (`avatar/otherself.vrm`) a été créé avec [VRoid Studio](https://vroid.com/en/studio) (pixiv), à partir des éléments prédéfinis de l'application, puis allégé pour l'extension. Il est distribué sous [VRM Public License 1.0](https://vrm.dev/licenses/1.0/) (usage commercial, redistribution et modification autorisés), distincte de la licence du code. Les éléments prédéfinis de VRoid relèvent aussi des [conditions de VRoid Studio](https://vroid.pixiv.help/hc/en-us/articles/4405813333657) : utiliser un modèle créé avec l'application est autorisé, mais une application qui génère des avatars à partir de ces éléments demande une licence séparée de pixiv.
 
-**Avatar 2D de secours et fonds.** L'avatar SVG sert quand l'avatar 3D ne peut pas être affiché (pas d'accélération graphique, échec du chargement) ; il ne ressemble pas encore à l'avatar 3D actuel et sera remplacé. Les images de ce personnage (v4) et des fonds « atrium » (par défaut, flouté) et « bureau » ont été générées avec ChatGPT (OpenAI). La tête a été vectorisée à partir de cette image, ramenée à une palette fixe et répartie dans les calques du gabarit. Les parties animées (yeux, clignement, bouches) ont été redessinées à la main. Les fonds, communs aux deux avatars, sont des images matricielles recadrées et retouchées (flou pour « atrium », désaturation et éclaircissement pour « bureau-clair »), intégrées en WebP dans un SVG. Le texte du t-shirt et le bandeau sont dessinés par le code. Ces images sont mises à disposition sans revendication de droits ; leur statut est distinct de la licence du code, la GPL ne s'applique pas à elles (détail : [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#images)).
+**Avatar 2D de secours et fonds.** L'avatar SVG sert quand l'avatar 3D ne peut pas être affiché (pas d'accélération graphique, échec du chargement) ; il ne ressemble pas encore à l'avatar 3D actuel et sera remplacé. Les images de ce personnage (v4) et des fonds « atrium » (par défaut, flouté) et « bureau » ont été générées avec ChatGPT (OpenAI). La tête a été vectorisée à partir de cette image, ramenée à une palette fixe et répartie dans les calques du gabarit. Les parties animées (yeux, clignement, bouches) ont été redessinées à la main. Les fonds, communs aux deux avatars, sont des images matricielles recadrées et retouchées (flou pour « atrium », désaturation et éclaircissement pour « bureau-clair »), intégrées en WebP dans un SVG. Le texte du t-shirt et le marqueur IA sont dessinés par le code. Ces images sont mises à disposition sans revendication de droits ; leur statut est distinct de la licence du code, la GPL ne s'applique pas à elles (détail : [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#images)).

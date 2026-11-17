@@ -32,7 +32,6 @@ export async function setupInjectionTest() {
   const vrm = vrmAssets && {
     model: await vrmAssets.model.arrayBuffer(),
     background: await createImageBitmap(vrmAssets.background),
-    banner: vrmAssets.banner,
     camera: vrmAssets.camera,
   };
   const audio = await loadTestAudio().catch((error: unknown) => {
@@ -42,7 +41,6 @@ export async function setupInjectionTest() {
   installFakeGetUserMedia({
     avatar,
     vrm,
-    avatarOptions: { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone },
     marking: await createImageBitmap(await renderMarkingText(config.badgeText)),
     pauseText: pauseText(config.language),
     // Pas de pipeline ici : la bouche suit directement le son de test.

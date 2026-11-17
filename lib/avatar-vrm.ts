@@ -1,7 +1,7 @@
 // Rendu de l'avatar 3D (VRM) dans le canvas 1280×720 de la caméra injectée. Tourne dans le monde MAIN de
 // l'onglet (voie A) comme dans les pages de l'extension. three.js dessine le modèle dans un canvas WebGL hors DOM, à
-// fond transparent, recopié à chaque image dans le canvas 2D capturé, par-dessus le fond ; le bandeau est peint en
-// dernier dans ce canvas 2D (règle 1), exactement comme pour l'avatar SVG (lib/avatar.ts).
+// fond transparent, recopié à chaque image dans le canvas 2D capturé, par-dessus le fond ; le marqueur IA (lib/badge.ts)
+// est peint en dernier dans ce canvas 2D par l'appelant (règle 1), exactement comme pour l'avatar SVG (lib/avatar.ts).
 //
 // Animation : bouche pilotée par le niveau de la voix (mêmes formes que le SVG, traduites en expressions VRM, avec
 // transitions lissées), clignements, regard vers la caméra avec petites saccades, respiration, mouvements de tête au
@@ -15,11 +15,7 @@ import {
   AVATAR_WIDTH,
   BlinkAnimator,
   MouthAnimator,
-  drawBanner,
-  drawSafeZone,
-  type AvatarOptions,
   type MouthShape,
-  type Rect,
 } from './avatar';
 import { frameY, VRM_FOV, VRM_HEAD_TOP, type VrmCamera } from './vrm-frame';
 import type { MarkingAnchors } from './badge';
@@ -36,11 +32,10 @@ import {
   type StateStyle,
 } from './avatar-states';
 
-/** Ce que le rendu reçoit dans la page : modèle, fond, bandeau, caméra (lib/vrm-frame.ts). */
+/** Ce que le rendu reçoit dans la page : modèle, fond, caméra (lib/vrm-frame.ts). */
 export interface VrmSources {
   model: ArrayBuffer;
   background: ImageBitmap;
-  banner: Rect;
   camera: VrmCamera;
 }
 
@@ -106,7 +101,6 @@ export interface VrmPreviewOptions {
 export async function createVrmRenderer(
   canvas: HTMLCanvasElement,
   sources: VrmSources,
-  options: AvatarOptions,
   level: () => number = () => 0,
   log: (message: string) => void = () => {},
   preview: VrmPreviewOptions = {},
@@ -137,7 +131,7 @@ export async function createVrmRenderer(
     // Cadre fixe : tout le personnage est toujours à l'image, pas de test de visibilité.
     vrm.scene.traverse((object) => (object.frustumCulled = false));
     log(`modèle VRM chargé en ${Math.round(performance.now() - started)} ms`);
-    return new VrmAvatarRenderer(canvas, renderer, vrm, sources, options, level, log, preview);
+    return new VrmAvatarRenderer(canvas, renderer, vrm, sources, level, log, preview);
   } catch (error) {
     renderer.dispose();
     renderer.forceContextLoss();
@@ -153,8 +147,6 @@ export class VrmAvatarRenderer implements FrameRenderer {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly vrm: VRM;
   private readonly sources: VrmSources;
-  private readonly options: AvatarOptions;
-  private readonly banner: OffscreenCanvas;
   private readonly motion: VrmMotion;
   private readonly level: () => number;
   private lost = false;
@@ -175,7 +167,6 @@ export class VrmAvatarRenderer implements FrameRenderer {
     renderer: THREE.WebGLRenderer,
     vrm: VRM,
     sources: VrmSources,
-    options: AvatarOptions,
     level: () => number,
     log: (message: string) => void,
     preview: VrmPreviewOptions = {},
@@ -189,7 +180,6 @@ export class VrmAvatarRenderer implements FrameRenderer {
     this.renderer = renderer;
     this.vrm = vrm;
     this.sources = sources;
-    this.options = options;
     this.level = level;
     renderer.domElement.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
@@ -227,13 +217,9 @@ export class VrmAvatarRenderer implements FrameRenderer {
       }
     }
 
-    this.banner = new OffscreenCanvas(sources.banner.width, sources.banner.height);
-    const bannerCtx = this.banner.getContext('2d');
-    if (!bannerCtx) throw new Error('contexte 2D hors écran indisponible');
-    drawBanner(bannerCtx, { x: 0, y: 0, width: sources.banner.width, height: sources.banner.height }, options.bannerText);
   }
 
-  /** Une image entière : fond, personnage, (zone de sécurité), bandeau en dernier. */
+  /** Une image entière : fond, personnage ; le marqueur IA (lib/badge.ts) est peint ensuite par l'appelant. */
   draw(now = performance.now()): MouthShape {
     if (this.lost) throw new Error('contexte WebGL perdu');
     const dt = this.previous === null ? 1 / 30 : Math.min(0.1, Math.max(0, (now - this.previous) / 1000));
@@ -244,8 +230,6 @@ export class VrmAvatarRenderer implements FrameRenderer {
     const { ctx, sources } = this;
     ctx.drawImage(sources.background, 0, 0, AVATAR_WIDTH, AVATAR_HEIGHT);
     ctx.drawImage(this.renderer.domElement, 0, 0, AVATAR_WIDTH, AVATAR_HEIGHT);
-    if (this.options.debugSafeZone) drawSafeZone(ctx);
-    ctx.drawImage(this.banner, sources.banner.x, sources.banner.y);
     if (this.markingBone) {
       const center = this.project(this.textPoint);
       this.anchors = {

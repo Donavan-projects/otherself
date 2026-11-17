@@ -24,7 +24,6 @@ let current = cycle.update(performance.now());
 const renderer = new AvatarRenderer(
   canvas,
   bitmaps,
-  { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone },
   () => current.level,
 );
 // Marqueur IA (marquage et voyant) peint en dernier, comme dans la caméra injectée.

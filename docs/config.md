@@ -17,12 +17,11 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | --- | --- | --- | --- |
 | `avatar` | nom de fichier | Personnage : `avatar/<avatar>.svg` (voir `avatar/gabarit.svg`) | `otherself` |
 | `background` | nom de fichier | Fond : `avatar/fonds/<background>.svg` | `atrium` (autres fonds : `bureau-clair`, `bureau`, `interieur-clair`) |
-| `avatarRenderer` | `vrm` / `svg` | Rendu de l'avatar. `vrm` : modèle 3D `avatar/otherself.vrm` (VRoid), animé en WebGL, slogan imprimé sur le sweat ; sans accélération graphique (rendu WebGL logiciel) ou en cas d'échec, l'avatar SVG prend le relais automatiquement. `svg` : avatar dessiné en 2D seul. Les champs `avatar`, `palette`, `hairstyle` et `accessories` ne concernent que le SVG (la voix reste celle du personnage SVG `avatar`, et le slogan du sweat reprend sa zone, ses lignes et son encre) | `vrm` |
+| `avatarRenderer` | `vrm` / `svg` | Rendu de l'avatar. `vrm` : modèle 3D `avatar/otherself.vrm` (VRoid), animé en WebGL, plan serré, marqueur IA (marquage et voyant de la languette du col) ; sans accélération graphique (rendu WebGL logiciel) ou en cas d'échec, l'avatar SVG prend le relais automatiquement. `svg` : avatar dessiné en 2D seul. Les champs `avatar`, `palette`, `hairstyle` et `accessories` ne concernent que le SVG (la voix reste celle du personnage SVG `avatar`) | `vrm` |
 | `palette` | objet | Variante de couleurs sans redessiner : classe de la palette du SVG → couleur CSS. Exemple : `{ "peau": "#a86f4c", "cheveux": "#151010", "vetement": "#5b6470", "barbe": "none" }`. Classes : `peau`, `peau-trait`, `cheveux`, `cheveux-trait`, `sourcils`, `barbe`, `vetement` (surchemise), `vetement-2` (t-shirt), `vetement-trait`, `iris`, `levres`, `badge-fond` (encre du slogan)… | Couleurs du SVG |
 | `hairstyle` | nom | Coiffure : sous-groupe `coiffure_<nom>` du SVG | `principale` |
 | `accessories` | liste de noms | Accessoires affichés : sous-groupes `accessoire_<nom>` | aucun |
-| `bannerOffsetY` | pixels | Décalage vertical du bandeau du bas, négatif vers le haut. Il reste dans la zone de sécurité et ne remonte jamais sur le slogan du t-shirt (de y = 529 à 608) | `0` (bandeau en bas du cadre, y = 608 à 670) |
-| `bannerText` | texte | Texte du bandeau incrusté (règle 1), aussi imprimé sur le t-shirt de l'avatar. Démo : « Automated candidate, just like you. » | « Candidat automatisé, comme vous. » (un texte vide est aussi remplacé par celui-ci) |
+| `badgeText` | texte court | Marquage imprimé sur la veste de l'avatar à côté du voyant d'état (règle 1), en lettres pleines ; 12 caractères au plus | « IA » si `language` vaut `fr`, sinon « AI » (un texte vide est aussi remplacé) |
 | `language` | `en`, `fr` | Langue de l'entretien : transcription, réponses du LLM, phrase de révélation | `en` |
 | `candidateName` | texte | Prénom ou nom du candidat : l'avatar parle de lui à la troisième personne (« Alex a travaillé… »), et se présente comme « l'avatar IA qui représente Alex » | « the candidate » / « le candidat » |
 | `messageText` | texte | Mode « message » : déclaration prononcée juste après la révélation, avant de répondre aux questions | Révélation seule |
@@ -41,7 +40,6 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | `bargeInMs` | millisecondes | Parole continue du recruteur par-dessus la voix de l'avatar nécessaire pour l'interrompre. En dessous, la prise de parole est ignorée (écho ou bruit probable) | `600` |
 | `sttModel` | modèle OpenAI | Transcription en flux (session Realtime) | `gpt-live-transcribe` |
 | `llmModel` | modèle OpenAI | Réponses en streaming, sans raisonnement. `gpt-6-luna` reste possible, mais son premier mot varie de 1 à 14 s (mesuré le 28/10) | `gpt-5.6-luna` (premier mot en 0,8 à 1,7 s) |
-| `debugSafeZone` | `true` / `false` | Débogage : dessine dans l'image le contour pointillé magenta de la zone de sécurité (visible aussi par l'interlocuteur sur la plateforme) | Désactivé |
 | `testAudio` | mp3, ogg, wav, webm, m4a | Banc d'essai `rehearsal?inject` uniquement : son joué en boucle par le micro injecté | Bip de 440 Hz chaque seconde |
 
 ## Voix

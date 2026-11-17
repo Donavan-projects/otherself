@@ -13,7 +13,7 @@ const log = createLogger('avatar');
 const INKSCAPE_NS = 'http://www.inkscape.org/namespaces/inkscape';
 const SLOGAN_FONT_URL = '/fonts/NotoSans-Bold.ttf';
 const SLOGAN_FONT = 'OtherSelfSlogan';
-/** Comme pour le bandeau : resserrement maximal avant de réduire la police. */
+/** Resserrement maximal du slogan avant de réduire la police. */
 const SLOGAN_MIN_SQUEEZE = 0.78;
 /** Encre un peu transparente : aspect mat, le coton transparaît. */
 const SLOGAN_INK_ALPHA = 0.94;
@@ -34,7 +34,16 @@ const OVER_LAYERS = ['sourcils', 'cheveux_avant', 'accessoires'];
 const MOUTH_LAYERS: Record<MouthShape, string> = { repos: 'bouche_repos', A: 'bouche_A', E: 'bouche_E', O: 'bouche_O', M: 'bouche_M' };
 
 /** Slogan du personnage SVG, tel qu'imprimé dans le cadre : repris par l'avatar 3D (lib/vrm-assets.ts). */
-export type AvatarVariant = Pick<DemoConfig, 'avatar' | 'background' | 'palette' | 'hairstyle' | 'accessories' | 'bannerText' | 'bannerOffsetY'>;
+export type AvatarVariant = Pick<DemoConfig, 'avatar' | 'background' | 'palette' | 'hairstyle' | 'accessories' | 'language'>;
+
+/**
+ * Slogan imprimé sur le t-shirt de l'avatar SVG de secours, seul personnage qui le porte encore (l'avatar 3D n'a plus
+ * de slogan depuis la sous-étape 3b) ; texte fixe depuis le retrait du bandeau et de bannerText (3c), jusqu'au
+ * remplacement de ce personnage (3e).
+ */
+function svgSlogan(language: 'fr' | 'en'): string {
+  return language === 'fr' ? 'Candidat automatisé, comme vous.' : 'Automated candidate, just like you.';
+}
 
 const assetUrl = (path: string) => browser.runtime.getURL(path as '/');
 
@@ -83,11 +92,7 @@ export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ asset
   // Haut de la tête mesuré sur le dessin (dépend de la coiffure), à l'échelle 1.
   const head = await rasterize(withLayers(character, ['cheveux_arriere', 'cheveux_avant', 'tete']), svgWidth, svgHeight);
   const hairTop = opaqueBounds(head)?.y ?? 0;
-  const layout = composeFrame(
-    { width: svgWidth, hairTop, sloganBottom: slogan.y + slogan.height, sloganBottomInFrame: slogan.bottomInFrame },
-    variant.bannerOffsetY,
-  );
-  if (layout.clamped) log(`bannerOffsetY = ${variant.bannerOffsetY} hors limites : bandeau ramené à y = ${layout.banner.y} (zone de sécurité)`);
+  const layout = composeFrame({ width: svgWidth, hairTop, sloganBottom: slogan.y + slogan.height, sloganBottomInFrame: slogan.bottomInFrame });
   const width = Math.round(svgWidth * layout.scale);
   const height = Math.round(svgHeight * layout.scale);
   const layer = (names: string[]) => rasterize(withLayers(character, names), width, height);
@@ -102,7 +107,7 @@ export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ asset
   const bottom = layout.top + height;
   if (bottom < AVATAR_HEIGHT) ctx.drawImage(body, 0, height - 1, width, 1, layout.left, bottom, width, AVATAR_HEIGHT - bottom);
   const ink = paletteColor(character, 'badge-fond') ?? '#f2c62e';
-  await drawSlogan(ctx, variant.bannerText, ink, {
+  await drawSlogan(ctx, svgSlogan(variant.language), ink, {
     x: layout.left + slogan.x * layout.scale,
     y: layout.top + slogan.y * layout.scale,
     width: slogan.width * layout.scale,
@@ -122,12 +127,12 @@ export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ asset
   const region = union([eyes.open, eyes.closed, ...(eyes.aside ? [eyes.aside] : []), ...MOUTH_SHAPES.map((shape) => mouths[shape])]);
 
   const assets = await mapAssets<HTMLCanvasElement, Blob>(
-    { under, over, eyes, mouths, region, banner: layout.banner },
+    { under, over, eyes, mouths, region },
     (image) => toBlob(image),
   );
   log(
     `avatar préparé en ${Math.round(performance.now() - started)} ms : ${variant.avatar} sur ${variant.background}, ` +
-      `échelle ${layout.scale.toFixed(3)}, bandeau y = ${layout.banner.y}, zone animée ${region.width}x${region.height}`,
+      `échelle ${layout.scale.toFixed(3)}, zone animée ${region.width}x${region.height}`,
   );
   return { assets, layout };
 }

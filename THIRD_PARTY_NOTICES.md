@@ -47,7 +47,7 @@ ne s'applique pas à elles.**
 | `avatar/otherself.vrm` (avatar 3D « Android », par défaut) | modèle créé par l'auteur du projet avec [VRoid Studio](https://vroid.com/en/studio) (pixiv), à partir des éléments prédéfinis de l'application (visage, cheveux, veste), exporté en VRM 1.0 ; allégé par `scripts/optimize-vrm.ts` (miniature, pantalon et chaussures retirés, morph targets retirés sauf ceux des expressions et des sourcils, textures réduites à 1024 px). | [VRM Public License 1.0](https://vrm.dev/licenses/1.0/), selon les métadonnées du modèle : utilisation par tous, usage commercial autorisé, redistribution et modification autorisées, mention de l'auteur non requise ; usages violents, sexuels, politiques ou religieux et antisociaux non autorisés. Les éléments prédéfinis de VRoid Studio relèvent en outre des [conditions de VRoid Studio](https://vroid.pixiv.help/hc/en-us/articles/4405813333657) : l'usage, y compris commercial, d'un modèle créé avec l'application est autorisé, mais **une application qui génère des avatars à partir des pièces de VRoid demande une licence séparée de pixiv**. Un futur créateur d'avatar dans OtherSelf ne devra donc utiliser que des pièces qui ne viennent pas de VRoid |
 | `avatar/otherself-v1.svg`, `avatar/gabarit.svg`, `avatar/fonds/interieur-clair.svg` | dessinés directement en SVG pour le projet, avec Claude Code (Anthropic) | licence du dépôt (GPL-3.0-or-later) |
 
-Le texte du t-shirt (avatar SVG) est dessiné par le code en Noto Sans Bold (OFL-1.1), le marquage « IA » en DejaVu Sans Mono Bold (voir ci-dessus) ; le bandeau, en police système.
+Le texte du t-shirt (avatar SVG) est dessiné par le code en Noto Sans Bold (OFL-1.1), le marquage « IA » en DejaVu Sans Mono Bold (voir ci-dessus).
 
 ## Services externes
 

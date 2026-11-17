@@ -2,7 +2,7 @@
 // le canvas de l'avatar comme caméra et la piste audio fournie comme micro, sous le nom
 // « Avatar IA – OtherSelf ». Sans API d'extension : tourne dans le monde MAIN d'un onglet.
 
-import { AvatarRenderer, type AvatarAssets, type AvatarOptions, type MouthShape } from './avatar';
+import { AvatarRenderer, type AvatarAssets, type MouthShape } from './avatar';
 import { createVrmRenderer, type FrameRenderer, type VrmSources } from './avatar-vrm';
 import type { AvatarState } from './avatar-states';
 import { AiMarking } from './badge';
@@ -25,7 +25,6 @@ export interface FakeMediaSources {
   avatar: AvatarAssets<ImageBitmap>;
   /** Avatar 3D (prototype) : utilisé s'il est fourni et si WebGL est accéléré ; sinon, et en cas de panne, avatar SVG. */
   vrm?: VrmSources | undefined;
-  avatarOptions: AvatarOptions;
   /** Texte de l'image de pause (« Avatar IA en pause ») : sans avatar, elle n'a ni marquage ni voyant (règle 1). */
   pauseText: string;
   /** Marquage « IA » déjà rendu (règle 1), peint avec le voyant en dernier sur chaque image où l'avatar est visible. */
@@ -40,7 +39,7 @@ interface FakeTracks {
   video: MediaStreamTrack;
   audio: MediaStreamTrack;
   stopRendering(): void;
-  /** Pause : image fixe « Avatar en pause » (bandeau compris) au lieu de l'avatar, au même rythme. */
+  /** Pause : image fixe « Avatar IA en pause » (sans avatar ni marqueur) au lieu de l'avatar, au même rythme. */
   setPaused(paused: boolean, clickAt?: number): void;
   setAvatarState(state: AvatarState): void;
   nod(): void;
@@ -236,7 +235,7 @@ async function createVideoTrack(
   nod(): void;
   fps(): number | null;
 }> {
-  // Canvas hors DOM : la page ne voit que le flux, bandeau compris (règle 1).
+  // Canvas hors DOM : la page ne voit que le flux, marqueur IA compris (règle 1).
   // Niveau maximal par période de statistiques : sert à régler les seuils de la bouche (lib/avatar.ts).
   let maxLevel = 0;
   const measured = () => {
@@ -246,11 +245,11 @@ async function createVideoTrack(
   };
   // Avatar 3D ou SVG, dessinés dans le même canvas : la piste capturée ne change pas en cas de repli.
   const canvas = document.createElement('canvas');
-  const svg = (): FrameRenderer => new AvatarRenderer(canvas, sources.avatar, sources.avatarOptions, measured);
+  const svg = (): FrameRenderer => new AvatarRenderer(canvas, sources.avatar, measured);
   let renderer: FrameRenderer;
   if (sources.vrm) {
     try {
-      renderer = await createVrmRenderer(canvas, sources.vrm, sources.avatarOptions, measured, log);
+      renderer = await createVrmRenderer(canvas, sources.vrm, measured, log);
       log('rendu : avatar 3D (VRM)');
     } catch (error) {
       log(`avatar 3D indisponible (${errorMessage(error)}) : avatar SVG utilisé`);
@@ -282,7 +281,7 @@ async function createVideoTrack(
   // Image de pause, préparée une fois : sans avatar, ni marquage ni voyant ; son texte l'identifie (règle 1).
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('contexte 2D indisponible');
-  const pauseFrame = createPauseFrame(sources.pauseText, sources.vrm?.banner ?? sources.avatar.banner, sources.avatarOptions.bannerText);
+  const pauseFrame = createPauseFrame(sources.pauseText);
   let paused = false;
   // Marqueur IA (règle 1) : peint en dernier sur chaque image où l'avatar est visible, voyant à la couleur de l'état.
   const marking = new AiMarking(sources.marking);

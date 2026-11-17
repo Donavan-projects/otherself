@@ -19,13 +19,8 @@ export interface DemoConfig {
   hairstyle: string;
   /** Accessoires : sous-groupes accessoire_<nom> affichés. */
   accessories: string[];
-  /** Décalage vertical du bandeau en pixels (négatif : vers le haut), borné à la zone de sécurité. */
-  bannerOffsetY: number;
   testAudio: string | null;
   cv: string | null;
-  debugSafeZone: boolean;
-  /** Texte du bandeau (retiré à la fin de la sous-étape 3c) : jamais vide. */
-  bannerText: string;
   /** Texte de la pastille « ● IA » (règle 1) : jamais vide ; « IA » ou « AI » par défaut selon la langue. */
   badgeText: string;
   /** Déclaration prononcée après la révélation, avant les réponses (mode « message »). */
@@ -59,8 +54,6 @@ export interface DemoConfig {
   llmModel: string;
 }
 
-export const DEFAULT_BANNER_TEXT = 'Candidat automatisé, comme vous.';
-
 const DEFAULTS: DemoConfig = {
   avatar: 'otherself',
   background: 'atrium',
@@ -68,11 +61,8 @@ const DEFAULTS: DemoConfig = {
   palette: {},
   hairstyle: 'principale',
   accessories: [],
-  bannerOffsetY: 0,
   testAudio: null,
   cv: null,
-  debugSafeZone: false,
-  bannerText: DEFAULT_BANNER_TEXT,
   badgeText: 'AI',
   messageText: '',
   language: 'en',
@@ -94,18 +84,12 @@ const DEFAULTS: DemoConfig = {
   llmModel: 'gpt-5.6-luna',
 };
 
-/** Règle 1 : un texte de bandeau vide ou absent est remplacé par le texte par défaut. */
-export function bannerTextOrDefault(text: unknown): string {
-  return typeof text === 'string' && text.trim() !== '' ? text.trim() : DEFAULT_BANNER_TEXT;
-}
-
 // Fichiers ajoutés au build (local/, vendor/) : absents des chemins typés par WXT.
 export const localUrl = (path: string) => new URL(path, browser.runtime.getURL('/')).href;
 
 export async function loadDemoConfig(): Promise<DemoConfig> {
   const raw = (await (await fetch(localUrl('/local/config.json'))).json()) as Partial<DemoConfig>;
   const config: DemoConfig = { ...DEFAULTS, ...raw };
-  config.bannerText = bannerTextOrDefault(raw.bannerText);
   config.language = raw.language === 'fr' ? 'fr' : 'en';
   config.badgeText = badgeTextOrDefault(raw.badgeText, config.language);
   config.silenceMs = Number(raw.silenceMs) > 0 ? Number(raw.silenceMs) : DEFAULTS.silenceMs;
@@ -136,7 +120,6 @@ export async function loadDemoConfig(): Promise<DemoConfig> {
   );
   config.hairstyle = safeName(raw.hairstyle) ?? DEFAULTS.hairstyle;
   config.accessories = Array.isArray(raw.accessories) ? raw.accessories.flatMap((name) => safeName(name) ?? []) : [];
-  config.bannerOffsetY = Number.isFinite(Number(raw.bannerOffsetY)) ? Number(raw.bannerOffsetY) : 0;
   config.bargeInMs = Number(raw.bargeInMs) >= 0 && raw.bargeInMs !== undefined ? Number(raw.bargeInMs) : DEFAULTS.bargeInMs;
   return config;
 }

@@ -2,7 +2,7 @@
 // npm run vrm), calcule le cadrage (plan serré, lib/vrm-frame.ts), rastérise le fond. La page de la plateforme ne reçoit
 // que le modèle et des images (jamais la configuration ni la clé API). Pas de slogan sur la veste depuis la sous-étape 3b.
 
-import { AVATAR_HEIGHT, AVATAR_WIDTH, composeFrame, SLOGAN_BOTTOM, type Rect } from './avatar';
+import { AVATAR_HEIGHT, AVATAR_WIDTH } from './avatar';
 import { fetchText, rasterize, toBlob } from './avatar-assets';
 import type { DemoConfig } from './config';
 import { findPrimitive, readAccessor, readGlb, vrmOf, type Glb, type Primitive } from './glb';
@@ -19,7 +19,6 @@ export interface VrmAssets<T> {
   model: T;
   /** Fond plein cadre 1280×720. */
   background: T;
-  banner: Rect;
   camera: VrmCamera;
 }
 
@@ -27,7 +26,7 @@ export async function mapVrmAssets<A, B>(assets: VrmAssets<A>, convert: (file: A
   return { ...assets, model: await convert(assets.model), background: await convert(assets.background) };
 }
 
-export type VrmVariant = Pick<DemoConfig, 'background' | 'bannerText' | 'bannerOffsetY'>;
+export type VrmVariant = Pick<DemoConfig, 'background'>;
 
 /**
  * Prépare l'avatar 3D. modelName : page de test seulement (vrm.html?model=), autre fichier copié à la main dans avatar-vrm/
@@ -49,18 +48,14 @@ export async function buildVrmAssets(variant: VrmVariant, modelName?: string): P
   const camera = solveVrmCamera(top, { y: anchorY, z: shirt.frontZ(boneHeight(glb, VRM_DEPTH_REFERENCE)) });
   log(`repères : haut des cheveux ${top.y.toFixed(3)} m (y = ${VRM_HEAD_TOP}), languette du col ${anchorY.toFixed(3)} m (y = ${VRM_COLLAR_Y})`);
   const background = await rasterize(await fetchText(`/avatar-svg/fonds/${variant.background}.svg`), AVATAR_WIDTH, AVATAR_HEIGHT);
-  // Bandeau placé comme pour le personnage SVG : sous y = SLOGAN_BOTTOM, bannerOffsetY borné.
-  const layout = composeFrame({ width: 1, hairTop: 0, sloganBottom: 1, sloganBottomInFrame: SLOGAN_BOTTOM }, variant.bannerOffsetY);
-  if (layout.clamped) log(`bannerOffsetY = ${variant.bannerOffsetY} hors limites : bandeau ramené à y = ${layout.banner.y} (zone de sécurité)`);
   const assets: VrmAssets<Blob> = {
     model,
     background: await toBlob(background),
-    banner: layout.banner,
     camera,
   };
   log(
     `avatar 3D préparé en ${Math.round(performance.now() - started)} ms : modèle ${(assets.model.size / 1e6).toFixed(1)} Mo, ` +
-      `caméra à ${camera.distance.toFixed(2)} m, fond ${variant.background}, bandeau y = ${layout.banner.y}`,
+      `caméra à ${camera.distance.toFixed(2)} m, fond ${variant.background}`,
   );
   return assets;
 }

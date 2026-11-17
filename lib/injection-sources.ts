@@ -13,10 +13,8 @@ export interface SerializedSources {
   avatar: AvatarAssets<SerializedFile>;
   /** Avatar 3D (avatarRenderer: vrm) ; l'avatar SVG ci-dessus sert de secours. */
   vrm?: VrmAssets<SerializedFile> | undefined;
-  bannerText: string;
   /** Marquage « IA » (règle 1) déjà rendu par le popup (lib/avatar-assets.ts, renderMarkingText). */
   marking: SerializedFile;
-  debugSafeZone: boolean;
   /** Langue des textes affichés dans la page (bouton Pause / Reprendre, image de pause). */
   language: 'fr' | 'en';
 }

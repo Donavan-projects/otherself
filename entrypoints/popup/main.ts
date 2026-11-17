@@ -197,9 +197,7 @@ async function loadSources(): Promise<SerializedSources> {
   return {
     avatar: await mapAssets(assets, blobToFile),
     vrm,
-    bannerText: config.bannerText,
     marking: await blobToFile(await renderMarkingText(config.badgeText)),
-    debugSafeZone: config.debugSafeZone,
     language: config.language,
   };
 }
