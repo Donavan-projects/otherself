@@ -99,32 +99,27 @@ voyant et la révélation vocale (règle 2).
   y 458 à 482). Marge des cheveux : 18 px au-dessus de la coupe 2:1 de Meet ; si des mèches sont coupées, descendre le
   cadrage d'environ 15 px (languette vers y ≈ 485, toujours sous 536).
 
-**Badge IA.**
-- ~~Imprimé dans la texture du modèle~~ (abandonné en 3c) : pastille « ● IA » dessinée en dernier dans le canvas 2D,
-  à la position du torse projetée à chaque image (épinglée à l'os upperChest, elle suit les mouvements). Dans la
-  texture, elle serait assombrie par l'éclairage, masquée par les cheveux ou un bras, et ne pourrait pas servir de
-  voyant (couleur changée à chaque image) ; le même code sert pour l'avatar 3D, l'image de pause et l'avatar SVG.
+**Marqueur IA (3c).**
+- Premier essai, une pastille « ● IA » (pilule sombre, voyant et texte) : rejeté sur planche le 17/11, trop hors
+  personnage.
+- Retenu : marquage « IA » (« AI » en anglais, `badgeText`, jamais vide) en lettres pleines gris anthracite, imprimé
+  sur la veste comme un numéro de série de robot (police technique à chasse fixe, embarquée), sans fond ni contour, à
+  côté de la languette du col ; la languette elle-même sert de voyant d'état et s'allume avec un léger halo : bleu
+  pour inactif et écoute, ambre pour réflexion (respiration lente), vert pour parole. Un très léger fondu dans la
+  veste l'empêche de flotter au-dessus du tissu, sans perte de netteté.
+- Dessiné en dernier dans le canvas 2D, pas dans la texture du modèle : dans la texture, il serait assombri par
+  l'éclairage, masqué par les cheveux ou un bras, et le voyant ne pourrait pas changer de couleur à chaque image.
+  Attaché au torse (os upperChest), projeté à chaque image : il suit les mouvements comme s'il était imprimé.
+- Présent dans chaque image où l'avatar est visible ; le voyant ne s'éteint jamais tant que l'avatar est visible.
+  L'image de pause, sans avatar, n'a ni marquage ni voyant : son texte l'identifie (« Avatar IA en pause » / « AI
+  avatar paused »).
 - Lisible dans une vignette d'environ 320×180 ; toujours visible de face et dans les mouvements de tête.
-- Texte court et configurable, jamais vide : « IA » par défaut (variante anglaise « AI ») ; décision du 16/11.
-- Avatar SVG de secours : badge équivalent, dessiné dans le canvas.
-- Le badge sert aussi de voyant d'état : petite lumière au col, sur la languette du nouveau modèle, dont la couleur
-  suit l'état de l'étape 2 : bleu pour inactif et écoute, ambre pour réflexion, vert pour parole. Toujours lisible et
-  jamais éteint, puisqu'il reste le marqueur IA.
-- Le bandeau est retiré une fois le badge en place (3c), après la modification de la règle 1.
+- Avatar SVG de secours : même marquage ; voyant à l'endroit le plus proche d'un col, en attendant la sous-étape 3e.
+- La languette du col (28 × 24 px dans le cadre 1280×720, plan serré de 3b) est trop petite pour porter le texte :
+  elle sert de voyant, le texte est imprimé juste à côté.
 - Vérifier que le voyant bleu se distingue des bandes lumineuses turquoise du fond Atrium.
-- La languette du col (28 × 24 px dans le cadre 1280×720, plan serré de 3b) est trop petite pour porter « IA » lisible
-  dans une vignette de 320×180 : elle sert de voyant. Le texte « IA » est un badge plus grand (texte d'environ 35 à
-  40 px de haut) juste à côté, sur le haut de la poitrine sous le col ou sur l'épaule, entre y ≈ 485 et 530.
-
-**Modification de la règle 1 de `CLAUDE.md`** (à faire explicitement, la règle actuelle impose le bandeau).
-Proposition :
-
-> 1. **Marqueur IA incrusté** : un badge IA fait partie de chaque image du flux vidéo injecté (imprimé sur
->    l'avatar 3D, dessiné dans le canvas pour l'avatar SVG), jamais en superposition DOM masquable, placé près du
->    visage (col ou épaule) pour survivre aux recadrages des plateformes, lisible dans une vignette d'environ
->    320×180. Son texte est configurable (`badgeText`, « IA » par défaut, « AI » en anglais), jamais vide ni
->    désactivable.
->    L'apparence volontairement non humaine de l'avatar et la révélation vocale (règle 2) complètent ce marqueur.
+- Le bandeau est retiré une fois le marquage validé (3c), après la modification de la règle 1 (faite le 17/11 :
+  voir `CLAUDE.md`).
 
 ### 4. Personnalité (ton uniquement)
 
