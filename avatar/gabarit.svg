@@ -10,9 +10,9 @@
   - Ombres et lumières : classes .ombre / .lumiere (translucides), valables pour toutes les variantes.
   - Ombre de barbe : classe .barbe, sans opacité en ligne (une variante la règle ou la met à 0).
   - Yeux (2 états) et bouches (5 formes) superposés exactement, centrés sur ancre_yeux / ancre_bouche.
-  - Pas de texte : le slogan (bannerText) est écrit par le code dans badge_zone_texte (repère), en encre
-    .badge-fond et en Noto Sans Bold (public/fonts), après le calque vetements. Le calque badge est la
-    surimpression dessinée ensuite par-dessus l'encre : grain d'usure, plis et ombres du tissu.
+  - Pas de texte. badge_zone_texte (repère) ne sert plus qu'au cadrage (bas du cadre, data-bas-cadre) : le slogan
+    n'est plus écrit depuis la sous-étape 3c. Le calque badge est la surimpression du tissu (grain d'usure, plis et
+    ombres), dessinée après le calque vetements.
   - Coiffures et accessoires : sous-groupes coiffure_<nom> (dans cheveux_arriere et cheveux_avant)
     et accessoire_<nom> (dans accessoires), choisis dans config.local.json.
   - Fond : fichiers séparés dans avatar/fonds/, jamais dans ce fichier.

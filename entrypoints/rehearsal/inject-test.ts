@@ -3,7 +3,7 @@
 // config.local.json, ou avec ?inject&vrm.
 
 import { mapAssets } from '@/lib/avatar';
-import { buildAvatarAssets } from '@/lib/avatar-assets';
+import { buildAvatarAssets, renderMarkingText } from '@/lib/avatar-assets';
 import { loadDemoConfig, localUrl } from '@/lib/config';
 import { installFakeGetUserMedia } from '@/lib/inject';
 import { pauseText } from '@/lib/injection-sources';
@@ -32,7 +32,6 @@ export async function setupInjectionTest() {
   const vrm = vrmAssets && {
     model: await vrmAssets.model.arrayBuffer(),
     background: await createImageBitmap(vrmAssets.background),
-    banner: vrmAssets.banner,
     camera: vrmAssets.camera,
   };
   const audio = await loadTestAudio().catch((error: unknown) => {
@@ -42,7 +41,7 @@ export async function setupInjectionTest() {
   installFakeGetUserMedia({
     avatar,
     vrm,
-    avatarOptions: { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone },
+    marking: await createImageBitmap(await renderMarkingText(config.badgeText)),
     pauseText: pauseText(config.language),
     // Pas de pipeline ici : la bouche suit directement le son de test.
     initialState: 'parole',

@@ -29,7 +29,7 @@ flowchart TB
   subgraph TAB["Onglet de l'entretien"]
     subgraph MAIN["Script injecté, monde MAIN"]
       SHARE["Son de l'onglet partagé<br/>share-tab.ts"]
-      RENDER["Rendu de l'avatar<br/>VRM three.js, repli SVG<br/>+ bandeau en dernier"]
+      RENDER["Rendu de l'avatar<br/>VRM three.js, repli SVG<br/>+ marqueur IA en dernier"]
       VOICE["Voix de l'avatar<br/>page-audio.ts"]
       INJ["Caméra et micro injectés<br/>inject.ts"]
     end
@@ -101,7 +101,7 @@ Dans le document offscreen (`entrypoints/offscreen/main.ts`, `lib/conversation.t
 - **Retour** : la voix repart vers la page par le pont, et l'utilisateur l'entend par le document offscreen
   (`lib/monitor.ts`), jamais par les haut-parleurs de l'onglet, dont le son est partagé.
 
-### Rendu de l'avatar et bandeau
+### Rendu de l'avatar et marqueur IA
 
 Dans la page (`lib/inject.ts`), à la première demande de caméra :
 
@@ -109,8 +109,10 @@ Dans la page (`lib/inject.ts`), à la première demande de caméra :
   transparent. Il est recopié à chaque image dans le canvas 2D de 1280×720, par-dessus le fond.
 - **Repli SVG** (`lib/avatar.ts`) : si WebGL est logiciel (SwiftShader, llvmpipe), si le modèle ne se charge pas ou si le
   contexte WebGL est perdu, l'avatar SVG prend le relais dans le même canvas, sans changer de piste vidéo.
-- **Bandeau** : peint en dernier dans le canvas 2D, à chaque image, dans la zone de sécurité qui survit aux recadrages.
-  Il fait partie de l'image envoyée : la plateforme ne peut pas le masquer.
+- **Marqueur IA** (`lib/badge.ts`) : marquage « IA » imprimé sur la veste et voyant d'état sur la languette du col
+  (bleu, ambre, vert selon l'état), peints en dernier dans le canvas 2D, à chaque image où l'avatar est visible, près du
+  visage pour survivre aux recadrages. Ils font partie de l'image envoyée : la plateforme ne peut pas les masquer.
+  L'image de pause, sans avatar, l'indique en toutes lettres.
 
 ### Injection de la caméra et du micro
 
@@ -126,7 +128,7 @@ les fonctions d'origine et coupe les pistes.
 | Partage du son de l'onglet, routage audio, pont | Transcription : son du recruteur pendant ses prises de parole |
 | Détection de parole (Silero VAD) | Réponse : prompt système avec le CV et les notes, transcription des questions |
 | Synthèse vocale (Piper, modèle téléchargé une fois depuis Hugging Face), retour audio | Synthèse vocale OpenAI seulement si `ttsProvider` vaut `openai` (pas par défaut) |
-| Rendu de l'avatar (WebGL ou SVG), bandeau, injection | |
+| Rendu de l'avatar (WebGL ou SVG), marqueur IA, injection | |
 
 La clé API ne quitte jamais le document offscreen. Hugging Face ne sert qu'à télécharger le modèle de voix Piper, une
 fois, sans clé ni donnée de l'entretien ou du candidat (comme toute requête web, ce téléchargement fait connaître
@@ -197,8 +199,8 @@ fermeture. Les formes s'enchaînent donc sans saut.
 | --- | --- |
 | Mesure du niveau de la voix et choix de la forme de bouche (`MouthAnimator`) | Poids des expressions et transitions lissées |
 | Rythme des clignements (`BlinkAnimator`) | Fermeture progressive des paupières |
-| Bandeau, zone de sécurité, cadrage (haut de la tête à y = 94) | Regard, saccades, mouvements de tête, respiration, pose des bras, physique des cheveux |
-| Paramètres du slogan (zone, lignes, police Noto Sans Bold, encre) | Slogan imprimé dans la texture du sweat, sur le personnage posé |
+| Marqueur IA (marquage et voyant), peint par l'appelant | Regard, saccades, mouvements de tête, respiration, pose des bras, physique des cheveux |
+| | Plan serré par les os (cheveux à y = 54, languette du col à y = 470) ; marquage qui suit le tissu |
 
 L'avatar SVG n'a que des formes de bouche dessinées et des yeux ouverts ou fermés ; il ne redessine que la zone des
 yeux et de la bouche à chaque image.

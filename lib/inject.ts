@@ -2,9 +2,11 @@
 // le canvas de l'avatar comme caméra et la piste audio fournie comme micro, sous le nom
 // « Avatar IA – OtherSelf ». Sans API d'extension : tourne dans le monde MAIN d'un onglet.
 
-import { AVATAR_HEIGHT, AVATAR_WIDTH, AvatarRenderer, drawBanner, type AvatarAssets, type AvatarOptions, type MouthShape, type Rect } from './avatar';
+import { AvatarRenderer, type AvatarAssets, type MouthShape } from './avatar';
 import { createVrmRenderer, type FrameRenderer, type VrmSources } from './avatar-vrm';
 import type { AvatarState } from './avatar-states';
+import { AiMarking } from './badge';
+import { createPauseFrame } from './pause-frame';
 import { startFrameClock } from './frame-clock';
 import { trustedTypesEnforcement } from './trusted-types';
 import { createLogger } from './log';
@@ -23,9 +25,10 @@ export interface FakeMediaSources {
   avatar: AvatarAssets<ImageBitmap>;
   /** Avatar 3D (prototype) : utilisé s'il est fourni et si WebGL est accéléré ; sinon, et en cas de panne, avatar SVG. */
   vrm?: VrmSources | undefined;
-  avatarOptions: AvatarOptions;
-  /** Texte de l'image « Avatar en pause » (le bandeau y reste, règle 1). */
+  /** Texte de l'image de pause (« Avatar IA en pause ») : sans avatar, elle n'a ni marquage ni voyant (règle 1). */
   pauseText: string;
+  /** Marquage « IA » déjà rendu (règle 1), peint avec le voyant en dernier sur chaque image où l'avatar est visible. */
+  marking: ImageBitmap;
   /** État de départ de l'avatar ; « parole » pour un banc sans pipeline (bouche pilotée par le son de test). */
   initialState?: AvatarState;
   /** Crée la piste du micro injecté, au premier appel de getUserMedia. */
@@ -36,7 +39,7 @@ interface FakeTracks {
   video: MediaStreamTrack;
   audio: MediaStreamTrack;
   stopRendering(): void;
-  /** Pause : image fixe « Avatar en pause » (bandeau compris) au lieu de l'avatar, au même rythme. */
+  /** Pause : image fixe « Avatar IA en pause » (sans avatar ni marqueur) au lieu de l'avatar, au même rythme. */
   setPaused(paused: boolean, clickAt?: number): void;
   setAvatarState(state: AvatarState): void;
   nod(): void;
@@ -232,7 +235,7 @@ async function createVideoTrack(
   nod(): void;
   fps(): number | null;
 }> {
-  // Canvas hors DOM : la page ne voit que le flux, bandeau compris (règle 1).
+  // Canvas hors DOM : la page ne voit que le flux, marqueur IA compris (règle 1).
   // Niveau maximal par période de statistiques : sert à régler les seuils de la bouche (lib/avatar.ts).
   let maxLevel = 0;
   const measured = () => {
@@ -242,11 +245,11 @@ async function createVideoTrack(
   };
   // Avatar 3D ou SVG, dessinés dans le même canvas : la piste capturée ne change pas en cas de repli.
   const canvas = document.createElement('canvas');
-  const svg = (): FrameRenderer => new AvatarRenderer(canvas, sources.avatar, sources.avatarOptions, measured);
+  const svg = (): FrameRenderer => new AvatarRenderer(canvas, sources.avatar, measured);
   let renderer: FrameRenderer;
   if (sources.vrm) {
     try {
-      renderer = await createVrmRenderer(canvas, sources.vrm, sources.avatarOptions, measured, log);
+      renderer = await createVrmRenderer(canvas, sources.vrm, measured, log);
       log('rendu : avatar 3D (VRM)');
     } catch (error) {
       log(`avatar 3D indisponible (${errorMessage(error)}) : avatar SVG utilisé`);
@@ -275,11 +278,14 @@ async function createVideoTrack(
   const track = canvas.captureStream(FPS).getVideoTracks()[0];
   if (!track) throw new Error('captureStream n\'a fourni aucune piste vidéo');
 
-  // Image « Avatar en pause », préparée une fois, bandeau compris (règle 1).
+  // Image de pause, préparée une fois : sans avatar, ni marquage ni voyant ; son texte l'identifie (règle 1).
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('contexte 2D indisponible');
-  const pauseFrame = createPauseFrame(sources.pauseText, sources.vrm?.banner ?? sources.avatar.banner, sources.avatarOptions.bannerText);
+  const pauseFrame = createPauseFrame(sources.pauseText);
   let paused = false;
+  // Marqueur IA (règle 1) : peint en dernier sur chaque image où l'avatar est visible, voyant à la couleur de l'état.
+  const marking = new AiMarking(sources.marking);
+  marking.setState(avatarState);
   /** Clic de pause ou de reprise pas encore suivi d'une image : délai logué à la première image dessinée. */
   let pendingClick: { at: number; label: string } | null = null;
 
@@ -317,6 +323,8 @@ async function createVideoTrack(
       } else {
         const shape = draw(start);
         shapes.set(shape, (shapes.get(shape) ?? 0) + 1);
+        const anchors = renderer.markingAnchors?.();
+        if (anchors) marking.draw(ctx, anchors, start);
       }
       const spent = performance.now() - start;
       frames += 1;
@@ -349,6 +357,7 @@ async function createVideoTrack(
     setAvatarState(state) {
       avatarState = state;
       renderer.setState?.(state);
+      marking.setState(state);
     },
     nod: () => renderer.nod?.(),
     stop() {
@@ -356,22 +365,6 @@ async function createVideoTrack(
       renderer.dispose?.();
     },
   };
-}
-
-/** Image fixe de la pause : fond sombre, texte centré, bandeau à sa place habituelle, peint en dernier. */
-function createPauseFrame(text: string, banner: Rect, bannerText: string): OffscreenCanvas {
-  const frame = new OffscreenCanvas(AVATAR_WIDTH, AVATAR_HEIGHT);
-  const ctx = frame.getContext('2d', { alpha: false });
-  if (!ctx) throw new Error('contexte 2D hors écran indisponible');
-  ctx.fillStyle = '#20242c';
-  ctx.fillRect(0, 0, AVATAR_WIDTH, AVATAR_HEIGHT);
-  ctx.fillStyle = '#f2f2f2';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = '700 72px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText(text, AVATAR_WIDTH / 2, AVATAR_HEIGHT * 0.45, banner.width);
-  drawBanner(ctx, banner, bannerText);
-  return frame;
 }
 
 function errorMessage(error: unknown): string {

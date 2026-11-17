@@ -1,5 +1,5 @@
 // Page de l'avatar 3D (VRM) : aperçu animé et mesure du coût du rendu, par le même chemin que la caméra injectée
-// (lib/vrm-assets.ts puis lib/avatar-vrm.ts, bandeau peint en dernier). Sans paramètre, les états s'enchaînent comme
+// (lib/vrm-assets.ts puis lib/avatar-vrm.ts, marqueur IA peint en dernier). Sans paramètre, les états s'enchaînent comme
 // dans un entretien (écoute avec hochements, réflexion, parole avec une voix simulée, inactif : lib/avatar-states.ts).
 // Paramètres de l'adresse :
 // - ?state=inactif|ecoute|reflexion|parole : état imposé (voix simulée en « parole ») ;
@@ -7,10 +7,16 @@
 // - ?mouth=repos|M|E|A|O : forme de bouche imposée ; ?still=1 : ni clignement, ni saccade, ni dérive (posture de l'état
 //   gardée) ; ?blink=1|0 : paupières fermées ou ouvertes imposées ; ?angry=0.1 : poids d'angry imposé ;
 // - ?model=android-source : autre modèle copié à la main dans avatar-vrm/ du build (essais seulement) ;
-// - ?software=1 : accepte le rendu WebGL logiciel (contrôle visuel sans carte graphique, trop lent pour un vrai usage).
+// - ?software=1 : accepte le rendu WebGL logiciel (contrôle visuel sans carte graphique, trop lent pour un vrai usage) ;
+// - ?pause=1 : image de pause de la caméra injectée (sans avatar, donc sans marqueur).
+// Le marqueur IA (marquage et voyant de la languette, lib/badge.ts) est peint en dernier, comme dans la caméra injectée.
 
 import { MOUTH_SHAPES } from '@/lib/avatar';
 import { DemoCycle, isAvatarState } from '@/lib/avatar-states';
+import { renderMarkingText } from '@/lib/avatar-assets';
+import { AiMarking } from '@/lib/badge';
+import { pauseText } from '@/lib/injection-sources';
+import { createPauseFrame } from '@/lib/pause-frame';
 import { createVrmRenderer } from '@/lib/avatar-vrm';
 import { loadDemoConfig } from '@/lib/config';
 import { createLogger } from '@/lib/log';
@@ -32,6 +38,7 @@ const angry = angryParam === null ? undefined : Number(angryParam);
 const blinkParam = params.get('blink');
 const blink = blinkParam === null ? undefined : blinkParam === '1';
 const model = params.get('model') ?? undefined;
+const showPause = params.get('pause') === '1';
 const canvas = document.querySelector<HTMLCanvasElement>('#avatar')!;
 const statsBox = document.querySelector<HTMLPreElement>('#stats')!;
 
@@ -54,10 +61,8 @@ try {
     {
       model: await assets.model.arrayBuffer(),
       background: await createImageBitmap(assets.background),
-      banner: assets.banner,
       camera: assets.camera,
     },
-    { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone },
     () => current.level,
     log,
     {
@@ -70,6 +75,9 @@ try {
     },
   );
   renderer.setState(current.state);
+  const marking = new AiMarking(await createImageBitmap(await renderMarkingText(config.badgeText)));
+  const ctx = canvas.getContext('2d')!;
+  const pauseFrame = showPause ? createPauseFrame(pauseText(config.language)) : null;
 
   let frames = 0;
   let total = 0;
@@ -82,7 +90,13 @@ try {
     current = next;
     renderer.setState(current.state);
     if (current.nod) renderer.nod();
-    renderer.draw(start);
+    if (pauseFrame) {
+      ctx.drawImage(pauseFrame, 0, 0);
+    } else {
+      renderer.draw(start);
+      marking.setState(current.state);
+      marking.draw(ctx, renderer.markingAnchors(), start);
+    }
     const spent = performance.now() - start;
     frames += 1;
     total += spent;

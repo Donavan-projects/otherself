@@ -1,9 +1,9 @@
 // Préparation de l'avatar dans une page de l'extension (popup, aperçu, banc d'essai) : lit le SVG
 // du personnage et celui du fond, applique la variante (palette, coiffure, accessoires) choisie dans
-// config.local.json, rastérise les calques à l'échelle du cadre, écrit le slogan courbé sur le
-// t-shirt. La page de la plateforme ne reçoit que des images (jamais la configuration ni la clé API).
+// config.local.json, rastérise les calques à l'échelle du cadre (t-shirt sans slogan depuis la sous-étape 3c), et rend
+// le marquage « IA » (règle 1). La page de la plateforme ne reçoit que des images (jamais la configuration ni la clé API).
 
-import { SVG_GAZE_ASIDE } from './avatar-states';
+import { MARKING, SVG_GAZE_ASIDE } from './avatar-states';
 import { composeFrame, mapAssets, AVATAR_HEIGHT, AVATAR_WIDTH, MOUTH_SHAPES, SLOGAN_BOTTOM_MAX, SLOGAN_BOTTOM_MIN, type AvatarAssets, type FrameLayout, type MouthShape, type Rect, type Sprite } from './avatar';
 import type { DemoConfig } from './config';
 import { createLogger } from './log';
@@ -11,19 +11,8 @@ import { createLogger } from './log';
 const log = createLogger('avatar');
 
 const INKSCAPE_NS = 'http://www.inkscape.org/namespaces/inkscape';
-const SLOGAN_FONT_URL = '/fonts/NotoSans-Bold.ttf';
-const SLOGAN_FONT = 'OtherSelfSlogan';
-/** Comme pour le bandeau : resserrement maximal avant de réduire la police. */
-const SLOGAN_MIN_SQUEEZE = 0.78;
-/** Encre un peu transparente : aspect mat, le coton transparaît. */
-const SLOGAN_INK_ALPHA = 0.94;
 /** Nombre de lignes maximal accepté pour data-lignes-max (retours à la ligne selon la forme de la zone). */
 export const SLOGAN_MAX_LINES = 6;
-/**
- * Zone du slogan de l'avatar d'origine dans le cadre (288 x 84 à l'échelle 0,688) : référence de lisibilité.
- * Le journal signale un slogan dont les lettres seraient plus petites qu'avec cette zone et l'ancien calcul.
- */
-const SLOGAN_REFERENCE_ZONE = { width: 198, height: 58 };
 /** Marge autour des vignettes découpées (yeux, bouches, cheveux). */
 const SPRITE_PAD = 2;
 
@@ -33,8 +22,7 @@ const OVERLAY_LAYERS = ['badge'];
 const OVER_LAYERS = ['sourcils', 'cheveux_avant', 'accessoires'];
 const MOUTH_LAYERS: Record<MouthShape, string> = { repos: 'bouche_repos', A: 'bouche_A', E: 'bouche_E', O: 'bouche_O', M: 'bouche_M' };
 
-/** Slogan du personnage SVG, tel qu'imprimé dans le cadre : repris par l'avatar 3D (lib/vrm-assets.ts). */
-export type AvatarVariant = Pick<DemoConfig, 'avatar' | 'background' | 'palette' | 'hairstyle' | 'accessories' | 'bannerText' | 'bannerOffsetY'>;
+export type AvatarVariant = Pick<DemoConfig, 'avatar' | 'background' | 'palette' | 'hairstyle' | 'accessories' | 'language'>;
 
 const assetUrl = (path: string) => browser.runtime.getURL(path as '/');
 
@@ -83,16 +71,13 @@ export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ asset
   // Haut de la tête mesuré sur le dessin (dépend de la coiffure), à l'échelle 1.
   const head = await rasterize(withLayers(character, ['cheveux_arriere', 'cheveux_avant', 'tete']), svgWidth, svgHeight);
   const hairTop = opaqueBounds(head)?.y ?? 0;
-  const layout = composeFrame(
-    { width: svgWidth, hairTop, sloganBottom: slogan.y + slogan.height, sloganBottomInFrame: slogan.bottomInFrame },
-    variant.bannerOffsetY,
-  );
-  if (layout.clamped) log(`bannerOffsetY = ${variant.bannerOffsetY} hors limites : bandeau ramené à y = ${layout.banner.y} (zone de sécurité)`);
+  const layout = composeFrame({ width: svgWidth, hairTop, sloganBottom: slogan.y + slogan.height, sloganBottomInFrame: slogan.bottomInFrame });
   const width = Math.round(svgWidth * layout.scale);
   const height = Math.round(svgHeight * layout.scale);
   const layer = (names: string[]) => rasterize(withLayers(character, names), width, height);
 
-  // Plan du dessous : fond, personnage, slogan, surimpression du tissu.
+  // Plan du dessous : fond, personnage, surimpression du tissu. La zone du slogan (badge_zone_texte) ne sert plus
+  // qu'au cadrage.
   const under = canvas(AVATAR_WIDTH, AVATAR_HEIGHT);
   const ctx = context(under);
   ctx.drawImage(await rasterize(backgroundSource, AVATAR_WIDTH, AVATAR_HEIGHT), 0, 0);
@@ -101,13 +86,6 @@ export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ asset
   // Buste plus court que le cadre (autre personnage ou coiffure plus haute) : prolongé jusqu'en bas.
   const bottom = layout.top + height;
   if (bottom < AVATAR_HEIGHT) ctx.drawImage(body, 0, height - 1, width, 1, layout.left, bottom, width, AVATAR_HEIGHT - bottom);
-  const ink = paletteColor(character, 'badge-fond') ?? '#f2c62e';
-  await drawSlogan(ctx, variant.bannerText, ink, {
-    x: layout.left + slogan.x * layout.scale,
-    y: layout.top + slogan.y * layout.scale,
-    width: slogan.width * layout.scale,
-    height: slogan.height * layout.scale,
-  }, slogan.bend * layout.scale, slogan.maxLines);
   ctx.drawImage(await layer(OVERLAY_LAYERS), layout.left, layout.top);
 
   // Parties animées et plan du dessus, découpés à leur emprise.
@@ -122,12 +100,12 @@ export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ asset
   const region = union([eyes.open, eyes.closed, ...(eyes.aside ? [eyes.aside] : []), ...MOUTH_SHAPES.map((shape) => mouths[shape])]);
 
   const assets = await mapAssets<HTMLCanvasElement, Blob>(
-    { under, over, eyes, mouths, region, banner: layout.banner },
+    { under, over, eyes, mouths, region },
     (image) => toBlob(image),
   );
   log(
     `avatar préparé en ${Math.round(performance.now() - started)} ms : ${variant.avatar} sur ${variant.background}, ` +
-      `échelle ${layout.scale.toFixed(3)}, bandeau y = ${layout.banner.y}, zone animée ${region.width}x${region.height}`,
+      `échelle ${layout.scale.toFixed(3)}, zone animée ${region.width}x${region.height}`,
   );
   return { assets, layout };
 }
@@ -152,11 +130,6 @@ function applyPalette(doc: Document, palette: Record<string, string>) {
 function optionalNumber(element: Element, name: string): number | undefined {
   const value = element.getAttribute(name);
   return value === null ? undefined : Number(value);
-}
-
-function paletteColor(doc: Document, name: string): string | null {
-  const match = new RegExp(`\\.${name}\\s*\\{[^}]*?\\bfill\\s*:\\s*([^;}\\s]+)`).exec(doc.getElementById('palette')?.textContent ?? '');
-  return match?.[1] ?? null;
 }
 
 /** Ne garde visibles que les sous-groupes <prefix><nom> choisis (coiffures, accessoires). */
@@ -279,148 +252,37 @@ export function toBlob(source: HTMLCanvasElement): Promise<Blob> {
   });
 }
 
-let fontLoaded: Promise<void> | null = null;
+let markingFontLoaded: Promise<void> | null = null;
 
-/** Police du slogan, embarquée dans l'extension (OFL), jamais chargée depuis le web. */
-function loadSloganFont(): Promise<void> {
-  fontLoaded ??= (async () => {
-    const font = new FontFace(SLOGAN_FONT, `url(${assetUrl(SLOGAN_FONT_URL)})`, { weight: '700' });
+/**
+ * Marquage « IA » (règle 1, lib/badge.ts), rendu ici parce que la page de la plateforme ne peut pas charger la police
+ * de l'extension : lettres pleines gris anthracite, police technique à chasse fixe embarquée (DejaVu Sans Mono Bold),
+ * capitales de MARKING.capHeight pixels, fond transparent.
+ */
+export async function renderMarkingText(text: string): Promise<Blob> {
+  const { url, family } = MARKING.font;
+  markingFontLoaded ??= (async () => {
+    const font = new FontFace(family, `url(${assetUrl(url)})`, { weight: '700' });
     await font.load();
     document.fonts.add(font);
-    // Sans elle, le canvas prendrait une police de remplacement (sans-serif) sans le dire.
-    if (!document.fonts.check(`700 20px ${SLOGAN_FONT}`)) throw new Error(`police du slogan (${SLOGAN_FONT_URL}) non chargée`);
-    log(`police du slogan chargée : ${SLOGAN_FONT_URL} (Noto Sans Bold)`);
+    if (!document.fonts.check(`700 20px ${family}`)) throw new Error(`police du marquage (${url}) non chargée`);
   })();
-  return fontLoaded;
-}
-
-/**
- * Slogan imprimé sur le t-shirt : deux lignes centrées (une seule si le texte y reste assez grand), ou, si le SVG
- * donne data-lignes-max, de 1 à maxLines lignes choisies selon la forme de la zone ; écrites à plat puis recopiées
- * colonne par colonne avec la courbure du torse (bouts relevés de bend).
- */
-export async function drawSlogan(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  ink: string,
-  zone: Rect,
-  bend: number,
-  maxLines?: number,
-): Promise<{ lines: string[]; size: number }> {
-  await loadSloganFont();
-  const width = Math.round(zone.width);
-  const height = Math.round(zone.height);
-  const pad = Math.ceil(bend) + 2;
-  const flat = canvas(width, height + 2 * pad);
-  const f = context(flat);
-  const font = (size: number) => `700 ${size}px ${SLOGAN_FONT}, sans-serif`;
-  const fitWidth = (lines: string[], maxSize: number, w: number) => {
-    let size = Math.floor(maxSize);
-    f.font = font(size);
-    while (size > 6 && Math.max(...lines.map((line) => f.measureText(line).width)) * SLOGAN_MIN_SQUEEZE > w) {
-      size -= 1;
-      f.font = font(size);
-    }
-    return size;
-  };
-  // Ancien calcul (une ou deux lignes), inchangé : il sert aussi de référence de lisibilité.
-  const legacy = (w: number, h: number) => {
-    const oneLine = fitWidth([text], h * 0.9, w);
-    const lines = oneLine >= h * 0.55 ? [text] : splitInTwo(text);
-    return { lines, size: lines.length === 1 ? oneLine : fitWidth(lines, (h / 2) * 1.05, w) };
-  };
-  const { lines, size } = maxLines === undefined ? legacy(width, height) : wrapToShape(text, maxLines, width, height, fitWidth, f);
-  const reference = legacy(SLOGAN_REFERENCE_ZONE.width, SLOGAN_REFERENCE_ZONE.height).size;
-  log(`slogan : ${lines.length} ligne(s), police ${size} px (référence ${reference} px)` + (size < reference ? ' : LETTRES PLUS PETITES QUE LA RÉFÉRENCE' : ''));
-  f.font = font(size);
-  f.fillStyle = ink;
-  f.textAlign = 'center';
-  f.textBaseline = 'middle';
-  const lineHeight = size * 1.02;
-  lines.forEach((line, index) => {
-    const squeeze = Math.min(1, width / f.measureText(line).width);
-    f.save();
-    f.translate(width / 2, pad + height / 2 + (index - (lines.length - 1) / 2) * lineHeight + size * 0.04);
-    f.scale(squeeze, 1);
-    f.fillText(line, 0, 0);
-    f.restore();
-  });
-  ctx.save();
-  ctx.globalAlpha = SLOGAN_INK_ALPHA;
-  for (let x = 0; x < width; x += 1) {
-    const u = (x - width / 2) / (width / 2);
-    ctx.drawImage(flat, x, 0, 1, flat.height, zone.x + x, zone.y - pad - bend * u * u, 1, flat.height);
-  }
-  ctx.restore();
-  return { lines, size };
-}
-
-/**
- * Retours à la ligne selon la forme de la zone : pour n = 1..maxLines, découpage aux espaces qui minimise la ligne
- * la plus longue (à 2 % près, on préfère les coupures après une virgule, deux-points ou point-virgule), puis la plus grande
- * police qui tient en largeur (resserrement compris) et en hauteur (n lignes d'interligne 1,02). On garde le n qui donne
- * la plus grande police ; à égalité, le moins de lignes.
- */
-function wrapToShape(
-  text: string,
-  maxLines: number,
-  width: number,
-  height: number,
-  fitWidth: (lines: string[], maxSize: number, w: number) => number,
-  f: CanvasRenderingContext2D,
-): { lines: string[]; size: number } {
-  // Typographie française : « : ; ! ? » » restent avec le mot précédent et « « » avec le suivant (jamais en début
-  // ou fin de ligne seuls), même séparés par une espace.
-  const words: string[] = [];
-  for (const token of text.split(/\s+/).filter(Boolean)) {
-    const last = words.length - 1;
-    if (last >= 0 && (/^[:;!?»]+$/.test(token) || words[last] === '«')) words[last] += ` ${token}`;
-    else words.push(token);
-  }
-  // Largeurs mesurées à 100 px (la police du contexte est modifiée par fitWidth entre deux essais).
-  const measure = new Map<string, number>();
-  const at100 = (line: string) => {
-    if (!measure.has(line)) {
-      f.font = `700 100px ${SLOGAN_FONT}, sans-serif`;
-      measure.set(line, f.measureText(line).width);
-    }
-    return measure.get(line)!;
-  };
-  const widest = (lines: string[]) => Math.max(...lines.map(at100));
-  const pauses = (lines: string[]) => lines.slice(0, -1).filter((line) => /[,:;]$/.test(line)).length;
-  let best: { lines: string[]; size: number } | null = null;
-  for (let n = 1; n <= Math.min(maxLines, words.length); n += 1) {
-    const all = [...splits(words, n)];
-    const narrowest = Math.min(...all.map(widest));
-    // Parmi les découpages à 2 % de la ligne la plus courte possible : le plus de coupures après une ponctuation.
-    const chosen = all
-      .filter((lines) => widest(lines) <= narrowest * 1.02)
-      .sort((a, b) => pauses(b) - pauses(a) || widest(a) - widest(b))[0];
-    // Jamais vide en pratique (n ≤ nombre de mots) ; sinon, nombre de lignes suivant, puis repli sur une ligne.
-    if (!chosen) continue;
-    const size = fitWidth(chosen, height / (n * 1.02), width);
-    if (!best || size > best.size) best = { lines: chosen, size };
-  }
-  return best ?? { lines: [text], size: fitWidth([text], height * 0.9, width) };
-}
-
-/** Toutes les façons de répartir les mots, dans l'ordre, sur n lignes non vides. */
-function* splits(words: string[], n: number): Generator<string[]> {
-  if (n === 1) {
-    yield [words.join(' ')];
-    return;
-  }
-  for (let i = 1; i <= words.length - n + 1; i += 1) {
-    for (const rest of splits(words.slice(i), n - 1)) yield [words.slice(0, i).join(' '), ...rest];
-  }
-}
-
-/** Coupe le slogan en deux lignes : après la virgule si elle existe, sinon à l'espace le plus proche du milieu. */
-function splitInTwo(text: string): string[] {
-  const comma = text.indexOf(', ');
-  if (comma > 0) return [text.slice(0, comma + 1), text.slice(comma + 2)];
-  const middle = text.length / 2;
-  let best = -1;
-  for (let i = 0; i < text.length; i += 1) if (text[i] === ' ' && (best < 0 || Math.abs(i - middle) < Math.abs(best - middle))) best = i;
-  return best > 0 ? [text.slice(0, best), text.slice(best + 1)] : [text];
+  await markingFontLoaded;
+  const probe = context(canvas(1, 1));
+  probe.font = `700 100px ${family}`;
+  const capAt100 = probe.measureText('I').actualBoundingBoxAscent;
+  const size = (MARKING.capHeight / capAt100) * 100;
+  probe.font = `700 ${size}px ${family}`;
+  const metrics = probe.measureText(text);
+  const pad = 2;
+  const target = canvas(Math.ceil(metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight) + 2 * pad, Math.ceil(MARKING.capHeight) + 2 * pad);
+  const ctx = context(target);
+  ctx.font = `700 ${size}px ${family}`;
+  // Bords adoucis : flou très léger, une fois pour toutes (le dessin dans la page ne fait que transformer l'image).
+  ctx.filter = `blur(${MARKING.inkBlur}px)`;
+  ctx.fillStyle = MARKING.ink;
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(text, pad + metrics.actualBoundingBoxLeft, pad + MARKING.capHeight);
+  log(`marquage « ${text} » : police ${size.toFixed(1)} px (capitales ${MARKING.capHeight} px), ${target.width}x${target.height}`);
+  return toBlob(target);
 }

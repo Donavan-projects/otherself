@@ -1,43 +1,21 @@
 // Rendu de l'avatar cartoon dans un canvas 1280×720 : images préparées par l'extension
-// (lib/avatar-assets.ts), yeux et bouche animés, bandeau incrusté. Tourne dans le monde MAIN
+// (lib/avatar-assets.ts), yeux et bouche animés ; le marqueur IA (lib/badge.ts) est peint ensuite par l'appelant. Tourne dans le monde MAIN
 // de l'onglet (voie A) comme dans les pages de l'extension (aperçu, banc d'essai).
 
-import { STATE_STYLES, type AvatarState } from './avatar-states';
+import { MARKING, MARKING_SVG_CLEARANCE, STATE_STYLES, type AvatarState } from './avatar-states';
+import type { MarkingAnchors } from './badge';
 
 export const AVATAR_WIDTH = 1280;
 export const AVATAR_HEIGHT = 720;
 
-// Zone de sécurité (règle 1) : survit à un recadrage central en 4:3 et en carré (x 280 à 1000) et,
-// en haut et en bas, à la coupe 2:1 mesurée sur Meet sans cadrage automatique (36 px), avec 14 px
-// de marge. Décision du 26/10/2026 : la coupe 21:9 (86 px) n'est plus couverte.
-export const SAFE_ZONE = { left: 290, right: 990, top: 50, bottom: 670 };
-// 62 px plutôt que 80 : avec le cadrage automatique, Meet coupe vers y = 605, et un bandeau plus haut
-// laissait dépasser une ligne jaune. Sur 580 px de large, c'est la largeur qui limite la police,
-// pas la hauteur : le texte garde sa taille.
-export const BANNER_HEIGHT = 62;
-// Bandeau centré et moins large que la zone : le nom affiché par Meet en bas à gauche de la
-// vignette ne masque pas le début du texte.
-const BANNER_WIDTH = 580;
-/** Taille de police maximale (avant resserrement et réduction à la largeur). */
-const BANNER_FONT_SIZE = 50;
-const BANNER_BORDER = 3;
-const BANNER_PADDING_X = 14;
-// Resserrement horizontal maximal du texte avant de réduire la police : garde des
-// lettres hautes, lisibles dans une vignette de 320×180.
-const BANNER_MIN_SQUEEZE = 0.78;
-
-// Cadrage de webcam : haut de la tête vers 13 % du cadre, slogan du t-shirt au milieu de la
-// poitrine (bas du slogan à y = 517). Bandeau en bas du cadre, au bas de la zone de sécurité
-// (réglable par bannerOffsetY, sans jamais remonter sur le slogan).
+// Cadrage de webcam de l'avatar SVG de secours (inchangé jusqu'à la sous-étape 3e) : haut de la tête vers 13 % du
+// cadre, slogan du t-shirt au milieu de la poitrine (bas du slogan à y = 517).
 export const HEAD_TOP = 94;
 export const SLOGAN_BOTTOM = 517;
-// Plafond strict du bas du slogan quand le SVG le règle (data-bas-cadre sur badge_zone_texte) : le slogan sert de
-// bandeau de secours quand le cadrage automatique coupe vers y = 605, il en reste à 55 px au moins.
+// Plafond strict du bas du slogan quand le SVG le règle (data-bas-cadre sur badge_zone_texte).
 // scripts/check-avatar-svg.ts refuse toute valeur hors de [SLOGAN_BOTTOM, SLOGAN_BOTTOM_MAX].
 export const SLOGAN_BOTTOM_MIN = SLOGAN_BOTTOM;
 export const SLOGAN_BOTTOM_MAX = 550;
-const SLOGAN_GAP = 12;
-const DEFAULT_BANNER_TOP = SAFE_ZONE.bottom - BANNER_HEIGHT;
 
 export interface Rect {
   x: number;
@@ -51,38 +29,22 @@ export interface FrameLayout {
   scale: number;
   left: number;
   top: number;
-  banner: Rect;
-  /** Décalage demandé hors des limites (zone de sécurité, slogan) : ramené dedans. */
-  clamped: boolean;
 }
 
 /**
- * Compose personnage, slogan et bandeau : le personnage est mis à l'échelle pour que le haut de sa
- * tête soit à HEAD_TOP et le bas du slogan à SLOGAN_BOTTOM (ou à sloganBottomInFrame, data-bas-cadre du SVG,
- * entre SLOGAN_BOTTOM_MIN et SLOGAN_BOTTOM_MAX) ; le bandeau est en bas de la zone de sécurité, décalé de
- * bannerOffsetY (pixels, négatif vers le haut), jamais sur le slogan.
+ * Cadre le personnage SVG : mis à l'échelle pour que le haut de sa tête soit à HEAD_TOP et le bas du slogan à
+ * SLOGAN_BOTTOM (ou à sloganBottomInFrame, data-bas-cadre du SVG, entre SLOGAN_BOTTOM_MIN et SLOGAN_BOTTOM_MAX).
  */
-export function composeFrame(
-  svg: { width: number; hairTop: number; sloganBottom: number; sloganBottomInFrame?: number },
-  bannerOffsetY = 0,
-): FrameLayout {
+export function composeFrame(svg: { width: number; hairTop: number; sloganBottom: number; sloganBottomInFrame?: number }): FrameLayout {
   const sloganBottom = svg.sloganBottomInFrame ?? SLOGAN_BOTTOM;
   if (!(sloganBottom >= SLOGAN_BOTTOM_MIN && sloganBottom <= SLOGAN_BOTTOM_MAX)) {
     throw new Error(`bas du slogan à y = ${sloganBottom} : hors de [${SLOGAN_BOTTOM_MIN}, ${SLOGAN_BOTTOM_MAX}]`);
   }
-  // Garde-fou : le bandeau, dans la zone de sécurité, doit pouvoir rester sous le slogan avec son écart.
-  if (sloganBottom + SLOGAN_GAP > SAFE_ZONE.bottom - BANNER_HEIGHT) {
-    throw new Error(`bas du slogan à y = ${sloganBottom} : plus de place pour le bandeau sous le slogan`);
-  }
   const scale = (sloganBottom - HEAD_TOP) / (svg.sloganBottom - svg.hairTop);
-  const wanted = DEFAULT_BANNER_TOP + Math.round(bannerOffsetY);
-  const bannerTop = Math.min(SAFE_ZONE.bottom - BANNER_HEIGHT, Math.max(sloganBottom + SLOGAN_GAP, wanted));
   return {
     scale,
     left: Math.round(AVATAR_WIDTH / 2 - (svg.width / 2) * scale),
     top: Math.round(HEAD_TOP - svg.hairTop * scale),
-    banner: { x: Math.round((AVATAR_WIDTH - BANNER_WIDTH) / 2), y: bannerTop, width: BANNER_WIDTH, height: BANNER_HEIGHT },
-    clamped: bannerTop !== wanted,
   };
 }
 
@@ -110,7 +72,6 @@ export interface AvatarAssets<T> {
   mouths: Record<MouthShape, Sprite<T>>;
   /** Zone redessinée à chaque image : yeux et bouches. */
   region: Rect;
-  banner: Rect;
 }
 
 export async function mapAssets<A, B>(assets: AvatarAssets<A>, convert: (image: A) => Promise<B>): Promise<AvatarAssets<B>> {
@@ -126,15 +87,7 @@ export async function mapAssets<A, B>(assets: AvatarAssets<A>, convert: (image: 
     },
     mouths: Object.fromEntries(mouths) as Record<MouthShape, Sprite<B>>,
     region: assets.region,
-    banner: assets.banner,
   };
-}
-
-export interface AvatarOptions {
-  /** Texte du bandeau (bannerText), déjà vérifié : jamais vide (règle 1). */
-  bannerText: string;
-  /** Dessine le contour de la zone de sécurité (debugSafeZone dans config.local.json). */
-  debugSafeZone?: boolean;
 }
 
 // Bouche : niveau (RMS) de la voix réellement jouée dans le micro injecté. La voix est normalisée
@@ -220,9 +173,6 @@ export class AvatarRenderer {
   readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
   private readonly assets: AvatarAssets<ImageBitmap>;
-  private readonly options: AvatarOptions;
-  /** Bandeau rendu une fois, recopié à chaque image. */
-  private readonly banner: OffscreenCanvas;
   private readonly mouth = new MouthAnimator();
   private readonly blink: BlinkAnimator;
   private readonly level: () => number;
@@ -233,7 +183,6 @@ export class AvatarRenderer {
   constructor(
     canvas: HTMLCanvasElement,
     assets: AvatarAssets<ImageBitmap>,
-    options: AvatarOptions,
     level: () => number = () => 0,
     state: AvatarState = 'inactif',
   ) {
@@ -244,15 +193,15 @@ export class AvatarRenderer {
     this.canvas = canvas;
     this.ctx = ctx;
     this.assets = assets;
-    this.options = options;
     this.level = level;
     this.blink = new BlinkAnimator(performance.now());
     this.state = state;
     this.blink.setRange(STATE_STYLES[state].blinkMinMs, STATE_STYLES[state].blinkMaxMs, performance.now());
-    this.banner = new OffscreenCanvas(assets.banner.width, assets.banner.height);
-    const bannerCtx = this.banner.getContext('2d');
-    if (!bannerCtx) throw new Error('contexte 2D hors écran indisponible');
-    drawBanner(bannerCtx, { x: 0, y: 0, width: assets.banner.width, height: assets.banner.height }, options.bannerText);
+  }
+
+  /** Marqueur IA : positions fixes sur le personnage SVG (cadrage inchangé jusqu'à 3e), voyant rond sur le revers. */
+  markingAnchors(): MarkingAnchors {
+    return { light: MARKING.svg.light, text: MARKING.svg.text, shape: 'round' };
   }
 
   setState(state: AvatarState) {
@@ -269,16 +218,18 @@ export class AvatarRenderer {
 
   /**
    * Dessine une image : le cadre entier la première fois, ensuite seulement la zone des yeux
-   * et de la bouche (le reste ne bouge pas). Le bandeau est toujours peint en dernier.
+   * et de la bouche (le reste ne bouge pas), et la zone du marqueur IA, que l'appelant peint ensuite par-dessus.
    */
   draw(now = performance.now()): MouthShape {
     const { ctx, assets } = this;
     const region = assets.region;
     if (this.complete) {
       ctx.drawImage(assets.under, region.x, region.y, region.width, region.height, region.x, region.y, region.width, region.height);
+      // Sous le marqueur IA, peint ensuite par l'appelant : fond d'origine, pour qu'il ne s'empile pas.
+      const clear = MARKING_SVG_CLEARANCE;
+      ctx.drawImage(assets.under, clear.x, clear.y, clear.width, clear.height, clear.x, clear.y, clear.width, clear.height);
     } else {
       ctx.drawImage(assets.under, 0, 0);
-      if (this.options.debugSafeZone) drawSafeZone(ctx);
     }
     const aside = STATE_STYLES[this.state].gazeAsideYaw > 0 ? assets.eyes.aside : undefined;
     const eyes = this.blink.closed(now) ? assets.eyes.closed : (aside ?? assets.eyes.open);
@@ -298,55 +249,6 @@ export class AvatarRenderer {
       ctx.drawImage(assets.over.image, assets.over.x, assets.over.y);
       this.complete = true;
     }
-    ctx.drawImage(this.banner, assets.banner.x, assets.banner.y);
     return shape;
   }
-}
-
-/** Débogage : contour pointillé de la zone de sécurité, hors de la zone redessinée. */
-export function drawSafeZone(ctx: CanvasRenderingContext2D) {
-  ctx.save();
-  ctx.strokeStyle = '#ff00ff';
-  ctx.lineWidth = 4;
-  ctx.setLineDash([16, 10]);
-  ctx.strokeRect(SAFE_ZONE.left, SAFE_ZONE.top, SAFE_ZONE.right - SAFE_ZONE.left, SAFE_ZONE.bottom - SAFE_ZONE.top);
-  ctx.fillStyle = '#ff00ff';
-  ctx.font = bannerFont(18);
-  ctx.textBaseline = 'top';
-  ctx.fillText('zone de sécurité (debugSafeZone)', SAFE_ZONE.left + 10, SAFE_ZONE.top + 8);
-  ctx.restore();
-}
-
-/**
- * Bandeau jaune bordé de noir, sur une ligne, sur toute la largeur de la zone de sécurité.
- * Le texte est resserré horizontalement plutôt que réduit.
- */
-export function drawBanner(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, banner: Rect, text: string) {
-  const { x, y, width, height } = banner;
-  const maxTextWidth = width - 2 * (BANNER_BORDER + BANNER_PADDING_X);
-  ctx.save();
-  ctx.fillStyle = '#111';
-  ctx.fillRect(x, y, width, height);
-  ctx.fillStyle = '#ffd400';
-  ctx.fillRect(x + BANNER_BORDER, y + BANNER_BORDER, width - 2 * BANNER_BORDER, height - 2 * BANNER_BORDER);
-
-  let fontSize = Math.min(BANNER_FONT_SIZE, Math.round(height * 0.8));
-  ctx.font = bannerFont(fontSize);
-  // Réduit la police seulement si le resserrement maximal ne suffit pas (police de repli).
-  while (fontSize > 24 && ctx.measureText(text).width * BANNER_MIN_SQUEEZE > maxTextWidth) {
-    fontSize -= 2;
-    ctx.font = bannerFont(fontSize);
-  }
-  const squeeze = Math.min(1, maxTextWidth / ctx.measureText(text).width);
-  ctx.fillStyle = '#111';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.translate(x + width / 2, y + height / 2 + 2);
-  ctx.scale(squeeze, 1);
-  ctx.fillText(text, 0, 0);
-  ctx.restore();
-}
-
-function bannerFont(size: number) {
-  return `700 ${size}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
 }

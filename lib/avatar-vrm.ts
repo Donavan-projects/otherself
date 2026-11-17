@@ -1,7 +1,7 @@
 // Rendu de l'avatar 3D (VRM) dans le canvas 1280×720 de la caméra injectée. Tourne dans le monde MAIN de
 // l'onglet (voie A) comme dans les pages de l'extension. three.js dessine le modèle dans un canvas WebGL hors DOM, à
-// fond transparent, recopié à chaque image dans le canvas 2D capturé, par-dessus le fond ; le bandeau est peint en
-// dernier dans ce canvas 2D (règle 1), exactement comme pour l'avatar SVG (lib/avatar.ts).
+// fond transparent, recopié à chaque image dans le canvas 2D capturé, par-dessus le fond ; le marqueur IA (lib/badge.ts)
+// est peint en dernier dans ce canvas 2D par l'appelant (règle 1), exactement comme pour l'avatar SVG (lib/avatar.ts).
 //
 // Animation : bouche pilotée par le niveau de la voix (mêmes formes que le SVG, traduites en expressions VRM, avec
 // transitions lissées), clignements, regard vers la caméra avec petites saccades, respiration, mouvements de tête au
@@ -15,15 +15,13 @@ import {
   AVATAR_WIDTH,
   BlinkAnimator,
   MouthAnimator,
-  drawBanner,
-  drawSafeZone,
-  type AvatarOptions,
   type MouthShape,
-  type Rect,
 } from './avatar';
 import { frameY, VRM_FOV, VRM_HEAD_TOP, type VrmCamera } from './vrm-frame';
+import type { MarkingAnchors } from './badge';
 import {
   BLINK_EXPRESSION_COMPENSATION,
+  MARKING,
   HEAD_FOLLOW_ASIDE,
   NOD_MS,
   RELAXED_MOUTH_DAMPING,
@@ -34,11 +32,10 @@ import {
   type StateStyle,
 } from './avatar-states';
 
-/** Ce que le rendu reçoit dans la page : modèle, fond, bandeau, caméra (lib/vrm-frame.ts). */
+/** Ce que le rendu reçoit dans la page : modèle, fond, caméra (lib/vrm-frame.ts). */
 export interface VrmSources {
   model: ArrayBuffer;
   background: ImageBitmap;
-  banner: Rect;
   camera: VrmCamera;
 }
 
@@ -52,6 +49,8 @@ export interface FrameRenderer {
   setState?(state: AvatarState): void;
   /** Hochement (état « à l'écoute »). */
   nod?(): void;
+  /** Position du marqueur IA (voyant et marquage) dans la dernière image dessinée, peint ensuite par l'appelant. */
+  markingAnchors?(): MarkingAnchors;
   dispose?(): void;
 }
 
@@ -102,7 +101,6 @@ export interface VrmPreviewOptions {
 export async function createVrmRenderer(
   canvas: HTMLCanvasElement,
   sources: VrmSources,
-  options: AvatarOptions,
   level: () => number = () => 0,
   log: (message: string) => void = () => {},
   preview: VrmPreviewOptions = {},
@@ -133,7 +131,7 @@ export async function createVrmRenderer(
     // Cadre fixe : tout le personnage est toujours à l'image, pas de test de visibilité.
     vrm.scene.traverse((object) => (object.frustumCulled = false));
     log(`modèle VRM chargé en ${Math.round(performance.now() - started)} ms`);
-    return new VrmAvatarRenderer(canvas, renderer, vrm, sources, options, level, log, preview);
+    return new VrmAvatarRenderer(canvas, renderer, vrm, sources, level, log, preview);
   } catch (error) {
     renderer.dispose();
     renderer.forceContextLoss();
@@ -149,19 +147,26 @@ export class VrmAvatarRenderer implements FrameRenderer {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly vrm: VRM;
   private readonly sources: VrmSources;
-  private readonly options: AvatarOptions;
-  private readonly banner: OffscreenCanvas;
   private readonly motion: VrmMotion;
   private readonly level: () => number;
   private lost = false;
   private previous: number | null = null;
+  /** Marqueur IA épinglé au torse : points fixes (languette, marquage) dans le repère de l'os upperChest, projetés à
+   * chaque image. */
+  private readonly markingBone: THREE.Object3D | null;
+  private readonly tabPoint = new THREE.Vector3();
+  private readonly textPoint = new THREE.Vector3();
+  /** Repère du tissu sous le marquage : points à TEXT_FRAME_UNIT pixels (au repos) vers la droite et vers le bas. */
+  private readonly textRight = new THREE.Vector3();
+  private readonly textDown = new THREE.Vector3();
+  private hasTextFrame = false;
+  private anchors: MarkingAnchors = { light: { x: MARKING.tab.x, y: MARKING.tab.y }, text: { ...MARKING.text }, shape: 'tab' };
 
   constructor(
     canvas: HTMLCanvasElement,
     renderer: THREE.WebGLRenderer,
     vrm: VRM,
     sources: VrmSources,
-    options: AvatarOptions,
     level: () => number,
     log: (message: string) => void,
     preview: VrmPreviewOptions = {},
@@ -175,7 +180,6 @@ export class VrmAvatarRenderer implements FrameRenderer {
     this.renderer = renderer;
     this.vrm = vrm;
     this.sources = sources;
-    this.options = options;
     this.level = level;
     renderer.domElement.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
@@ -201,14 +205,21 @@ export class VrmAvatarRenderer implements FrameRenderer {
 
     this.camera = createCamera(vrm, sources.camera, log);
     this.motion = new VrmMotion(vrm, this.camera, preview);
+    this.markingBone = vrm.humanoid.getRawBoneNode('upperChest') ?? vrm.humanoid.getRawBoneNode('chest');
+    if (this.markingBone) {
+      this.tabPoint.copy(pinOnChest(vrm, this.camera, this.markingBone, MARKING.tab, 'languette', log));
+      const frame = surfaceFrame(vrm, this.camera, this.markingBone, MARKING.text, log);
+      this.textPoint.copy(frame.center);
+      if (frame.right && frame.down) {
+        this.textRight.copy(frame.right);
+        this.textDown.copy(frame.down);
+        this.hasTextFrame = true;
+      }
+    }
 
-    this.banner = new OffscreenCanvas(sources.banner.width, sources.banner.height);
-    const bannerCtx = this.banner.getContext('2d');
-    if (!bannerCtx) throw new Error('contexte 2D hors écran indisponible');
-    drawBanner(bannerCtx, { x: 0, y: 0, width: sources.banner.width, height: sources.banner.height }, options.bannerText);
   }
 
-  /** Une image entière : fond, personnage, (zone de sécurité), bandeau en dernier. */
+  /** Une image entière : fond, personnage ; le marqueur IA (lib/badge.ts) est peint ensuite par l'appelant. */
   draw(now = performance.now()): MouthShape {
     if (this.lost) throw new Error('contexte WebGL perdu');
     const dt = this.previous === null ? 1 / 30 : Math.min(0.1, Math.max(0, (now - this.previous) / 1000));
@@ -219,13 +230,32 @@ export class VrmAvatarRenderer implements FrameRenderer {
     const { ctx, sources } = this;
     ctx.drawImage(sources.background, 0, 0, AVATAR_WIDTH, AVATAR_HEIGHT);
     ctx.drawImage(this.renderer.domElement, 0, 0, AVATAR_WIDTH, AVATAR_HEIGHT);
-    if (this.options.debugSafeZone) drawSafeZone(ctx);
-    ctx.drawImage(this.banner, sources.banner.x, sources.banner.y);
+    if (this.markingBone) {
+      const center = this.project(this.textPoint);
+      this.anchors = {
+        light: this.project(this.tabPoint),
+        text: center,
+        shape: 'tab',
+        ...(this.hasTextFrame
+          ? { textFrame: { center, right: this.project(this.textRight), down: this.project(this.textDown), unit: TEXT_FRAME_UNIT } }
+          : {}),
+      };
+    }
     return shape;
   }
 
   setState(state: AvatarState) {
     this.motion.setState(state);
+  }
+
+  markingAnchors(): MarkingAnchors {
+    return this.anchors;
+  }
+
+  /** Point du repère de l'os du marqueur → pixels du cadre. */
+  private project(local: THREE.Vector3): { x: number; y: number } {
+    const point = this.markingBone!.localToWorld(PROJECTED.copy(local)).project(this.camera);
+    return { x: ((point.x + 1) / 2) * AVATAR_WIDTH, y: ((1 - point.y) / 2) * AVATAR_HEIGHT };
   }
 
   nod() {
@@ -249,6 +279,84 @@ function createCamera(vrm: VRM, frame: VrmCamera, log: (message: string) => void
   const top = highestVertex(vrm.scene);
   log(`cadrage : caméra à ${frame.distance.toFixed(2)} m, haut des cheveux posés à y = ${Math.round(frameY(frame, top.y, top.z))} (visé : ${VRM_HEAD_TOP})`);
   return camera;
+}
+
+const PROJECTED = new THREE.Vector3();
+/** Longueur (pixels au repos) des axes du repère du tissu sous le marquage. */
+const TEXT_FRAME_UNIT = 40;
+
+/**
+ * Repère du tissu au point du cadre pixel (marquage) : centre par un rayon de la caméra, normale du triangle de la veste
+ * touché (sommets déformés par le squelette), puis deux directions le long de la surface, droite (horizontale du
+ * cadre ramenée dans le plan du tissu) et bas, de TEXT_FRAME_UNIT pixels au repos. Tout est exprimé dans le repère de
+ * l'os du torse. Sans contact : centre seul (texte droit).
+ */
+function surfaceFrame(
+  vrm: VRM,
+  camera: THREE.Camera,
+  bone: THREE.Object3D,
+  pixel: { x: number; y: number },
+  log: (message: string) => void,
+): { center: THREE.Vector3; right?: THREE.Vector3; down?: THREE.Vector3 } {
+  vrm.scene.updateMatrixWorld(true);
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(new THREE.Vector2((pixel.x / AVATAR_WIDTH) * 2 - 1, 1 - (pixel.y / AVATAR_HEIGHT) * 2), camera);
+  const hit = raycaster.intersectObject(vrm.scene, true)[0];
+  if (!hit?.face || !(hit.object instanceof THREE.Mesh)) {
+    return { center: pinOnChest(vrm, camera, bone, pixel, 'marquage', log) };
+  }
+  const mesh = hit.object as THREE.Mesh;
+  const corner = (index: number) => mesh.getVertexPosition(index, new THREE.Vector3()).applyMatrix4(mesh.matrixWorld);
+  const [a, b, c] = [corner(hit.face.a), corner(hit.face.b), corner(hit.face.c)];
+  const normal = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a)).normalize();
+  if (normal.z < 0) normal.negate();
+  // Droite : axe x du monde ramené dans le plan du tissu ; bas : perpendiculaire dans ce plan, vers le bas.
+  const right = new THREE.Vector3(1, 0, 0).addScaledVector(normal, -normal.x).normalize();
+  const down = new THREE.Vector3().crossVectors(normal, right).normalize();
+  if (down.y > 0) down.negate();
+  // Longueur de chaque axe telle qu'il mesure TEXT_FRAME_UNIT pixels au repos : le raccourci dû à la pente du tissu
+  // est compensé (le texte garde sa taille lisible), seules sa direction et ses mouvements suivent la veste.
+  const center = hit.point.clone();
+  const px = (point: THREE.Vector3) => point.clone().project(camera).multiply(new THREE.Vector3(AVATAR_WIDTH / 2, AVATAR_HEIGHT / 2, 1));
+  const axisMeters = (axis: THREE.Vector3) =>
+    (0.01 * TEXT_FRAME_UNIT) / px(center.clone().addScaledVector(axis, 0.01)).sub(px(center)).setZ(0).length();
+  const tilt = THREE.MathUtils.radToDeg(Math.acos(Math.min(1, normal.z)));
+  log(`marqueur IA : marquage épinglé sur ${mesh.name || 'le modèle'}, tissu incliné de ${tilt.toFixed(0)}° par rapport à la caméra`);
+  return {
+    center: bone.worldToLocal(center.clone()),
+    right: bone.worldToLocal(center.clone().addScaledVector(right, axisMeters(right))),
+    down: bone.worldToLocal(center.clone().addScaledVector(down, axisMeters(down))),
+  };
+}
+
+/**
+ * Point du devant de la veste placé à pixel dans le cadre, sur le personnage posé : rayon de la caméra à travers ce
+ * pixel, premier point du modèle touché (veste), exprimé dans le repère de l'os du torse. Repli si le rayon ne touche
+ * rien : 12 cm devant l'os.
+ */
+function pinOnChest(
+  vrm: VRM,
+  camera: THREE.Camera,
+  bone: THREE.Object3D,
+  pixel: { x: number; y: number },
+  name: string,
+  log: (message: string) => void,
+): THREE.Vector3 {
+  vrm.scene.updateMatrixWorld(true);
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(new THREE.Vector2((pixel.x / AVATAR_WIDTH) * 2 - 1, 1 - (pixel.y / AVATAR_HEIGHT) * 2), camera);
+  const hit = raycaster.intersectObject(vrm.scene, true)[0];
+  let world: THREE.Vector3;
+  if (hit) {
+    world = hit.point.clone();
+    log(`marqueur IA : ${name} épinglé(e) sur ${hit.object.name || 'le modèle'} à ${hit.distance.toFixed(2)} m de la caméra`);
+  } else {
+    const boneWorld = bone.getWorldPosition(new THREE.Vector3());
+    const t = (boneWorld.z + 0.12 - raycaster.ray.origin.z) / raycaster.ray.direction.z;
+    world = raycaster.ray.at(t, new THREE.Vector3());
+    log(`marqueur IA : ${name}, rayon sans contact avec le modèle, point placé 12 cm devant le torse`);
+  }
+  return bone.worldToLocal(world);
 }
 
 /** Sommet le plus haut du modèle posé (peau comprise) : haut des cheveux. */
