@@ -89,13 +89,11 @@ export const MARKING = {
   /** Avatar 3D : centre de la languette (relevé sur le personnage posé, plan serré de 3b) et contour de la languette
    * (coins relatifs au centre, pixels), centre du marquage juste à côté. */
   tab: { x: 578, y: 470, corners: [[-4, -11], [13, -10], [5, 10], [-15, 8]] as const },
-  /** Centre du marquage au repos : à côté de la languette, sous la couture du col, sur le panneau de poitrine
-   * (« cote ») ; ou juste sous la languette, comme une plaque d'identification du voyant (« sous »). Le bas du texte
-   * reste au-dessus de la limite gardée par le cadrage automatique de Meet (y ≈ 536). */
-  text: { x: 634, y: 500 },
-  textBelow: { x: 580, y: 506 },
-  /** Placement par défaut ; la page de test accepte ?marking=cote|sous pour comparer. */
-  placement: 'cote' as 'cote' | 'sous',
+  /** Centre du marquage au repos : à côté de la languette, sur le panneau de poitrine, entre les coutures de la veste
+   * (couture horizontale du bas du col à y ≈ 485-488, couture verticale du milieu à x ≈ 600-608) : aucune ne touche
+   * les lettres. Le bas du texte descend vers y ≈ 537, toléré jusqu'à 545 (Meet ne recadre plus depuis le plan serré ;
+   * la coupe 2:1 commence à y = 684). */
+  text: { x: 652, y: 516 },
   /** Avatar SVG de secours (cadrage plus large, jusqu'à 3e) : voyant rond sur le revers de la veste, au plus près
    * d'un col ; marquage sur la poitrine, sous le revers. */
   svg: { light: { x: 768, y: 404, radius: 8 }, text: { x: 800, y: 466 } },

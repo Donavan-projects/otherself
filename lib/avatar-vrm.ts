@@ -101,8 +101,6 @@ export interface VrmPreviewOptions {
   angry?: number;
   /** Paupières fermées (vrai) ou ouvertes (faux) imposées (?blink=1|0), pour vérifier le mélange avec les expressions. */
   blink?: boolean;
-  /** Placement du marquage imposé (?marking=cote|sous), pour comparer. */
-  marking?: 'cote' | 'sous';
 }
 
 export async function createVrmRenderer(
@@ -220,8 +218,7 @@ export class VrmAvatarRenderer implements FrameRenderer {
     this.markingBone = vrm.humanoid.getRawBoneNode('upperChest') ?? vrm.humanoid.getRawBoneNode('chest');
     if (this.markingBone) {
       this.tabPoint.copy(pinOnChest(vrm, this.camera, this.markingBone, MARKING.tab, 'languette', log));
-      const placement = preview.marking ?? MARKING.placement;
-      const frame = surfaceFrame(vrm, this.camera, this.markingBone, placement === 'sous' ? MARKING.textBelow : MARKING.text, log);
+      const frame = surfaceFrame(vrm, this.camera, this.markingBone, MARKING.text, log);
       this.textPoint.copy(frame.center);
       if (frame.right && frame.down) {
         this.textRight.copy(frame.right);
