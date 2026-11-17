@@ -94,7 +94,10 @@ voyant et la révélation vocale (règle 2).
   voient plus, d'où l'intérêt du look non humain.
 - Valider sur Meet avec et sans cadrage automatique, avec et sans fond virtuel.
 - Refaire la comparaison du flou du fond Atrium (4 px retenu en 3a, contre 8 px), la partie visible du fond changeant
-  avec le plan serré.
+  avec le plan serré. Fait en 3b : 4 px confirmé.
+- Cadrage retenu en 3b : angle de vue 10,8°, haut des cheveux à y = 54, languette du col à y = 470 (x 564 à 592,
+  y 458 à 482). Marge des cheveux : 18 px au-dessus de la coupe 2:1 de Meet ; si des mèches sont coupées, descendre le
+  cadrage d'environ 15 px (languette vers y ≈ 485, toujours sous 536).
 
 **Badge IA.**
 - Imprimé dans la texture du modèle (col ou épaule), comme le slogan l'est aujourd'hui : il suit les mouvements
@@ -107,6 +110,9 @@ voyant et la révélation vocale (règle 2).
   jamais éteint, puisqu'il reste le marqueur IA.
 - Le bandeau est retiré une fois le badge en place (3c), après la modification de la règle 1.
 - Vérifier que le voyant bleu se distingue des bandes lumineuses turquoise du fond Atrium.
+- La languette du col (28 × 24 px dans le cadre 1280×720, plan serré de 3b) est trop petite pour porter « IA » lisible
+  dans une vignette de 320×180 : elle sert de voyant. Le texte « IA » est un badge plus grand (texte d'environ 35 à
+  40 px de haut) juste à côté, sur le haut de la poitrine sous le col ou sur l'épaule, entre y ≈ 485 et 530.
 
 **Modification de la règle 1 de `CLAUDE.md`** (à faire explicitement, la règle actuelle impose le bandeau).
 Proposition :

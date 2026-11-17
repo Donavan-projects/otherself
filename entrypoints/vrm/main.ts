@@ -14,7 +14,6 @@ import { DemoCycle, isAvatarState } from '@/lib/avatar-states';
 import { createVrmRenderer } from '@/lib/avatar-vrm';
 import { loadDemoConfig } from '@/lib/config';
 import { createLogger } from '@/lib/log';
-import { buildAvatarAssets } from '@/lib/avatar-assets';
 import { buildVrmAssets } from '@/lib/vrm-assets';
 
 const FPS = 30;
@@ -48,9 +47,7 @@ function simulated(now: number) {
 
 try {
   const config = await loadDemoConfig();
-  // Le slogan reprend celui du personnage SVG : zone, lignes, police, encre.
-  const { slogan } = await buildAvatarAssets(config);
-  const assets = await buildVrmAssets(config, slogan, model);
+  const assets = await buildVrmAssets(config, model);
   let current = simulated(performance.now());
   const renderer = await createVrmRenderer(
     canvas,
@@ -59,7 +56,6 @@ try {
       background: await createImageBitmap(assets.background),
       banner: assets.banner,
       camera: assets.camera,
-      slogan: { image: await createImageBitmap(assets.slogan), ...assets.sloganPlacement },
     },
     { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone },
     () => current.level,

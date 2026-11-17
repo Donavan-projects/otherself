@@ -25,16 +25,15 @@ async function loadTestAudio(): Promise<ArrayBuffer | null> {
 export async function setupInjectionTest() {
   const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
   const config = await loadDemoConfig();
-  const { assets, slogan } = await buildAvatarAssets(config);
+  const { assets } = await buildAvatarAssets(config);
   const avatar = await mapAssets(assets, (blob) => createImageBitmap(blob));
   const wantsVrm = config.avatarRenderer === 'vrm' || new URLSearchParams(location.search).has('vrm');
-  const vrmAssets = wantsVrm ? await buildVrmAssets(config, slogan) : undefined;
+  const vrmAssets = wantsVrm ? await buildVrmAssets(config) : undefined;
   const vrm = vrmAssets && {
     model: await vrmAssets.model.arrayBuffer(),
     background: await createImageBitmap(vrmAssets.background),
     banner: vrmAssets.banner,
     camera: vrmAssets.camera,
-    slogan: { image: await createImageBitmap(vrmAssets.slogan), ...vrmAssets.sloganPlacement },
   };
   const audio = await loadTestAudio().catch((error: unknown) => {
     log(`son indisponible : ${describe(error)}`);

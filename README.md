@@ -60,7 +60,7 @@ Chargez `.output/chrome-mv3` dans `chrome://extensions` (mode développeur, « C
 ## État d'avancement
 
 - Fait : page de répétition, injection caméra et micro, pipeline voix (écoute, transcription, réponse, synthèse vocale, révélation et déclaration configurable), bandeau incrusté, testé sur Google Meet.
-- Fait : avatar 3D (modèle VRoid rendu avec three.js) : synchronisation labiale sur la voix, clignements, regard, mouvements de tête, respiration, physique des cheveux, slogan imprimé sur le sweat ; avatar 2D (SVG) en secours automatique. Testé sur Google Meet.
+- Fait : avatar 3D (modèle VRoid rendu avec three.js) : synchronisation labiale sur la voix, clignements, regard, mouvements de tête, respiration, physique des cheveux, plan serré (tête et épaules) ; avatar 2D (SVG) en secours automatique. Testé sur Google Meet.
 - En cours : tournage de la démo.
 - Plus tard, si le sujet intéresse : bouche pilotée par les phonèmes plutôt que par le volume de la voix, assistant de configuration pour les non-techniciens.
 

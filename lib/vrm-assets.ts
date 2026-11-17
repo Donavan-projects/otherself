@@ -1,36 +1,22 @@
 // Préparation de l'avatar 3D (VRM) dans une page de l'extension : lit avatar/otherself.vrm (allégé par
-// npm run vrm), calcule le cadrage, dessine le slogan (bannerText) à plat dans les coordonnées du cadre, rastérise le
-// fond. Le slogan est imprimé dans la texture du sweat par la page (lib/avatar-vrm.ts), sur le personnage posé. La page
-// de la plateforme ne reçoit que le modèle et des images (jamais la configuration ni la clé API).
+// npm run vrm), calcule le cadrage (plan serré, lib/vrm-frame.ts), rastérise le fond. La page de la plateforme ne reçoit
+// que le modèle et des images (jamais la configuration ni la clé API). Pas de slogan sur la veste depuis la sous-étape 3b.
 
 import { AVATAR_HEIGHT, AVATAR_WIDTH, composeFrame, SLOGAN_BOTTOM, type Rect } from './avatar';
-import { canvas, context, drawSlogan, fetchText, rasterize, toBlob, type SloganStyle } from './avatar-assets';
+import { fetchText, rasterize, toBlob } from './avatar-assets';
 import type { DemoConfig } from './config';
 import { findPrimitive, readAccessor, readGlb, vrmOf, type Glb, type Primitive } from './glb';
 import { createLogger } from './log';
-import { frameY, solveVrmCamera, VRM_FRAME_ANCHOR, VRM_SLOGAN_TOP, type BoneLandmark, type VrmCamera } from './vrm-frame';
+import { solveVrmCamera, VRM_COLLAR_Y, VRM_DEPTH_REFERENCE, VRM_FRAME_ANCHOR, VRM_HEAD_TOP, type BoneLandmark, type VrmCamera } from './vrm-frame';
 
 const log = createLogger('avatar');
 
 const MODEL_URL = '/avatar-vrm/otherself.vrm';
 const TOPS_MATERIAL = /Tops/i;
-/** Slogan dessiné à plat avec 3 pixels par pixel du cadre (netteté une fois imprimé dans la texture agrandie). */
-const FLAT_OVERSAMPLING = 3;
-const FLAT_PAD = 4;
-
-/** Slogan à plat : zone qu'il occupe dans le cadre (pixels), et échelle et marge de son image. */
-export interface VrmSloganPlacement {
-  zone: Rect;
-  scale: number;
-  pad: number;
-}
 
 export interface VrmAssets<T> {
   /** Modèle VRM (avatar/otherself.vrm, tel quel). */
   model: T;
-  /** Slogan dessiné à plat (PNG transparent), à imprimer sur le sweat dans la page. */
-  slogan: T;
-  sloganPlacement: VrmSloganPlacement;
   /** Fond plein cadre 1280×720. */
   background: T;
   banner: Rect;
@@ -38,20 +24,16 @@ export interface VrmAssets<T> {
 }
 
 export async function mapVrmAssets<A, B>(assets: VrmAssets<A>, convert: (file: A) => Promise<B>): Promise<VrmAssets<B>> {
-  return { ...assets, model: await convert(assets.model), slogan: await convert(assets.slogan), background: await convert(assets.background) };
+  return { ...assets, model: await convert(assets.model), background: await convert(assets.background) };
 }
 
 export type VrmVariant = Pick<DemoConfig, 'background' | 'bannerText' | 'bannerOffsetY'>;
 
 /**
- * Prépare l'avatar 3D. Le slogan reprend celui du personnage SVG (sloganStyle, de buildAvatarAssets) : même zone dans
- * le cadre, mêmes lignes, même police, même encre.
- */
-/**
- * modelName : page de test seulement (vrm.html?model=), autre fichier copié à la main dans avatar-vrm/
+ * Prépare l'avatar 3D. modelName : page de test seulement (vrm.html?model=), autre fichier copié à la main dans avatar-vrm/
  * du build (ex. android-source) ; jamais dans la caméra injectée, qui prend toujours otherself.vrm.
  */
-export async function buildVrmAssets(variant: VrmVariant, sloganStyle: SloganStyle, modelName?: string): Promise<VrmAssets<Blob>> {
+export async function buildVrmAssets(variant: VrmVariant, modelName?: string): Promise<VrmAssets<Blob>> {
   const started = performance.now();
   if (modelName !== undefined && !/^[\w-]+$/.test(modelName)) throw new Error(`nom de modèle invalide : ${modelName}`);
   const url = modelName ? `/avatar-vrm/${modelName}.vrm` : MODEL_URL;
@@ -60,21 +42,18 @@ export async function buildVrmAssets(variant: VrmVariant, sloganStyle: SloganSty
   const model = await response.blob();
   const glb = readGlb(new Uint8Array(await model.arrayBuffer()), 'otherself.vrm');
   const anchorY = boneHeight(glb, VRM_FRAME_ANCHOR);
-  const sloganTop = boneHeight(glb, VRM_SLOGAN_TOP);
   const shirt = readShirt(glb, anchorY);
   const top = hairTop(glb);
-  const camera = solveVrmCamera(top, { y: anchorY, z: shirt.frontZ(anchorY) });
-  const sloganTopInFrame = Math.round(frameY(camera, sloganTop, shirt.frontZ(sloganTop)));
-  log(`repères : haut des cheveux ${top.y.toFixed(3)} m, cadrage ${anchorY.toFixed(3)} m (y = 517), haut du slogan ${sloganTop.toFixed(3)} m (y = ${sloganTopInFrame})`);
-  const slogan = await drawFlatSlogan(variant.bannerText, sloganStyle, sloganTopInFrame);
+  // Profondeur du repère prise au devant de la veste à la hauteur de upperChest, zone plate : au bord du col, la
+  // veste recule de plusieurs centimètres en quelques millimètres et la caméra sautait d'un réglage à l'autre.
+  const camera = solveVrmCamera(top, { y: anchorY, z: shirt.frontZ(boneHeight(glb, VRM_DEPTH_REFERENCE)) });
+  log(`repères : haut des cheveux ${top.y.toFixed(3)} m (y = ${VRM_HEAD_TOP}), languette du col ${anchorY.toFixed(3)} m (y = ${VRM_COLLAR_Y})`);
   const background = await rasterize(await fetchText(`/avatar-svg/fonds/${variant.background}.svg`), AVATAR_WIDTH, AVATAR_HEIGHT);
   // Bandeau placé comme pour le personnage SVG : sous y = SLOGAN_BOTTOM, bannerOffsetY borné.
   const layout = composeFrame({ width: 1, hairTop: 0, sloganBottom: 1, sloganBottomInFrame: SLOGAN_BOTTOM }, variant.bannerOffsetY);
   if (layout.clamped) log(`bannerOffsetY = ${variant.bannerOffsetY} hors limites : bandeau ramené à y = ${layout.banner.y} (zone de sécurité)`);
   const assets: VrmAssets<Blob> = {
     model,
-    slogan: slogan.image,
-    sloganPlacement: slogan.placement,
     background: await toBlob(background),
     banner: layout.banner,
     camera,
@@ -205,21 +184,4 @@ function readShirt(glb: Glb, chestY: number): Shirt {
       return z;
     },
   };
-}
-
-/**
- * Slogan à plat, comme sur le personnage SVG : zone de même taille dans le cadre, mêmes lignes, même police, même
- * encre, centrée, son haut à y = top (haut du torse, sous l'encolure). Pas de courbure : le torse 3D la donne.
- */
-async function drawFlatSlogan(text: string, style: SloganStyle, top: number): Promise<{ image: Blob; placement: VrmSloganPlacement }> {
-  const zone: Rect = { x: (AVATAR_WIDTH - style.width) / 2, y: top, width: style.width, height: style.height };
-  const scale = FLAT_OVERSAMPLING;
-  const pad = FLAT_PAD;
-  const flat = canvas(Math.ceil(zone.width * scale) + 2 * pad, Math.ceil(zone.height * scale) + 2 * pad);
-  const drawn = await drawSlogan(context(flat), text, style.ink, { x: pad, y: pad, width: zone.width * scale, height: zone.height * scale }, 0, style.maxLines);
-  log(
-    `slogan du sweat : ${drawn.lines.map((line) => `« ${line} »`).join(' / ')}, police ${(drawn.size / scale).toFixed(1)} px dans le cadre ` +
-      `(SVG : ${style.fontSize} px), y = ${Math.round(zone.y)} à ${Math.round(zone.y + zone.height)}, encre ${style.ink}`,
-  );
-  return { image: await toBlob(flat), placement: { zone, scale, pad } };
 }

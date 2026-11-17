@@ -34,18 +34,6 @@ const OVER_LAYERS = ['sourcils', 'cheveux_avant', 'accessoires'];
 const MOUTH_LAYERS: Record<MouthShape, string> = { repos: 'bouche_repos', A: 'bouche_A', E: 'bouche_E', O: 'bouche_O', M: 'bouche_M' };
 
 /** Slogan du personnage SVG, tel qu'imprimé dans le cadre : repris par l'avatar 3D (lib/vrm-assets.ts). */
-export interface SloganStyle {
-  /** Taille de la zone du slogan dans le cadre 1280×720 (pixels). */
-  width: number;
-  height: number;
-  /** Encre : couleur badge-fond de la palette du personnage. */
-  ink: string;
-  /** data-lignes-max du SVG (undefined : une ou deux lignes). */
-  maxLines: number | undefined;
-  /** Taille de police obtenue dans le cadre (pixels), pour comparaison. */
-  fontSize: number;
-}
-
 export type AvatarVariant = Pick<DemoConfig, 'avatar' | 'background' | 'palette' | 'hairstyle' | 'accessories' | 'bannerText' | 'bannerOffsetY'>;
 
 const assetUrl = (path: string) => browser.runtime.getURL(path as '/');
@@ -57,7 +45,7 @@ export async function fetchText(path: string): Promise<string> {
 }
 
 /** Construit les images de l'avatar à partir des SVG et de la variante choisie. */
-export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ assets: AvatarAssets<Blob>; layout: FrameLayout; slogan: SloganStyle }> {
+export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ assets: AvatarAssets<Blob>; layout: FrameLayout }> {
   const started = performance.now();
   const [characterSource, backgroundSource] = await Promise.all([
     fetchText(`/avatar-svg/${variant.avatar}.svg`),
@@ -114,7 +102,7 @@ export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ asset
   const bottom = layout.top + height;
   if (bottom < AVATAR_HEIGHT) ctx.drawImage(body, 0, height - 1, width, 1, layout.left, bottom, width, AVATAR_HEIGHT - bottom);
   const ink = paletteColor(character, 'badge-fond') ?? '#f2c62e';
-  const printed = await drawSlogan(ctx, variant.bannerText, ink, {
+  await drawSlogan(ctx, variant.bannerText, ink, {
     x: layout.left + slogan.x * layout.scale,
     y: layout.top + slogan.y * layout.scale,
     width: slogan.width * layout.scale,
@@ -141,14 +129,7 @@ export async function buildAvatarAssets(variant: AvatarVariant): Promise<{ asset
     `avatar préparé en ${Math.round(performance.now() - started)} ms : ${variant.avatar} sur ${variant.background}, ` +
       `échelle ${layout.scale.toFixed(3)}, bandeau y = ${layout.banner.y}, zone animée ${region.width}x${region.height}`,
   );
-  const sloganStyle: SloganStyle = {
-    width: slogan.width * layout.scale,
-    height: slogan.height * layout.scale,
-    ink,
-    maxLines: slogan.maxLines,
-    fontSize: printed.size,
-  };
-  return { assets, layout, slogan: sloganStyle };
+  return { assets, layout };
 }
 
 /** Remplace les couleurs de la palette : { "peau": "#c68b62", "barbe": "none" }. */
