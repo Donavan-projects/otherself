@@ -42,7 +42,7 @@ export async function setupInjectionTest() {
   installFakeGetUserMedia({
     avatar,
     vrm,
-    avatarOptions: { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone },
+    avatarOptions: { bannerText: config.bannerText, badgeText: config.badgeText, debugSafeZone: config.debugSafeZone },
     pauseText: pauseText(config.language),
     // Pas de pipeline ici : la bouche suit directement le son de test.
     initialState: 'parole',

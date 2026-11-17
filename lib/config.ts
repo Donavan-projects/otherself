@@ -2,6 +2,8 @@
 // (voir wxt.config.ts et docs/config.md). Lisible seulement depuis les pages de
 // l'extension : la clé API n'est jamais transmise à la page de la plateforme.
 
+import { badgeTextOrDefault } from './badge';
+
 export type Language = 'en' | 'fr';
 
 export interface DemoConfig {
@@ -22,8 +24,10 @@ export interface DemoConfig {
   testAudio: string | null;
   cv: string | null;
   debugSafeZone: boolean;
-  /** Texte du bandeau (règle 1) : jamais vide. */
+  /** Texte du bandeau (retiré à la fin de la sous-étape 3c) : jamais vide. */
   bannerText: string;
+  /** Texte de la pastille « ● IA » (règle 1) : jamais vide ; « IA » ou « AI » par défaut selon la langue. */
+  badgeText: string;
   /** Déclaration prononcée après la révélation, avant les réponses (mode « message »). */
   messageText: string;
   language: Language;
@@ -69,6 +73,7 @@ const DEFAULTS: DemoConfig = {
   cv: null,
   debugSafeZone: false,
   bannerText: DEFAULT_BANNER_TEXT,
+  badgeText: 'AI',
   messageText: '',
   language: 'en',
   candidateName: '',
@@ -102,6 +107,7 @@ export async function loadDemoConfig(): Promise<DemoConfig> {
   const config: DemoConfig = { ...DEFAULTS, ...raw };
   config.bannerText = bannerTextOrDefault(raw.bannerText);
   config.language = raw.language === 'fr' ? 'fr' : 'en';
+  config.badgeText = badgeTextOrDefault(raw.badgeText, config.language);
   config.silenceMs = Number(raw.silenceMs) > 0 ? Number(raw.silenceMs) : DEFAULTS.silenceMs;
   config.candidateName = typeof raw.candidateName === 'string' ? raw.candidateName.trim() : '';
   config.monitorAvatar = raw.monitorAvatar !== false;

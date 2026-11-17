@@ -100,8 +100,10 @@ voyant et la révélation vocale (règle 2).
   cadrage d'environ 15 px (languette vers y ≈ 485, toujours sous 536).
 
 **Badge IA.**
-- Imprimé dans la texture du modèle (col ou épaule), comme le slogan l'est aujourd'hui : il suit les mouvements
-  et l'éclairage.
+- ~~Imprimé dans la texture du modèle~~ (abandonné en 3c) : pastille « ● IA » dessinée en dernier dans le canvas 2D,
+  à la position du torse projetée à chaque image (épinglée à l'os upperChest, elle suit les mouvements). Dans la
+  texture, elle serait assombrie par l'éclairage, masquée par les cheveux ou un bras, et ne pourrait pas servir de
+  voyant (couleur changée à chaque image) ; le même code sert pour l'avatar 3D, l'image de pause et l'avatar SVG.
 - Lisible dans une vignette d'environ 320×180 ; toujours visible de face et dans les mouvements de tête.
 - Texte court et configurable, jamais vide : « IA » par défaut (variante anglaise « AI ») ; décision du 16/11.
 - Avatar SVG de secours : badge équivalent, dessiné dans le canvas.

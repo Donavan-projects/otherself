@@ -14,6 +14,8 @@ export interface SerializedSources {
   /** Avatar 3D (avatarRenderer: vrm) ; l'avatar SVG ci-dessus sert de secours. */
   vrm?: VrmAssets<SerializedFile> | undefined;
   bannerText: string;
+  /** Texte de la pastille « ● IA » (règle 1). */
+  badgeText: string;
   debugSafeZone: boolean;
   /** Langue des textes affichés dans la page (bouton Pause / Reprendre, image de pause). */
   language: 'fr' | 'en';

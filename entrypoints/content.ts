@@ -89,7 +89,7 @@ export default defineContentScript({
         const media = installFakeGetUserMedia({
           avatar,
           vrm,
-          avatarOptions: { bannerText: sources.bannerText, debugSafeZone: sources.debugSafeZone },
+          avatarOptions: { bannerText: sources.bannerText, badgeText: sources.badgeText, debugSafeZone: sources.debugSafeZone },
           pauseText: pauseText(sources.language),
           createAudioTrack: async () => {
             voice = createVoiceOutput(

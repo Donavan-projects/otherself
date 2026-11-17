@@ -2,9 +2,11 @@
 // le canvas de l'avatar comme caméra et la piste audio fournie comme micro, sous le nom
 // « Avatar IA – OtherSelf ». Sans API d'extension : tourne dans le monde MAIN d'un onglet.
 
-import { AVATAR_HEIGHT, AVATAR_WIDTH, AvatarRenderer, drawBanner, type AvatarAssets, type AvatarOptions, type MouthShape, type Rect } from './avatar';
+import { AvatarRenderer, type AvatarAssets, type AvatarOptions, type MouthShape } from './avatar';
 import { createVrmRenderer, type FrameRenderer, type VrmSources } from './avatar-vrm';
-import type { AvatarState } from './avatar-states';
+import { BADGE, type AvatarState } from './avatar-states';
+import { StatusBadge } from './badge';
+import { createPauseFrame } from './pause-frame';
 import { startFrameClock } from './frame-clock';
 import { trustedTypesEnforcement } from './trusted-types';
 import { createLogger } from './log';
@@ -275,11 +277,14 @@ async function createVideoTrack(
   const track = canvas.captureStream(FPS).getVideoTracks()[0];
   if (!track) throw new Error('captureStream n\'a fourni aucune piste vidéo');
 
-  // Image « Avatar en pause », préparée une fois, bandeau compris (règle 1).
+  // Image « Avatar en pause », préparée une fois ; la pastille « ● IA » (règle 1) est peinte par-dessus à chaque image.
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('contexte 2D indisponible');
   const pauseFrame = createPauseFrame(sources.pauseText, sources.vrm?.banner ?? sources.avatar.banner, sources.avatarOptions.bannerText);
   let paused = false;
+  // Pastille « ● IA » : peinte en dernier sur chaque image (avatar 3D, SVG ou pause), voyant à la couleur de l'état.
+  const badge = new StatusBadge(sources.avatarOptions.badgeText);
+  badge.setState(avatarState);
   /** Clic de pause ou de reprise pas encore suivi d'une image : délai logué à la première image dessinée. */
   let pendingClick: { at: number; label: string } | null = null;
 
@@ -314,9 +319,11 @@ async function createVideoTrack(
       const start = performance.now();
       if (paused) {
         ctx.drawImage(pauseFrame, 0, 0);
+        badge.draw(ctx, BADGE.rest, start);
       } else {
         const shape = draw(start);
         shapes.set(shape, (shapes.get(shape) ?? 0) + 1);
+        badge.draw(ctx, renderer.badgeAnchor?.() ?? BADGE.rest, start);
       }
       const spent = performance.now() - start;
       frames += 1;
@@ -341,6 +348,7 @@ async function createVideoTrack(
     setPaused(value, clickAt) {
       if (value === paused) return;
       paused = value;
+      badge.setState(value ? 'pause' : avatarState);
       // L'avatar SVG ne redessine que la zone du visage : il repart d'une image entière.
       if (!value) renderer.invalidate?.();
       if (clickAt !== undefined) pendingClick = { at: clickAt, label: value ? 'pause' : 'reprise' };
@@ -349,6 +357,7 @@ async function createVideoTrack(
     setAvatarState(state) {
       avatarState = state;
       renderer.setState?.(state);
+      if (!paused) badge.setState(state);
     },
     nod: () => renderer.nod?.(),
     stop() {
@@ -356,22 +365,6 @@ async function createVideoTrack(
       renderer.dispose?.();
     },
   };
-}
-
-/** Image fixe de la pause : fond sombre, texte centré, bandeau à sa place habituelle, peint en dernier. */
-function createPauseFrame(text: string, banner: Rect, bannerText: string): OffscreenCanvas {
-  const frame = new OffscreenCanvas(AVATAR_WIDTH, AVATAR_HEIGHT);
-  const ctx = frame.getContext('2d', { alpha: false });
-  if (!ctx) throw new Error('contexte 2D hors écran indisponible');
-  ctx.fillStyle = '#20242c';
-  ctx.fillRect(0, 0, AVATAR_WIDTH, AVATAR_HEIGHT);
-  ctx.fillStyle = '#f2f2f2';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = '700 72px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText(text, AVATAR_WIDTH / 2, AVATAR_HEIGHT * 0.45, banner.width);
-  drawBanner(ctx, banner, bannerText);
-  return frame;
 }
 
 function errorMessage(error: unknown): string {

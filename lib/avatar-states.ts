@@ -55,6 +55,55 @@ export const RELAXED_MOUTH_DAMPING = 0.8;
  * plissent les yeux) : le clignement est réduit d'autant pour ne pas fermer deux fois.
  */
 export const BLINK_EXPRESSION_COMPENSATION = { relaxed: 0.6, angry: 0.3 } as const;
+/**
+ * Pastille « ● IA » (règle 1, lib/badge.ts) : voyant d'état et marqueur IA, dessinée en dernier dans le canvas 2D.
+ * Couleurs du voyant par état (jamais éteint), dimensions dans le cadre 1280×720, position au repos.
+ */
+export const BADGE = {
+  /** Couleur du voyant par état. Bleu franc, distinct des bandes turquoise (≈ #3ad4e0) du fond Atrium. */
+  colors: {
+    inactif: '#3b6cff',
+    ecoute: '#3b6cff',
+    reflexion: '#ffaa1f',
+    parole: '#2fd36b',
+    pause: '#ffffff',
+  } satisfies Record<AvatarState, string>,
+  /** Variante de pause comparée sur planche (?pauseColor=gris) : gris neutre. */
+  pauseGray: '#9aa1ad',
+  /**
+   * Réflexion : pulsation discrète (fréquence en Hz) de la luminosité du voyant (profondeur de 0 à 1 ; à 0,3 l'ambre
+   * tirait sur le brun) et de son halo (fraction du rayon), qui la porte surtout.
+   */
+  pulseHz: 0.8,
+  pulseDepth: 0.15,
+  pulseGlow: 0.6,
+  /** Halo du voyant (rayon du flou, pixels) : lumière, pas simple pastille de couleur. */
+  glow: 10,
+  /** Hauteur des capitales du texte (pixels) : 35 à 40 px demandés, lisible réduit à 320×180. */
+  capHeight: 36,
+  /** Hauteur de la pastille, diamètre du voyant, marges intérieures, écart voyant-texte, contour (pixels). */
+  height: 54,
+  dot: 28,
+  padX: 14,
+  gap: 12,
+  border: 2,
+  /** Fond sombre et contour clair : lisible sur la veste blanche comme sur l'image de pause sombre. */
+  fill: 'rgba(16, 18, 26, 0.92)',
+  borderColor: 'rgba(255, 255, 255, 0.85)',
+  text: '#ffffff',
+  /** Centre de la pastille au repos (avatar 3D, image de pause) : haut de la poitrine, sous le col, à droite de la
+   * languette (x 564 à 592), y ≈ 485 à 530 sous la limite gardée par le cadrage automatique de Meet (≈ 536). */
+  rest: { x: 712, y: 508 },
+  /** Avatar SVG de secours (cadrage plus large, inchangé jusqu'à 3e) : poitrine, à droite du slogan du t-shirt. */
+  svg: { x: 812, y: 470 },
+} as const;
+
+/**
+ * Avatar SVG : demi-largeur et demi-hauteur (pixels) de la zone redessinée sous la pastille à chaque image (il ne
+ * redessine sinon que le visage) : pastille et halo ne s'empilent pas d'une image à l'autre.
+ */
+export const BADGE_CLEARANCE = { halfWidth: 170, halfHeight: 44 } as const;
+
 /** Part de l'écart du regard de côté suivie par la tête (le reste vient des yeux). */
 export const HEAD_FOLLOW_ASIDE = 0.12;
 /** Avatar SVG : décalage des iris quand le regard part de côté (fraction du rayon de l'iris). */
