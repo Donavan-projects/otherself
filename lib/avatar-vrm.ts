@@ -22,10 +22,10 @@ import {
   type Rect,
 } from './avatar';
 import { frameY, VRM_FOV, VRM_HEAD_TOP, type VrmCamera } from './vrm-frame';
-import type { BadgeAnchor } from './badge';
+import type { MarkingAnchors } from './badge';
 import {
-  BADGE,
   BLINK_EXPRESSION_COMPENSATION,
+  MARKING,
   HEAD_FOLLOW_ASIDE,
   NOD_MS,
   RELAXED_MOUTH_DAMPING,
@@ -54,8 +54,8 @@ export interface FrameRenderer {
   setState?(state: AvatarState): void;
   /** Hochement (état « à l'écoute »). */
   nod?(): void;
-  /** Centre de la pastille « ● IA » dans la dernière image dessinée (pixels du cadre), peinte ensuite par l'appelant. */
-  badgeAnchor?(): BadgeAnchor;
+  /** Position du marqueur IA (voyant et marquage) dans la dernière image dessinée, peint ensuite par l'appelant. */
+  markingAnchors?(): MarkingAnchors;
   dispose?(): void;
 }
 
@@ -159,10 +159,12 @@ export class VrmAvatarRenderer implements FrameRenderer {
   private readonly level: () => number;
   private lost = false;
   private previous: number | null = null;
-  /** Pastille « ● IA » épinglée au torse : point fixe dans le repère de l'os upperChest, projeté à chaque image. */
-  private readonly badgeBone: THREE.Object3D | null;
-  private readonly badgePoint = new THREE.Vector3();
-  private anchor: BadgeAnchor = { ...BADGE.rest };
+  /** Marqueur IA épinglé au torse : points fixes (languette, marquage) dans le repère de l'os upperChest, projetés à
+   * chaque image. */
+  private readonly markingBone: THREE.Object3D | null;
+  private readonly tabPoint = new THREE.Vector3();
+  private readonly textPoint = new THREE.Vector3();
+  private anchors: MarkingAnchors = { light: { x: MARKING.tab.x, y: MARKING.tab.y }, text: { ...MARKING.text }, shape: 'tab' };
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -209,8 +211,11 @@ export class VrmAvatarRenderer implements FrameRenderer {
 
     this.camera = createCamera(vrm, sources.camera, log);
     this.motion = new VrmMotion(vrm, this.camera, preview);
-    this.badgeBone = vrm.humanoid.getRawBoneNode('upperChest') ?? vrm.humanoid.getRawBoneNode('chest');
-    if (this.badgeBone) this.badgePoint.copy(pinOnChest(vrm, this.camera, this.badgeBone, log));
+    this.markingBone = vrm.humanoid.getRawBoneNode('upperChest') ?? vrm.humanoid.getRawBoneNode('chest');
+    if (this.markingBone) {
+      this.tabPoint.copy(pinOnChest(vrm, this.camera, this.markingBone, MARKING.tab, 'languette', log));
+      this.textPoint.copy(pinOnChest(vrm, this.camera, this.markingBone, MARKING.text, 'marquage', log));
+    }
 
     this.banner = new OffscreenCanvas(sources.banner.width, sources.banner.height);
     const bannerCtx = this.banner.getContext('2d');
@@ -231,9 +236,8 @@ export class VrmAvatarRenderer implements FrameRenderer {
     ctx.drawImage(this.renderer.domElement, 0, 0, AVATAR_WIDTH, AVATAR_HEIGHT);
     if (this.options.debugSafeZone) drawSafeZone(ctx);
     ctx.drawImage(this.banner, sources.banner.x, sources.banner.y);
-    if (this.badgeBone) {
-      const point = this.badgeBone.localToWorld(PROJECTED.copy(this.badgePoint)).project(this.camera);
-      this.anchor = { x: ((point.x + 1) / 2) * AVATAR_WIDTH, y: ((1 - point.y) / 2) * AVATAR_HEIGHT };
+    if (this.markingBone) {
+      this.anchors = { light: this.project(this.tabPoint), text: this.project(this.textPoint), shape: 'tab' };
     }
     return shape;
   }
@@ -242,8 +246,14 @@ export class VrmAvatarRenderer implements FrameRenderer {
     this.motion.setState(state);
   }
 
-  badgeAnchor(): BadgeAnchor {
-    return this.anchor;
+  markingAnchors(): MarkingAnchors {
+    return this.anchors;
+  }
+
+  /** Point du repère de l'os du marqueur → pixels du cadre. */
+  private project(local: THREE.Vector3): { x: number; y: number } {
+    const point = this.markingBone!.localToWorld(PROJECTED.copy(local)).project(this.camera);
+    return { x: ((point.x + 1) / 2) * AVATAR_WIDTH, y: ((1 - point.y) / 2) * AVATAR_HEIGHT };
   }
 
   nod() {
@@ -272,24 +282,31 @@ function createCamera(vrm: VRM, frame: VrmCamera, log: (message: string) => void
 const PROJECTED = new THREE.Vector3();
 
 /**
- * Point du devant de la veste placé à BADGE.rest dans le cadre, sur le personnage posé : rayon de la caméra à travers
- * ce pixel, premier point du modèle touché (veste), exprimé dans le repère de l'os du torse. Repli si le rayon ne touche
- * rien : 12 cm devant l'os, à la même hauteur.
+ * Point du devant de la veste placé à pixel dans le cadre, sur le personnage posé : rayon de la caméra à travers ce
+ * pixel, premier point du modèle touché (veste), exprimé dans le repère de l'os du torse. Repli si le rayon ne touche
+ * rien : 12 cm devant l'os.
  */
-function pinOnChest(vrm: VRM, camera: THREE.Camera, bone: THREE.Object3D, log: (message: string) => void): THREE.Vector3 {
+function pinOnChest(
+  vrm: VRM,
+  camera: THREE.Camera,
+  bone: THREE.Object3D,
+  pixel: { x: number; y: number },
+  name: string,
+  log: (message: string) => void,
+): THREE.Vector3 {
   vrm.scene.updateMatrixWorld(true);
   const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(new THREE.Vector2((BADGE.rest.x / AVATAR_WIDTH) * 2 - 1, 1 - (BADGE.rest.y / AVATAR_HEIGHT) * 2), camera);
+  raycaster.setFromCamera(new THREE.Vector2((pixel.x / AVATAR_WIDTH) * 2 - 1, 1 - (pixel.y / AVATAR_HEIGHT) * 2), camera);
   const hit = raycaster.intersectObject(vrm.scene, true)[0];
   let world: THREE.Vector3;
   if (hit) {
     world = hit.point.clone();
-    log(`pastille IA épinglée sur ${hit.object.name || 'le modèle'} à ${hit.distance.toFixed(2)} m de la caméra`);
+    log(`marqueur IA : ${name} épinglé(e) sur ${hit.object.name || 'le modèle'} à ${hit.distance.toFixed(2)} m de la caméra`);
   } else {
     const boneWorld = bone.getWorldPosition(new THREE.Vector3());
     const t = (boneWorld.z + 0.12 - raycaster.ray.origin.z) / raycaster.ray.direction.z;
     world = raycaster.ray.at(t, new THREE.Vector3());
-    log('pastille IA : rayon sans contact avec le modèle, point placé 12 cm devant le torse');
+    log(`marqueur IA : ${name}, rayon sans contact avec le modèle, point placé 12 cm devant le torse`);
   }
   return bone.worldToLocal(world);
 }

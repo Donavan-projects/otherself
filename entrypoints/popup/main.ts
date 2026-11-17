@@ -3,7 +3,7 @@
 // (consigne ou erreur). Les détails techniques vont dans les logs [inject] de la console du popup.
 
 import { mapAssets } from '@/lib/avatar';
-import { buildAvatarAssets } from '@/lib/avatar-assets';
+import { buildAvatarAssets, renderMarkingText } from '@/lib/avatar-assets';
 import { buildVrmAssets, mapVrmAssets } from '@/lib/vrm-assets';
 import { loadDemoConfig } from '@/lib/config';
 import { blobToFile, type SerializedSources } from '@/lib/injection-sources';
@@ -198,7 +198,7 @@ async function loadSources(): Promise<SerializedSources> {
     avatar: await mapAssets(assets, blobToFile),
     vrm,
     bannerText: config.bannerText,
-    badgeText: config.badgeText,
+    marking: await blobToFile(await renderMarkingText(config.badgeText)),
     debugSafeZone: config.debugSafeZone,
     language: config.language,
   };

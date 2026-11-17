@@ -3,7 +3,7 @@
 // config.local.json, rastérise les calques à l'échelle du cadre, écrit le slogan courbé sur le
 // t-shirt. La page de la plateforme ne reçoit que des images (jamais la configuration ni la clé API).
 
-import { SVG_GAZE_ASIDE } from './avatar-states';
+import { MARKING, SVG_GAZE_ASIDE } from './avatar-states';
 import { composeFrame, mapAssets, AVATAR_HEIGHT, AVATAR_WIDTH, MOUTH_SHAPES, SLOGAN_BOTTOM_MAX, SLOGAN_BOTTOM_MIN, type AvatarAssets, type FrameLayout, type MouthShape, type Rect, type Sprite } from './avatar';
 import type { DemoConfig } from './config';
 import { createLogger } from './log';
@@ -292,6 +292,39 @@ function loadSloganFont(): Promise<void> {
     log(`police du slogan chargée : ${SLOGAN_FONT_URL} (Noto Sans Bold)`);
   })();
   return fontLoaded;
+}
+
+let markingFontLoaded: Promise<void> | null = null;
+
+/**
+ * Marquage « IA » (règle 1, lib/badge.ts), rendu ici parce que la page de la plateforme ne peut pas charger la police
+ * de l'extension : lettres pleines gris anthracite, police technique à chasse fixe embarquée (DejaVu Sans Mono Bold),
+ * capitales de MARKING.capHeight pixels, fond transparent.
+ */
+export async function renderMarkingText(text: string): Promise<Blob> {
+  const { url, family } = MARKING.font;
+  markingFontLoaded ??= (async () => {
+    const font = new FontFace(family, `url(${assetUrl(url)})`, { weight: '700' });
+    await font.load();
+    document.fonts.add(font);
+    if (!document.fonts.check(`700 20px ${family}`)) throw new Error(`police du marquage (${url}) non chargée`);
+  })();
+  await markingFontLoaded;
+  const probe = context(canvas(1, 1));
+  probe.font = `700 100px ${family}`;
+  const capAt100 = probe.measureText('I').actualBoundingBoxAscent;
+  const size = (MARKING.capHeight / capAt100) * 100;
+  probe.font = `700 ${size}px ${family}`;
+  const metrics = probe.measureText(text);
+  const pad = 2;
+  const target = canvas(Math.ceil(metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight) + 2 * pad, Math.ceil(MARKING.capHeight) + 2 * pad);
+  const ctx = context(target);
+  ctx.font = `700 ${size}px ${family}`;
+  ctx.fillStyle = MARKING.ink;
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(text, pad + metrics.actualBoundingBoxLeft, pad + MARKING.capHeight);
+  log(`marquage « ${text} » : police ${size.toFixed(1)} px (capitales ${MARKING.capHeight} px), ${target.width}x${target.height}`);
+  return toBlob(target);
 }
 
 /**

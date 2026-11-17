@@ -56,53 +56,48 @@ export const RELAXED_MOUTH_DAMPING = 0.8;
  */
 export const BLINK_EXPRESSION_COMPENSATION = { relaxed: 0.6, angry: 0.3 } as const;
 /**
- * Pastille « ● IA » (règle 1, lib/badge.ts) : voyant d'état et marqueur IA, dessinée en dernier dans le canvas 2D.
- * Couleurs du voyant par état (jamais éteint), dimensions dans le cadre 1280×720, position au repos.
+ * Marqueur IA (règle 1, lib/badge.ts) : marquage « IA » imprimé sur la veste (lettres pleines, police technique) et
+ * voyant d'état sur la languette du col, dessinés en dernier dans le canvas 2D. Couleurs, dimensions et positions au
+ * repos dans le cadre 1280×720.
  */
-export const BADGE = {
-  /** Couleur du voyant par état. Bleu franc, distinct des bandes turquoise (≈ #3ad4e0) du fond Atrium. */
+export const MARKING = {
+  /** Couleur du voyant par état (jamais éteint tant que l'avatar est visible). Bleu franc, distinct des bandes
+   * turquoise (≈ #3ad4e0) du fond Atrium. Pas de couleur de pause : l'image de pause n'a ni avatar ni voyant. */
   colors: {
     inactif: '#3b6cff',
     ecoute: '#3b6cff',
     reflexion: '#ffaa1f',
     parole: '#2fd36b',
-    pause: '#ffffff',
+    pause: '#3b6cff',
   } satisfies Record<AvatarState, string>,
-  /** Variante de pause comparée sur planche (?pauseColor=gris) : gris neutre. */
-  pauseGray: '#9aa1ad',
-  /**
-   * Réflexion : pulsation discrète (fréquence en Hz) de la luminosité du voyant (profondeur de 0 à 1 ; à 0,3 l'ambre
-   * tirait sur le brun) et de son halo (fraction du rayon), qui la porte surtout.
-   */
+  /** Réflexion : respiration lente (Hz) de la luminosité du voyant (profondeur de 0 à 1) et de son halo. */
   pulseHz: 0.8,
   pulseDepth: 0.15,
-  pulseGlow: 0.6,
-  /** Halo du voyant (rayon du flou, pixels) : lumière, pas simple pastille de couleur. */
-  glow: 10,
-  /** Hauteur des capitales du texte (pixels) : 35 à 40 px demandés, lisible réduit à 320×180. */
-  capHeight: 36,
-  /** Hauteur de la pastille, diamètre du voyant, marges intérieures, écart voyant-texte, contour (pixels). */
-  height: 54,
-  dot: 28,
-  padX: 14,
-  gap: 12,
-  border: 2,
-  /** Fond sombre et contour clair : lisible sur la veste blanche comme sur l'image de pause sombre. */
-  fill: 'rgba(16, 18, 26, 0.92)',
-  borderColor: 'rgba(255, 255, 255, 0.85)',
-  text: '#ffffff',
-  /** Centre de la pastille au repos (avatar 3D, image de pause) : haut de la poitrine, sous le col, à droite de la
-   * languette (x 564 à 592), y ≈ 485 à 530 sous la limite gardée par le cadrage automatique de Meet (≈ 536). */
-  rest: { x: 712, y: 508 },
-  /** Avatar SVG de secours (cadrage plus large, inchangé jusqu'à 3e) : poitrine, à droite du slogan du t-shirt. */
-  svg: { x: 812, y: 470 },
+  pulseGlow: 0.5,
+  /** Voyant : opacité de la languette allumée, rayon et opacité du halo autour (pixels). */
+  lightAlpha: 0.92,
+  haloRadius: 26,
+  haloAlpha: 0.5,
+  /** Marquage : police (fichier de l'extension, rendu à l'avance par le popup), encre gris anthracite, hauteur des
+   * capitales (lisible réduit à 320×180), opacité en mode « multiply » (le tissu transparaît à peine). */
+  font: { url: '/fonts/DejaVuSansMono-Bold.ttf', family: 'OtherSelfMarking' },
+  ink: '#2e3138',
+  capHeight: 38,
+  inkAlpha: 0.9,
+  /** Avatar 3D : centre de la languette (relevé sur le personnage posé, plan serré de 3b) et contour de la languette
+   * (coins relatifs au centre, pixels), centre du marquage juste à côté. */
+  tab: { x: 578, y: 470, corners: [[-4, -11], [13, -10], [5, 10], [-15, 8]] as const },
+  text: { x: 634, y: 474 },
+  /** Avatar SVG de secours (cadrage plus large, jusqu'à 3e) : voyant rond sur le revers de la veste, au plus près
+   * d'un col ; marquage sur la poitrine, sous le revers. */
+  svg: { light: { x: 768, y: 404, radius: 8 }, text: { x: 800, y: 466 } },
 } as const;
 
 /**
- * Avatar SVG : demi-largeur et demi-hauteur (pixels) de la zone redessinée sous la pastille à chaque image (il ne
- * redessine sinon que le visage) : pastille et halo ne s'empilent pas d'une image à l'autre.
+ * Avatar SVG : zone redessinée sous le marqueur à chaque image (il ne redessine sinon que le visage), pour que voyant,
+ * halo et marquage ne s'empilent pas d'une image à l'autre. Couvre le voyant et le marquage de MARKING.svg.
  */
-export const BADGE_CLEARANCE = { halfWidth: 170, halfHeight: 44 } as const;
+export const MARKING_SVG_CLEARANCE = { x: 730, y: 370, width: 150, height: 140 } as const;
 
 /** Part de l'écart du regard de côté suivie par la tête (le reste vient des yeux). */
 export const HEAD_FOLLOW_ASIDE = 0.12;

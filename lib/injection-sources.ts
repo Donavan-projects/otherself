@@ -14,16 +14,16 @@ export interface SerializedSources {
   /** Avatar 3D (avatarRenderer: vrm) ; l'avatar SVG ci-dessus sert de secours. */
   vrm?: VrmAssets<SerializedFile> | undefined;
   bannerText: string;
-  /** Texte de la pastille « ● IA » (règle 1). */
-  badgeText: string;
+  /** Marquage « IA » (règle 1) déjà rendu par le popup (lib/avatar-assets.ts, renderMarkingText). */
+  marking: SerializedFile;
   debugSafeZone: boolean;
   /** Langue des textes affichés dans la page (bouton Pause / Reprendre, image de pause). */
   language: 'fr' | 'en';
 }
 
-/** Texte de l'image fixe affichée pendant la pause (bandeau conservé, règle 1). */
+/** Texte de l'image affichée pendant la pause : sans avatar ni marqueur, elle l'identifie en toutes lettres (règle 1). */
 export function pauseText(language: 'fr' | 'en'): string {
-  return language === 'fr' ? 'Avatar en pause' : 'Avatar paused';
+  return language === 'fr' ? 'Avatar IA en pause' : 'AI avatar paused';
 }
 
 export function bytesToBase64(bytes: ArrayBuffer): string {

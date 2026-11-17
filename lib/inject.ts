@@ -4,8 +4,8 @@
 
 import { AvatarRenderer, type AvatarAssets, type AvatarOptions, type MouthShape } from './avatar';
 import { createVrmRenderer, type FrameRenderer, type VrmSources } from './avatar-vrm';
-import { BADGE, type AvatarState } from './avatar-states';
-import { StatusBadge } from './badge';
+import type { AvatarState } from './avatar-states';
+import { AiMarking } from './badge';
 import { createPauseFrame } from './pause-frame';
 import { startFrameClock } from './frame-clock';
 import { trustedTypesEnforcement } from './trusted-types';
@@ -26,8 +26,10 @@ export interface FakeMediaSources {
   /** Avatar 3D (prototype) : utilisé s'il est fourni et si WebGL est accéléré ; sinon, et en cas de panne, avatar SVG. */
   vrm?: VrmSources | undefined;
   avatarOptions: AvatarOptions;
-  /** Texte de l'image « Avatar en pause » (le bandeau y reste, règle 1). */
+  /** Texte de l'image de pause (« Avatar IA en pause ») : sans avatar, elle n'a ni marquage ni voyant (règle 1). */
   pauseText: string;
+  /** Marquage « IA » déjà rendu (règle 1), peint avec le voyant en dernier sur chaque image où l'avatar est visible. */
+  marking: ImageBitmap;
   /** État de départ de l'avatar ; « parole » pour un banc sans pipeline (bouche pilotée par le son de test). */
   initialState?: AvatarState;
   /** Crée la piste du micro injecté, au premier appel de getUserMedia. */
@@ -277,14 +279,14 @@ async function createVideoTrack(
   const track = canvas.captureStream(FPS).getVideoTracks()[0];
   if (!track) throw new Error('captureStream n\'a fourni aucune piste vidéo');
 
-  // Image « Avatar en pause », préparée une fois ; la pastille « ● IA » (règle 1) est peinte par-dessus à chaque image.
+  // Image de pause, préparée une fois : sans avatar, ni marquage ni voyant ; son texte l'identifie (règle 1).
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('contexte 2D indisponible');
   const pauseFrame = createPauseFrame(sources.pauseText, sources.vrm?.banner ?? sources.avatar.banner, sources.avatarOptions.bannerText);
   let paused = false;
-  // Pastille « ● IA » : peinte en dernier sur chaque image (avatar 3D, SVG ou pause), voyant à la couleur de l'état.
-  const badge = new StatusBadge(sources.avatarOptions.badgeText);
-  badge.setState(avatarState);
+  // Marqueur IA (règle 1) : peint en dernier sur chaque image où l'avatar est visible, voyant à la couleur de l'état.
+  const marking = new AiMarking(sources.marking);
+  marking.setState(avatarState);
   /** Clic de pause ou de reprise pas encore suivi d'une image : délai logué à la première image dessinée. */
   let pendingClick: { at: number; label: string } | null = null;
 
@@ -319,11 +321,11 @@ async function createVideoTrack(
       const start = performance.now();
       if (paused) {
         ctx.drawImage(pauseFrame, 0, 0);
-        badge.draw(ctx, BADGE.rest, start);
       } else {
         const shape = draw(start);
         shapes.set(shape, (shapes.get(shape) ?? 0) + 1);
-        badge.draw(ctx, renderer.badgeAnchor?.() ?? BADGE.rest, start);
+        const anchors = renderer.markingAnchors?.();
+        if (anchors) marking.draw(ctx, anchors, start);
       }
       const spent = performance.now() - start;
       frames += 1;
@@ -348,7 +350,6 @@ async function createVideoTrack(
     setPaused(value, clickAt) {
       if (value === paused) return;
       paused = value;
-      badge.setState(value ? 'pause' : avatarState);
       // L'avatar SVG ne redessine que la zone du visage : il repart d'une image entière.
       if (!value) renderer.invalidate?.();
       if (clickAt !== undefined) pendingClick = { at: clickAt, label: value ? 'pause' : 'reprise' };
@@ -357,7 +358,7 @@ async function createVideoTrack(
     setAvatarState(state) {
       avatarState = state;
       renderer.setState?.(state);
-      if (!paused) badge.setState(state);
+      marking.setState(state);
     },
     nod: () => renderer.nod?.(),
     stop() {

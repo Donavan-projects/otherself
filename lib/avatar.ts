@@ -2,7 +2,8 @@
 // (lib/avatar-assets.ts), yeux et bouche animés, bandeau incrusté. Tourne dans le monde MAIN
 // de l'onglet (voie A) comme dans les pages de l'extension (aperçu, banc d'essai).
 
-import { BADGE, BADGE_CLEARANCE, STATE_STYLES, type AvatarState } from './avatar-states';
+import { MARKING, MARKING_SVG_CLEARANCE, STATE_STYLES, type AvatarState } from './avatar-states';
+import type { MarkingAnchors } from './badge';
 
 export const AVATAR_WIDTH = 1280;
 export const AVATAR_HEIGHT = 720;
@@ -133,8 +134,6 @@ export async function mapAssets<A, B>(assets: AvatarAssets<A>, convert: (image: 
 export interface AvatarOptions {
   /** Texte du bandeau (bannerText), déjà vérifié : jamais vide. Retiré à la fin de la sous-étape 3c. */
   bannerText: string;
-  /** Texte de la pastille « ● IA » (badgeText, règle 1), déjà vérifié : jamais vide. */
-  badgeText: string;
   /** Dessine le contour de la zone de sécurité (debugSafeZone dans config.local.json). */
   debugSafeZone?: boolean;
 }
@@ -257,9 +256,9 @@ export class AvatarRenderer {
     drawBanner(bannerCtx, { x: 0, y: 0, width: assets.banner.width, height: assets.banner.height }, options.bannerText);
   }
 
-  /** Pastille « ● IA » : position fixe sur la poitrine du personnage SVG (cadrage inchangé jusqu'à 3e). */
-  badgeAnchor(): { x: number; y: number } {
-    return BADGE.svg;
+  /** Marqueur IA : positions fixes sur le personnage SVG (cadrage inchangé jusqu'à 3e), voyant rond sur le revers. */
+  markingAnchors(): MarkingAnchors {
+    return { light: MARKING.svg.light, text: MARKING.svg.text, shape: 'round' };
   }
 
   setState(state: AvatarState) {
@@ -283,9 +282,8 @@ export class AvatarRenderer {
     const region = assets.region;
     if (this.complete) {
       ctx.drawImage(assets.under, region.x, region.y, region.width, region.height, region.x, region.y, region.width, region.height);
-      // Sous la pastille « ● IA », peinte ensuite par l'appelant : fond d'origine, pour qu'elle ne s'empile pas.
-      const { halfWidth, halfHeight } = BADGE_CLEARANCE;
-      const clear = { x: BADGE.svg.x - halfWidth, y: BADGE.svg.y - halfHeight, width: 2 * halfWidth, height: 2 * halfHeight };
+      // Sous le marqueur IA, peint ensuite par l'appelant : fond d'origine, pour qu'il ne s'empile pas.
+      const clear = MARKING_SVG_CLEARANCE;
       ctx.drawImage(assets.under, clear.x, clear.y, clear.width, clear.height, clear.x, clear.y, clear.width, clear.height);
     } else {
       ctx.drawImage(assets.under, 0, 0);

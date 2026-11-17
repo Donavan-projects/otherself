@@ -8,13 +8,13 @@
 //   gardée) ; ?blink=1|0 : paupières fermées ou ouvertes imposées ; ?angry=0.1 : poids d'angry imposé ;
 // - ?model=android-source : autre modèle copié à la main dans avatar-vrm/ du build (essais seulement) ;
 // - ?software=1 : accepte le rendu WebGL logiciel (contrôle visuel sans carte graphique, trop lent pour un vrai usage) ;
-// - ?pause=1 : image de pause de la caméra injectée, avec la pastille ; ?pauseColor=gris : voyant de pause gris au lieu
-//   de blanc (planche de comparaison).
-// La pastille « ● IA » (lib/badge.ts) est peinte en dernier, comme dans la caméra injectée.
+// - ?pause=1 : image de pause de la caméra injectée (sans avatar, donc sans marqueur).
+// Le marqueur IA (marquage et voyant de la languette, lib/badge.ts) est peint en dernier, comme dans la caméra injectée.
 
 import { MOUTH_SHAPES } from '@/lib/avatar';
-import { BADGE, DemoCycle, isAvatarState } from '@/lib/avatar-states';
-import { StatusBadge } from '@/lib/badge';
+import { DemoCycle, isAvatarState } from '@/lib/avatar-states';
+import { renderMarkingText } from '@/lib/avatar-assets';
+import { AiMarking } from '@/lib/badge';
 import { pauseText } from '@/lib/injection-sources';
 import { createPauseFrame } from '@/lib/pause-frame';
 import { createVrmRenderer } from '@/lib/avatar-vrm';
@@ -39,7 +39,6 @@ const blinkParam = params.get('blink');
 const blink = blinkParam === null ? undefined : blinkParam === '1';
 const model = params.get('model') ?? undefined;
 const showPause = params.get('pause') === '1';
-const pauseGray = params.get('pauseColor') === 'gris';
 const canvas = document.querySelector<HTMLCanvasElement>('#avatar')!;
 const statsBox = document.querySelector<HTMLPreElement>('#stats')!;
 
@@ -65,7 +64,7 @@ try {
       banner: assets.banner,
       camera: assets.camera,
     },
-    { bannerText: config.bannerText, badgeText: config.badgeText, debugSafeZone: config.debugSafeZone },
+    { bannerText: config.bannerText, debugSafeZone: config.debugSafeZone },
     () => current.level,
     log,
     {
@@ -78,7 +77,7 @@ try {
     },
   );
   renderer.setState(current.state);
-  const badge = new StatusBadge(config.badgeText, { pauseGray });
+  const marking = new AiMarking(await createImageBitmap(await renderMarkingText(config.badgeText)));
   const ctx = canvas.getContext('2d')!;
   const pauseFrame = showPause ? createPauseFrame(pauseText(config.language), assets.banner, config.bannerText) : null;
 
@@ -95,12 +94,10 @@ try {
     if (current.nod) renderer.nod();
     if (pauseFrame) {
       ctx.drawImage(pauseFrame, 0, 0);
-      badge.setState('pause');
-      badge.draw(ctx, BADGE.rest, start);
     } else {
       renderer.draw(start);
-      badge.setState(current.state);
-      badge.draw(ctx, renderer.badgeAnchor(), start);
+      marking.setState(current.state);
+      marking.draw(ctx, renderer.markingAnchors(), start);
     }
     const spent = performance.now() - start;
     frames += 1;
