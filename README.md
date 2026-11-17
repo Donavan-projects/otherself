@@ -38,7 +38,7 @@ Détail des composants, de ce qui reste local et de l'animation de l'avatar : [d
 
 Ces règles font partie du projet et ne sont pas désactivables :
 
-- **Bandeau toujours visible** : un bandeau (« Candidat automatisé, comme vous. » par défaut) est dessiné dans chaque image de la vidéo, à un emplacement qui reste visible même quand la plateforme recadre l'image.
+- **Marqueur IA toujours visible** : une pastille « ● IA » (« ● AI » en anglais) est dessinée dans chaque image de la vidéo, sur le haut de la poitrine de l'avatar, près du visage, pour rester visible même quand la plateforme recadre l'image. Son point coloré indique l'état de l'avatar (écoute, réflexion, parole, pause) et ne s'éteint jamais. Elle figure aussi sur l'image de pause et sur l'avatar de secours. L'apparence volontairement non humaine de l'avatar et l'annonce vocale complètent ce marqueur.
 - **Révélation immédiate** : la première prise de parole de l'avatar annonce qu'il est une IA.
 - **Aucun mode discret** : OtherSelf ne sert pas à tromper un interlocuteur humain, ni à souffler des réponses.
 - **Avatar cartoon uniquement** : pas d'import de photo, pas de clonage de visage ni de voix ; voix synthétique générique.
