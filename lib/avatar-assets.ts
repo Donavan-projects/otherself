@@ -320,6 +320,8 @@ export async function renderMarkingText(text: string): Promise<Blob> {
   const target = canvas(Math.ceil(metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight) + 2 * pad, Math.ceil(MARKING.capHeight) + 2 * pad);
   const ctx = context(target);
   ctx.font = `700 ${size}px ${family}`;
+  // Bords adoucis : flou très léger, une fois pour toutes (le dessin dans la page ne fait que transformer l'image).
+  ctx.filter = `blur(${MARKING.inkBlur}px)`;
   ctx.fillStyle = MARKING.ink;
   ctx.textBaseline = 'alphabetic';
   ctx.fillText(text, pad + metrics.actualBoundingBoxLeft, pad + MARKING.capHeight);

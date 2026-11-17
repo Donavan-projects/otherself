@@ -101,6 +101,8 @@ export interface VrmPreviewOptions {
   angry?: number;
   /** Paupières fermées (vrai) ou ouvertes (faux) imposées (?blink=1|0), pour vérifier le mélange avec les expressions. */
   blink?: boolean;
+  /** Placement du marquage imposé (?marking=cote|sous), pour comparer. */
+  marking?: 'cote' | 'sous';
 }
 
 export async function createVrmRenderer(
@@ -164,6 +166,10 @@ export class VrmAvatarRenderer implements FrameRenderer {
   private readonly markingBone: THREE.Object3D | null;
   private readonly tabPoint = new THREE.Vector3();
   private readonly textPoint = new THREE.Vector3();
+  /** Repère du tissu sous le marquage : points à TEXT_FRAME_UNIT pixels (au repos) vers la droite et vers le bas. */
+  private readonly textRight = new THREE.Vector3();
+  private readonly textDown = new THREE.Vector3();
+  private hasTextFrame = false;
   private anchors: MarkingAnchors = { light: { x: MARKING.tab.x, y: MARKING.tab.y }, text: { ...MARKING.text }, shape: 'tab' };
 
   constructor(
@@ -214,7 +220,14 @@ export class VrmAvatarRenderer implements FrameRenderer {
     this.markingBone = vrm.humanoid.getRawBoneNode('upperChest') ?? vrm.humanoid.getRawBoneNode('chest');
     if (this.markingBone) {
       this.tabPoint.copy(pinOnChest(vrm, this.camera, this.markingBone, MARKING.tab, 'languette', log));
-      this.textPoint.copy(pinOnChest(vrm, this.camera, this.markingBone, MARKING.text, 'marquage', log));
+      const placement = preview.marking ?? MARKING.placement;
+      const frame = surfaceFrame(vrm, this.camera, this.markingBone, placement === 'sous' ? MARKING.textBelow : MARKING.text, log);
+      this.textPoint.copy(frame.center);
+      if (frame.right && frame.down) {
+        this.textRight.copy(frame.right);
+        this.textDown.copy(frame.down);
+        this.hasTextFrame = true;
+      }
     }
 
     this.banner = new OffscreenCanvas(sources.banner.width, sources.banner.height);
@@ -237,7 +250,15 @@ export class VrmAvatarRenderer implements FrameRenderer {
     if (this.options.debugSafeZone) drawSafeZone(ctx);
     ctx.drawImage(this.banner, sources.banner.x, sources.banner.y);
     if (this.markingBone) {
-      this.anchors = { light: this.project(this.tabPoint), text: this.project(this.textPoint), shape: 'tab' };
+      const center = this.project(this.textPoint);
+      this.anchors = {
+        light: this.project(this.tabPoint),
+        text: center,
+        shape: 'tab',
+        ...(this.hasTextFrame
+          ? { textFrame: { center, right: this.project(this.textRight), down: this.project(this.textDown), unit: TEXT_FRAME_UNIT } }
+          : {}),
+      };
     }
     return shape;
   }
@@ -280,6 +301,52 @@ function createCamera(vrm: VRM, frame: VrmCamera, log: (message: string) => void
 }
 
 const PROJECTED = new THREE.Vector3();
+/** Longueur (pixels au repos) des axes du repère du tissu sous le marquage. */
+const TEXT_FRAME_UNIT = 40;
+
+/**
+ * Repère du tissu au point du cadre pixel (marquage) : centre par un rayon de la caméra, normale du triangle de la veste
+ * touché (sommets déformés par le squelette), puis deux directions le long de la surface, droite (horizontale du
+ * cadre ramenée dans le plan du tissu) et bas, de TEXT_FRAME_UNIT pixels au repos. Tout est exprimé dans le repère de
+ * l'os du torse. Sans contact : centre seul (texte droit).
+ */
+function surfaceFrame(
+  vrm: VRM,
+  camera: THREE.Camera,
+  bone: THREE.Object3D,
+  pixel: { x: number; y: number },
+  log: (message: string) => void,
+): { center: THREE.Vector3; right?: THREE.Vector3; down?: THREE.Vector3 } {
+  vrm.scene.updateMatrixWorld(true);
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(new THREE.Vector2((pixel.x / AVATAR_WIDTH) * 2 - 1, 1 - (pixel.y / AVATAR_HEIGHT) * 2), camera);
+  const hit = raycaster.intersectObject(vrm.scene, true)[0];
+  if (!hit?.face || !(hit.object instanceof THREE.Mesh)) {
+    return { center: pinOnChest(vrm, camera, bone, pixel, 'marquage', log) };
+  }
+  const mesh = hit.object as THREE.Mesh;
+  const corner = (index: number) => mesh.getVertexPosition(index, new THREE.Vector3()).applyMatrix4(mesh.matrixWorld);
+  const [a, b, c] = [corner(hit.face.a), corner(hit.face.b), corner(hit.face.c)];
+  const normal = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a)).normalize();
+  if (normal.z < 0) normal.negate();
+  // Droite : axe x du monde ramené dans le plan du tissu ; bas : perpendiculaire dans ce plan, vers le bas.
+  const right = new THREE.Vector3(1, 0, 0).addScaledVector(normal, -normal.x).normalize();
+  const down = new THREE.Vector3().crossVectors(normal, right).normalize();
+  if (down.y > 0) down.negate();
+  // Longueur de chaque axe telle qu'il mesure TEXT_FRAME_UNIT pixels au repos : le raccourci dû à la pente du tissu
+  // est compensé (le texte garde sa taille lisible), seules sa direction et ses mouvements suivent la veste.
+  const center = hit.point.clone();
+  const px = (point: THREE.Vector3) => point.clone().project(camera).multiply(new THREE.Vector3(AVATAR_WIDTH / 2, AVATAR_HEIGHT / 2, 1));
+  const axisMeters = (axis: THREE.Vector3) =>
+    (0.01 * TEXT_FRAME_UNIT) / px(center.clone().addScaledVector(axis, 0.01)).sub(px(center)).setZ(0).length();
+  const tilt = THREE.MathUtils.radToDeg(Math.acos(Math.min(1, normal.z)));
+  log(`marqueur IA : marquage épinglé sur ${mesh.name || 'le modèle'}, tissu incliné de ${tilt.toFixed(0)}° par rapport à la caméra`);
+  return {
+    center: bone.worldToLocal(center.clone()),
+    right: bone.worldToLocal(center.clone().addScaledVector(right, axisMeters(right))),
+    down: bone.worldToLocal(center.clone().addScaledVector(down, axisMeters(down))),
+  };
+}
 
 /**
  * Point du devant de la veste placé à pixel dans le cadre, sur le personnage posé : rayon de la caméra à travers ce

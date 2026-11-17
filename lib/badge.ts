@@ -16,6 +16,12 @@ export interface MarkingAnchors {
   light: { x: number; y: number };
   /** Centre du marquage « IA ». */
   text: { x: number; y: number };
+  /**
+   * Repère du tissu sous le marquage (avatar 3D), projeté à chaque image : centre du texte, et points situés à unit
+   * pixels (au repos) vers la droite et vers le bas le long de la surface de la veste. Le texte suit ainsi la pente du
+   * tissu, les mouvements du buste et la respiration (rotation et légère déformation). Absent : texte droit sur text.
+   */
+  textFrame?: { center: { x: number; y: number }; right: { x: number; y: number }; down: { x: number; y: number }; unit: number };
   /** Forme du voyant : contour de la languette, ou disque (avatar SVG). */
   shape: 'tab' | 'round';
 }
@@ -77,11 +83,23 @@ export class AiMarking {
     ctx.stroke();
     ctx.restore();
 
-    // Marquage : encre « multiply », à peine transparente, pour qu'il paraisse imprimé dans le tissu.
+    // Marquage : ton d'impression (« multiply », opacité réduite) qui laisse transparaître les ombres du tissu.
     ctx.save();
     ctx.globalCompositeOperation = 'multiply';
     ctx.globalAlpha = MARKING.inkAlpha;
-    ctx.drawImage(this.text, Math.round(anchors.text.x - this.text.width / 2), Math.round(anchors.text.y - this.text.height / 2));
+    const { width, height } = this.text;
+    const frame = anchors.textFrame;
+    if (frame) {
+      // Transformation affine image → cadre : axes du tissu projetés, centre de l'image sur le centre du repère.
+      const a = (frame.right.x - frame.center.x) / frame.unit;
+      const b = (frame.right.y - frame.center.y) / frame.unit;
+      const c = (frame.down.x - frame.center.x) / frame.unit;
+      const d = (frame.down.y - frame.center.y) / frame.unit;
+      ctx.transform(a, b, c, d, frame.center.x - (a * width) / 2 - (c * height) / 2, frame.center.y - (b * width) / 2 - (d * height) / 2);
+      ctx.drawImage(this.text, 0, 0);
+    } else {
+      ctx.drawImage(this.text, Math.round(anchors.text.x - width / 2), Math.round(anchors.text.y - height / 2));
+    }
     ctx.restore();
   }
 

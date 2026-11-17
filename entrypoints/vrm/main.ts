@@ -8,7 +8,8 @@
 //   gardée) ; ?blink=1|0 : paupières fermées ou ouvertes imposées ; ?angry=0.1 : poids d'angry imposé ;
 // - ?model=android-source : autre modèle copié à la main dans avatar-vrm/ du build (essais seulement) ;
 // - ?software=1 : accepte le rendu WebGL logiciel (contrôle visuel sans carte graphique, trop lent pour un vrai usage) ;
-// - ?pause=1 : image de pause de la caméra injectée (sans avatar, donc sans marqueur).
+// - ?pause=1 : image de pause de la caméra injectée (sans avatar, donc sans marqueur) ;
+// - ?marking=cote|sous : placement du marquage (à côté de la languette, ou juste dessous).
 // Le marqueur IA (marquage et voyant de la languette, lib/badge.ts) est peint en dernier, comme dans la caméra injectée.
 
 import { MOUTH_SHAPES } from '@/lib/avatar';
@@ -39,6 +40,8 @@ const blinkParam = params.get('blink');
 const blink = blinkParam === null ? undefined : blinkParam === '1';
 const model = params.get('model') ?? undefined;
 const showPause = params.get('pause') === '1';
+const markingParam = params.get('marking');
+const markingPlacement = markingParam === 'cote' || markingParam === 'sous' ? markingParam : undefined;
 const canvas = document.querySelector<HTMLCanvasElement>('#avatar')!;
 const statsBox = document.querySelector<HTMLPreElement>('#stats')!;
 
@@ -74,6 +77,7 @@ try {
       state,
       ...(angry !== undefined && Number.isFinite(angry) ? { angry } : {}),
       ...(blink !== undefined ? { blink } : {}),
+      ...(markingPlacement ? { marking: markingPlacement } : {}),
     },
   );
   renderer.setState(current.state);
