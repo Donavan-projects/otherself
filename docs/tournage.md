@@ -5,12 +5,21 @@ Méthode testée sous Linux (X11) avec Chrome et OBS Studio.
 
 ## Avant la prise
 
-Dans `config.local.json`, puis `npm run build` et rechargement de l'extension dans `chrome://extensions` :
+Dans `config.local.json` (détail : `docs/config.md`), puis `npm run build` et rechargement de l'extension dans
+`chrome://extensions` :
 
-- `debugSafeZone` à `false` (sinon le contour magenta de la zone de sécurité est filmé) ;
-- voix du personnage (`en_US-norman-medium`) ou une autre voix publiable : jamais `en_US-joe-medium` ni
+- `avatarRenderer` absent ou à `vrm` (avatar 3D ; `fallback` forcerait l'avatar de secours, sans mouvement de tête) ;
+- `avatarName` (Nova par défaut) et `pronunciations` : le nom doit être bien prononcé (à l'oreille, page
+  `voices.html?prononcer=…`) ;
+- `language` et `badgeText` cohérents avec la plateforme : en anglais, marquage « AI » et image de pause « AI avatar
+  paused » ;
+- voix par défaut (`en_US-norman-medium`, +1,5 demi-ton) ou une autre voix publiable : jamais `en_US-joe-medium` ni
   `en_US-libritts_r-medium` (voir `THIRD_PARTY_NOTICES.md`) ;
+- `messageText` relu : il est dit tel quel après la révélation ;
 - `previewWindow` absent ou à `true` (bouton « Aperçu de l'avatar »).
+
+Dans Chrome : `chrome://gpu` doit indiquer « WebGL: Hardware accelerated » ; sans accélération, l'avatar de secours
+prend le relais (images fixes, sans respiration ni mouvement de tête).
 
 Sur la plateforme : pas de fond virtuel, cadrage automatique désactivé (Meet : Paramètres → Vidéo → Cadrage).
 
@@ -22,7 +31,10 @@ Tout l'écran est capturé, même si seules deux zones sont gardées au montage 
 - [ ] Autres fenêtres fermées (messagerie, courriel, gestionnaire de fichiers, terminal).
 - [ ] Notifications coupées (mode « Ne pas déranger » du bureau) ; notifications de Chrome et de la plateforme aussi.
 - [ ] Casque branché : la voix de l'avatar ne doit pas revenir par le micro du recruteur.
-- [ ] Rien de confidentiel dans le CV et les notes que l'avatar pourrait citer.
+- [ ] Rien de confidentiel dans le profil (`local/cv.md`, modèle : `docs/profil.md`) : l'avatar peut citer tout ce
+      qu'il contient, à voix haute.
+- [ ] Les boutons injectés dans la page (bouton OtherSelf de partage, bouton « Mettre en pause » / « Reprendre »)
+      seront filmés avec l'onglet : c'est attendu, ils font partie de la démo.
 
 ## Lancer l'entretien et l'aperçu
 
@@ -33,6 +45,8 @@ Tout l'écran est capturé, même si seules deux zones sont gardées au montage 
    plateforme, à l'endroit (la vignette de la plateforme est souvent en miroir), sans son.
 5. Agrandir la fenêtre d'aperçu par un coin et la placer à côté de l'onglet, sans chevauchement. Éloigner la souris :
    les commandes de la fenêtre disparaissent. Chrome affiche l'adresse du site en haut à gauche : la rogner (voir plus bas).
+6. Vérifier dans la console de l'onglet la ligne « rendu : avatar 3D (VRM) » (et non « avatar de secours »), et dans
+   l'aperçu le marquage « AI » et le voyant du col, entiers, non recadrés par la plateforme.
 
 Les fenêtres restent **fixes pendant toute la prise** : les zones de rognage d'OBS ne suivent pas une fenêtre déplacée.
 Si l'aperçu se ferme, le rouvrir depuis le popup et le replacer au même endroit.
@@ -55,7 +69,19 @@ La capture de fenêtre (Xcomposite) peut ne pas fonctionner avec Chrome : la cap
 
 ## Pendant et après la prise
 
-- Ne pas déplacer les fenêtres, ne pas changer d'onglet : un onglet en arrière-plan est ralenti par Chrome.
-- Logs utiles (console de l'onglet) : `[inject]` et `[preview]` donnent les images par seconde du flux envoyé,
-  avant et pendant l'aperçu (vers 30 images/s attendues).
-- Fin : arrêter l'enregistrement, puis popup → « Désactiver sur cet onglet » (l'aperçu se ferme avec).
+- Ne pas déplacer les fenêtres, ne pas changer d'onglet : ce qui est filmé doit rester à l'écran (l'avatar, lui,
+  continue à 30 images/s même onglet masqué).
+- Moments à faire apparaître :
+  - la révélation avec le nom (« I'm Nova, an AI avatar representing… »), puis `messageText` ;
+  - le voyant qui change de couleur : bleu à l'écoute, ambre pendant la réflexion, vert pendant la parole ;
+  - une question comportementale (« tell me about a time… ») : un exemple tiré des notes, avec son résultat ;
+  - une question sans réponse dans les notes : l'avatar le dit au lieu d'inventer ;
+  - éventuellement « are you human? », et une pause / reprise : image « AI avatar paused », puis rappel court à la
+    reprise.
+- Logs utiles :
+  - console de l'onglet : `[inject]` et `[preview]` donnent les images par seconde du flux envoyé, avant et pendant
+    l'aperçu (vers 30 images/s attendues) ;
+  - console du document offscreen (`chrome://extensions` → « Inspecter les vues : offscreen.html ») : transcription
+    horodatée `Recruteur : …` / `Avatar : …` (utile pour les sous-titres) et ligne `LATENCE` de chaque réponse.
+- Fin : arrêter l'enregistrement, puis popup → « Retirer complètement » (l'aperçu se ferme avec) ; la plateforme
+  reprend ensuite la vraie caméra et le vrai micro dans ses réglages.
