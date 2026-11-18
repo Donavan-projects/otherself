@@ -11,7 +11,7 @@ import { isGreetingOnly } from './greeting';
 import { streamReply, type ChatMessage } from './llm';
 import { clock, createLogger } from './log';
 import { int16ToFloat, resample } from './pcm';
-import { disclosureText, openingText, shortDisclosureText, systemPrompt } from './prompt';
+import { disclosureText, humorNote, openingText, shortDisclosureText, stripHumorMark, systemPrompt } from './prompt';
 import { createTranscriber, STT_SAMPLE_RATE, type Transcriber } from './stt';
 import type { SpeechAudio, TtsEngine } from './tts';
 import { Vad, VAD_SAMPLE_RATE } from './vad';
@@ -116,6 +116,8 @@ export class Conversation {
   /** Question restée sans réponse audible (recruteur qui reprend la parole). */
   private carried = '';
   private readonly history: ChatMessage[] = [];
+  /** Remarque d'humour sur sa condition d'IA déjà faite dans cet entretien (au plus une, voir lib/prompt.ts). */
+  private humorUsed = false;
   private readonly opening: string;
   private readonly system: string;
   private openingAudio: Promise<SpeechAudio[]>;
@@ -132,16 +134,16 @@ export class Conversation {
     cv: string,
     private readonly link: PageLink,
   ) {
-    const opening = openingText(config.language, config.messageText, config.candidateName);
+    const opening = openingText(config, config.messageText);
     this.opening = opening;
     // Le texte de l'ouverture n'est pas donné au LLM : il le recopiait mot pour mot.
-    this.system = systemPrompt(config.language, cv, config.candidateName);
+    this.system = systemPrompt(config, cv);
     // Ouverture synthétisée d'avance, phrase après phrase ; elle n'est jouée qu'une fois le
     // recruteur présent (fin de sa première prise de parole).
     // Révélation et message synthétisés à part : on sait ainsi quand la révélation a été entendue.
     this.openingAudio = (async () => {
       const audio: SpeechAudio[] = [];
-      for (const sentence of splitSentences(disclosureText(config.language, config.candidateName))) {
+      for (const sentence of splitSentences(disclosureText(config))) {
         audio.push(await voice.synthesize(sentence));
       }
       this.disclosureMs = audio.reduce((sum, chunk) => sum + (chunk.samples.length / chunk.sampleRate) * 1000, 0);
@@ -150,7 +152,7 @@ export class Conversation {
       return audio;
     })();
     this.shortDisclosureAudio = this.openingAudio
-      .then(() => voice.synthesize(shortDisclosureText(config.language, config.candidateName)))
+      .then(() => voice.synthesize(shortDisclosureText(config)))
       .then((audio) => {
         this.shortDisclosureMs = (audio.samples.length / audio.sampleRate) * 1000;
         return audio;
@@ -179,6 +181,7 @@ export class Conversation {
   reset(reason: string) {
     this.interrupt(reason);
     this.history.length = 0;
+    this.humorUsed = false;
     this.carried = '';
     this.preroll = [];
     this.prerollSamples = 0;
@@ -478,7 +481,7 @@ export class Conversation {
     if (this.revealed) {
       // Reprise après une pause : la révélation complète a déjà été entendue, le rappel court suffit.
       audio = [await this.shortDisclosureAudio];
-      text = shortDisclosureText(this.config.language, this.config.candidateName);
+      text = shortDisclosureText(this.config);
       this.remember(text);
       log(`reprise après une pause : rappel court de la révélation (réponse ${response.id})`);
     } else if (this.openingPlays < MAX_OPENING_PLAYS) {
@@ -492,7 +495,7 @@ export class Conversation {
       );
     } else {
       audio = [await this.shortDisclosureAudio];
-      text = shortDisclosureText(this.config.language, this.config.candidateName);
+      text = shortDisclosureText(this.config);
       this.remember(text);
       log(`ouverture déjà coupée ${MAX_OPENING_PLAYS} fois : rappel court de la révélation (réponse ${response.id})`);
     }
@@ -510,6 +513,7 @@ export class Conversation {
     const messages: ChatMessage[] = [
       { role: 'system', content: this.system },
       ...this.history.slice(-MAX_HISTORY_MESSAGES),
+      { role: 'system', content: humorNote(this.humorUsed) },
       { role: 'user', content: question },
     ];
     log(`question envoyée au LLM (${this.config.llmModel}) : « ${question} »`);
@@ -538,7 +542,13 @@ export class Conversation {
             response.timings.firstToken = Date.now() - questionEndAt;
             log(`premier mot reçu ${response.timings.firstToken} ms après la fin de la question`);
           }
-          buffer += delta;
+          // Signe de la remarque d'humour : retiré avant la voix et la transcription, compté une fois pour toutes.
+          const { text: clean, marked } = stripHumorMark(delta);
+          if (marked && !this.humorUsed) {
+            this.humorUsed = true;
+            log('remarque d’humour faite : plus aucune dans cet entretien');
+          }
+          buffer += clean;
           const ready = take(false);
           if (ready.length) {
             sentences.push(...ready);
@@ -548,7 +558,7 @@ export class Conversation {
         signal,
       );
       sentences.push(...take(true));
-      this.history.push({ role: 'user', content: question }, { role: 'assistant', content: reply });
+      this.history.push({ role: 'user', content: question }, { role: 'assistant', content: stripHumorMark(reply).text });
     } catch (error) {
       if (!signal.aborted) log(`erreur : ${error instanceof Error ? error.message : String(error)}`);
     } finally {

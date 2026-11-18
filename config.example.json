@@ -4,6 +4,8 @@
   "testAudio": "local/test-audio.ogg",
   "language": "en",
   "candidateName": "Alex",
+  "avatarName": "Nova",
+  "pronunciations": {},
   "messageText": "Alex would prefer to be interviewed by a human, and kindly asks for that option. In the meantime, I will answer your questions about Alex.",
   "cv": "local/cv.md",
   "openaiApiKey": "sk-proj-REMPLACER-PAR-VOTRE-CLE",

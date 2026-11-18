@@ -3,10 +3,11 @@
 // la vitesse de synthèse et la variation de hauteur (indice de l'intonation), et permet d'écouter.
 
 import { loadDemoConfig } from '@/lib/config';
-import { openingText } from '@/lib/prompt';
+import { candidateLabel, openingText } from '@/lib/prompt';
+import { createPronouncer } from '@/lib/pronunciation';
 import { createLogger } from '@/lib/log';
 import { encodeWav, floatToInt16 } from '@/lib/pcm';
-import { PiperVoice, type PiperScales, type SpeechAudio } from '@/lib/tts';
+import { DEFAULT_PIPER_SCALES, PiperVoice, type PiperScales, type SpeechAudio } from '@/lib/tts';
 import { OpenAiVoice } from '@/lib/tts-openai';
 import { configureOnnxRuntime } from '@/lib/vad';
 
@@ -52,6 +53,8 @@ export interface BenchResult {
   engine: string;
   settings: string;
   sentence: number;
+  text: string;
+  phonemes: string;
   firstAudioMs: number;
   totalMs: number;
   audioMs: number;
@@ -118,7 +121,8 @@ function addRow(result: BenchResult) {
   const cells = [
     result.engine,
     result.settings,
-    String(result.sentence),
+    result.text,
+    result.phonemes || '-',
     `${Math.round(result.firstAudioMs)} ms`,
     `${Math.round(result.totalMs)} ms`,
     `${(result.audioMs / 1000).toFixed(2)} s`,
@@ -129,18 +133,20 @@ function addRow(result: BenchResult) {
   cells.forEach((text, index) => {
     const cell = row.insertCell();
     cell.textContent = text;
-    if (index >= 3) cell.className = 'num';
+    if (index >= 4) cell.className = 'num';
   });
   row.insertCell().append(audio);
 }
 
-async function measure(engine: string, label: string, sentence: number, run: (onAudio: (audio: SpeechAudio) => void) => Promise<void>) {
+async function measure(engine: string, label: string, sentence: number, text: string, run: (onAudio: (audio: SpeechAudio & { phonemes?: string }) => void) => Promise<void>) {
   const pieces: Float32Array[] = [];
+  let phonemes = '';
   let sampleRate = 22050;
   let firstAudioMs = 0;
   const started = performance.now();
   await run((audio) => {
     if (pieces.length === 0) firstAudioMs = performance.now() - started;
+    phonemes = [phonemes, audio.phonemes ?? ''].filter(Boolean).join(' | ');
     pieces.push(audio.samples);
     sampleRate = audio.sampleRate;
   });
@@ -155,6 +161,8 @@ async function measure(engine: string, label: string, sentence: number, run: (on
     engine,
     settings: label,
     sentence,
+    text,
+    phonemes,
     firstAudioMs,
     totalMs,
     audioMs: (samples.length / sampleRate) * 1000,
@@ -169,14 +177,38 @@ const config = await loadDemoConfig();
 // &jeu=entretien : l'ouverture réelle (révélation et messageText de config.local.json), une réponse type sur le
 // parcours du candidat et la phrase des noms de projets. &phrases=… : phrases libres, séparées par « | ».
 const interviewSet = [
-  openingText(config.language, config.messageText, config.candidateName),
+  openingText(config, config.messageText),
   "Donavan has fourteen years of operational experience. He now builds AI products and automation workflows.",
   'His recent projects include ADELIN, Curator Agent, IntelAgent, Familiar.dev, and Loupe.',
 ];
-const SENTENCES =
-  params.get('jeu') === 'entretien'
-    ? interviewSet
-    : (params.get('phrases')?.split('|').map((item) => item.trim()).filter(Boolean) ?? DEFAULT_SENTENCES);
+// ?prononcer=Nova:Nohvah,Nowvah,Noh-vah : chaque graphie dans une phrase de révélation et seule, l'orthographe d'origine
+// en premier, sans dictionnaire ; voix, hauteur et réglages de config.local.json (sauf &voix=…).
+const toCompare = params.get('prononcer');
+const [word = '', spellingList = ''] = (toCompare ?? '').split(':');
+const spellings = toCompare ? [word.trim(), ...spellingList.split(',').map((item) => item.trim()).filter(Boolean)] : [];
+const candidate = candidateLabel(config.language, config.candidateName);
+const pronunciationSet = spellings.flatMap((spelling) =>
+  config.language === 'fr'
+    ? [`Je suis ${spelling}, un avatar IA qui représente ${candidate}.`, `${spelling}.`]
+    : [`I'm ${spelling}, an AI avatar representing ${candidate}.`, `${spelling}.`],
+);
+// Le jeu « entretien » et les phrases libres passent par le dictionnaire, comme dans l'entretien réel.
+const pronounce = createPronouncer(config.pronunciations);
+const SENTENCES = toCompare
+  ? pronunciationSet
+  : (params.get('jeu') === 'entretien'
+      ? interviewSet
+      : (params.get('phrases')?.split('|').map((item) => item.trim()).filter(Boolean) ?? DEFAULT_SENTENCES)
+    ).map(pronounce);
+if (toCompare && !params.has('voix')) {
+  piperVoices.splice(0, piperVoices.length, {
+    label: `${config.voice}${config.pitchSemitones ? ` ${config.pitchSemitones > 0 ? '+' : ''}${config.pitchSemitones} demi-ton(s)` : ''}`,
+    voiceId: config.voice,
+    speaker: undefined,
+    scales: { ...DEFAULT_PIPER_SCALES, ...config.piperScales },
+    pitchSemitones: config.pitchSemitones,
+  });
+}
 configureOnnxRuntime();
 // Voix consécutives sur le même modèle (locuteurs d'une voix libritts) : un seul chargement.
 let loaded = null as { voiceId: string; voice: PiperVoice } | null;
@@ -194,7 +226,7 @@ for (const item of piperVoices) {
     const label = `${scales.lengthScale} / ${scales.noiseScale} / ${scales.noiseW}`;
     for (const [index, sentence] of SENTENCES.entries()) {
       status(`${item.label}, ${label}, phrase ${index + 1}`);
-      await measure(`Piper ${item.label}`, label, index + 1, async (onAudio) =>
+      await measure(`Piper ${item.label}`, label, index + 1, sentence, async (onAudio) =>
         onAudio(await voice.synthesize(sentence, scales, item.speaker, item.pitchSemitones)),
       );
     }
@@ -206,7 +238,7 @@ for (const voiceName of openaiVoices) {
   const voice = new OpenAiVoice({ apiKey: config.openaiApiKey, model: config.openaiTtsModel, voice: voiceName });
   for (const [index, sentence] of SENTENCES.entries()) {
     status(`OpenAI ${voiceName}, phrase ${index + 1}`);
-    await measure(`OpenAI ${voiceName}`, config.openaiTtsModel, index + 1, (onAudio) => voice.stream(sentence, onAudio));
+    await measure(`OpenAI ${voiceName}`, config.openaiTtsModel, index + 1, sentence, (onAudio) => voice.stream(sentence, onAudio));
   }
 }
 window.__bench.done = true;

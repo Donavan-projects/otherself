@@ -94,7 +94,7 @@ export interface TtsEngine {
 
 interface Pending {
   text: string;
-  resolve(audio: SpeechAudio & { elapsedMs: number }): void;
+  resolve(audio: SpeechAudio & { elapsedMs: number; phonemes: string }): void;
   reject(error: Error): void;
 }
 
@@ -172,7 +172,7 @@ export class PiperVoice implements TtsEngine {
   }
 
   /** `scales`, `speaker`, `pitchSemitones` : réglages pour cette phrase (banc d'essai), gardés pour les suivantes. */
-  synthesize(text: string, scales?: Partial<PiperScales>, speaker?: string, pitchSemitones?: number): Promise<SpeechAudio & { elapsedMs: number }> {
+  synthesize(text: string, scales?: Partial<PiperScales>, speaker?: string, pitchSemitones?: number): Promise<SpeechAudio & { elapsedMs: number; phonemes: string }> {
     const id = (this.nextId += 1);
     return new Promise((resolve, reject) => {
       this.pending.set(id, { text, resolve, reject });
@@ -191,7 +191,7 @@ export class PiperVoice implements TtsEngine {
       pending.reject(new Error(message.message));
       return;
     }
-    const { sampleRate, elapsedMs } = message;
+    const { sampleRate, elapsedMs, phonemes } = message;
     const level = normalizeSpeech(message.samples, sampleRate);
     const { samples } = level;
     const durationMs = (samples.length / sampleRate) * 1000;
@@ -203,6 +203,6 @@ export class PiperVoice implements TtsEngine {
         `${level.afterPeak.toFixed(2)}, gain ×${level.gain.toFixed(1)}) : « ${pending.text} »` +
         (slow ? ' — voix trop lente pour cette machine, préférer une voix « medium » plus légère' : ''),
     );
-    pending.resolve({ samples, sampleRate, elapsedMs });
+    pending.resolve({ samples, sampleRate, elapsedMs, phonemes });
   }
 }

@@ -14,7 +14,8 @@
     "zip:firefox": "wxt zip -b firefox",
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare",
-    "vrm": "node --experimental-strip-types scripts/optimize-vrm.ts"
+    "vrm": "node --experimental-strip-types scripts/optimize-vrm.ts",
+    "bench:prompt": "node --experimental-strip-types scripts/bench-prompt.ts"
   },
   "devDependencies": {
     "@diffusionstudio/piper-wasm": "^1.0.0",

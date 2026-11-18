@@ -28,6 +28,8 @@ const PASSTHROUGH_FIELDS = [
   'avatarRenderer',
   'bargeInMs',
   'candidateName',
+  'avatarName',
+  'pronunciations',
   'monitorAvatar',
   'monitorVolume',
   'previewWindow',
@@ -149,6 +151,18 @@ export default defineConfig({
         if (config?.[field] !== undefined) warn(`${LOCAL_CONFIG} : champ "${field}" ignoré (personnage SVG retiré), à retirer`);
       }
       if (config?.photo !== undefined) warn(`${LOCAL_CONFIG} : champ "photo" ignoré (avatar cartoon, règle 4), à retirer`);
+      // Nom de l'avatar : jamais celui du candidat (l'avatar ne se fait pas passer pour lui) ; mêmes règles que
+      // avatarNameOrDefault (lib/config.ts), qui revient au défaut dans l'extension.
+      const avatarName = config?.avatarName;
+      const candidateName = typeof config?.candidateName === 'string' ? config.candidateName.trim() : '';
+      if (avatarName !== undefined && avatarName !== '') {
+        const name = typeof avatarName === 'string' ? avatarName.trim().replace(/\s+/g, ' ') : '';
+        if (candidateName && name.toLocaleLowerCase() === candidateName.toLocaleLowerCase()) {
+          warn(`${LOCAL_CONFIG} : "avatarName" égal à "candidateName" (l'avatar ne se fait jamais passer pour le candidat) : nom par défaut utilisé`);
+        } else if (!/^[\p{L}\p{M}][\p{L}\p{M}' -]*$/u.test(name) || name.length > 30) {
+          warn(`${LOCAL_CONFIG} : "avatarName" refusé (lettres, espaces, apostrophes et tirets, 30 caractères au plus) : nom par défaut utilisé`);
+        }
+      }
       if (config && !config.openaiApiKey) warn(`${LOCAL_CONFIG} : champ "openaiApiKey" manquant (pipeline voix inactif)`);
       files.push({ relativeDest: 'local/config.json', contents: JSON.stringify(output) });
     },

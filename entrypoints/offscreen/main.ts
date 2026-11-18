@@ -7,7 +7,9 @@
 
 import type { Browser } from 'wxt/browser';
 import { PORT_NAME, type FromOffscreen, type FromPage } from '@/lib/bridge-messages';
-import { loadDemoConfig, loadLocalText } from '@/lib/config';
+import { loadDemoConfig } from '@/lib/config';
+import { localFileProfile } from '@/lib/profile';
+import { withPronunciations } from '@/lib/pronunciation';
 import { Conversation } from '@/lib/conversation';
 import { createLogger } from '@/lib/log';
 import { AvatarMonitor } from '@/lib/monitor';
@@ -146,8 +148,9 @@ async function start() {
     log('openaiApiKey manquant dans config.local.json : pipeline voix inactif');
     return;
   }
-  const cv = await loadLocalText(config.cv);
-  log(`CV et notes chargés (${cv.length} caractères), langue ${config.language}`);
+  const profile = await localFileProfile(config).load();
+  const cv = profile.text;
+  log(`profil chargé : ${profile.origin}, ${cv.length} caractères ; langue ${config.language} ; avatar ${config.avatarName ? `« ${config.avatarName} »` : 'sans nom'}`);
   configureOnnxRuntime();
   // Voix : champs voice / openaiVoice / pitchSemitones de config.local.json, sinon celles de l'avatar (lib/config.ts).
   let voice: TtsEngine;
@@ -156,7 +159,10 @@ async function start() {
   } else {
     voice = await PiperVoice.load(config.voice, { ...DEFAULT_PIPER_SCALES, ...config.piperScales }, config.pitchSemitones);
   }
-  log(`synthèse vocale : ${voice.description}`);
+  // Prononciation (Piper) : seulement le texte envoyé à la voix (ni le LLM, ni la transcription « Avatar : … »).
+  if (config.ttsProvider === 'piper') voice = withPronunciations(voice, config.pronunciations);
+  const spellings = Object.entries(config.pronunciations).map(([word, said]) => `${word} → ${said}`).join(', ');
+  log(`synthèse vocale : ${voice.description}${config.ttsProvider === 'piper' && spellings ? ` (${spellings})` : ''}`);
   // Retour pour l'utilisateur : joué ici, jamais dans l'onglet capturé.
   const monitor = config.monitorAvatar ? new AvatarMonitor(config.monitorVolume) : null;
   if (!monitor) log('retour audio de la voix de l’avatar désactivé (monitorAvatar: false)');
