@@ -172,6 +172,13 @@ sans structure STAR ni résultats chiffrés). Cause principale : les limites de 
 - Un seul fichier de types décrit ce contrat, pour qu'un autre moteur (agent externe, autre service) puisse un
   jour le remplacer.
 - Pas de connecteur pour la démo. Tout moteur futur reste soumis aux règles 2, 3 et 5.
+- Profil du candidat : la source est déjà isolée derrière une interface (`lib/profile.ts`, `ProfileSource`) et son
+  format documenté (`docs/profil.md`). Pistes pour plus tard :
+  - conversion de n'importe quelle source (CV en PDF, Notion, second brain, Dots, Muse…) vers ce format,
+    automatique ou assistée par un LLM, avec relecture par l'utilisateur avant usage et sans invention : chaque
+    fait du profil converti doit venir de la source (citation ou lien vers le passage) ;
+  - sélection des passages utiles à chaque question quand la source est trop grosse pour le prompt (recherche
+    sémantique ou par mots-clés), sans jamais affaiblir la règle 5 : ce qui n'est pas retrouvé n'est pas inventé.
 
 ## Hors périmètre pour l'instant
 

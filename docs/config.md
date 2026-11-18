@@ -20,8 +20,9 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | `badgeText` | texte court | Marquage imprimé sur la veste de l'avatar à côté du voyant d'état (règle 1), en lettres pleines ; 12 caractères au plus | « IA » si `language` vaut `fr`, sinon « AI » (un texte vide est aussi remplacé) |
 | `language` | `en`, `fr` | Langue de l'entretien : transcription, réponses du LLM, phrase de révélation | `en` |
 | `candidateName` | texte | Prénom ou nom du candidat : l'avatar parle de lui à la troisième personne (« Alex a travaillé… »), et se présente comme « l'avatar IA qui représente Alex » | « the candidate » / « le candidat » |
+| `avatarName` | texte | Nom de l'avatar, dit dans la révélation et le rappel court (« I'm Nova, an AI avatar representing Alex… ») et quand on lui demande s'il est humain ; lettres, espaces, apostrophes et tirets, 30 caractères au plus. `""` : avatar sans nom (« I am an AI avatar representing Alex… »). Jamais le nom du candidat : l'avatar ne se fait pas passer pour lui ; dans ce cas, avertissement au build et nom par défaut | `Nova` |
 | `messageText` | texte | Mode « message » : déclaration prononcée juste après la révélation, avant de répondre aux questions | Révélation seule |
-| `cv` | md, txt | CV et notes du candidat, seule source des réponses (règle 5) | Avertissement au build ; l'avatar dit ne pas pouvoir répondre |
+| `cv` | md, txt | CV et notes du candidat, seule source des réponses (règle 5) ; modèle conseillé : [profil.md](profil.md) (une histoire par expérience clé : contexte, rôle, actions, résultat chiffré) | Avertissement au build ; l'avatar dit ne pas pouvoir répondre |
 | `openaiApiKey` | `sk-…` | Clé OpenAI (transcription et LLM) | Pipeline voix inactif, avertissement au build |
 | `voice` | identifiant Piper | Voix Piper de l'avatar : modèle téléchargé une seule fois depuis Hugging Face (aucune donnée de l'entretien ni du candidat envoyée), puis synthèse en local dans le navigateur (voir ci-dessous) | `en_US-norman-medium` |
 | `ttsProvider` | `piper`, `openai` | Synthèse vocale : Piper (local, gratuit) ou OpenAI (même clé, payante, en streaming) | `piper` |

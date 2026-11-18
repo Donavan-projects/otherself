@@ -70,6 +70,7 @@ entrypoints/
   fallback/            # génération des images du secours (pilotée par npm run vrm -- fallback)
 lib/
   vad.ts  stt.ts  llm.ts  tts.ts  prompt.ts  greeting.ts
+  profile.ts           # source du profil du candidat (interface ; aujourd'hui le fichier cv de config.local.json)
   avatar.ts            # avatar de secours (images rendues depuis le 3D) : yeux et bouche animés (monde MAIN et pages)
   badge.ts             # marqueur IA (règle 1) : marquage « IA » et voyant d'état de la languette, peints en dernier
   pause-frame.ts       # image de pause (« Avatar IA en pause »), sans avatar ni marqueur
@@ -102,13 +103,14 @@ scripts/
   check-locales.ts     # vérification des fichiers _locales au build
   optimize-vrm.ts      # MANUEL (npm run vrm) : inspection et allègement du VRM exporté par VRoid
   render-fallback.ts   # MANUEL (npm run vrm -- fallback) : images du secours rendues depuis le VRM dans Chromium
+  bench-prompt.ts      # MANUEL, payant (npm run bench:prompt) : banc du prompt en texte seul, rapport dans local/
 avatar/
   otherself.vrm        # avatar 3D allégé (commité, l'androïde depuis le 16/11) ; sources VRoid *-source.vrm ignorées par git
   secours/             # avatar de secours généré depuis otherself.vrm (WebP + secours.json, commité)
   fonds/               # fonds (SVG contenant une image WebP)
 public/fonts/          # DejaVu Sans Mono Bold (licence Bitstream Vera), police du marquage « IA »
 docs/
-  spec.md  config.md  visuel-otherself.md  tournage.md
+  spec.md  config.md  profil.md  visuel-otherself.md  tournage.md  feuille-de-route.md  architecture.md
 ```
 
 ## Décisions techniques (à connaître avant de modifier)
@@ -118,8 +120,12 @@ docs/
 - **Pas les pistes WebRTC** : Meet décode l'audio reçu en WebAssembly (NetEq) et le joue par Web Audio ; ses pistes WebRTC et ses éléments `<audio>` restent silencieux.
 - **Ouverture** : révélation puis `messageText`, jouée à la fin de la première prise de parole du recruteur, quand la plateforme a demandé le micro ; une seule révélation. Pendant l'ouverture, seuil d'interruption relevé à 2 s ; coupée après la révélation, elle n'est pas rejouée ; coupée avant, elle est rejouée une fois ; rappel court (« As a reminder… ») seulement ensuite. Après une pause, la réponse suivante commence par ce rappel court (pas l'ouverture complète), jusqu'à ce qu'il soit entendu en entier. Nouvelle page = nouvel entretien (le compteur des réponses, lui, continue). Une première prise de parole réduite à une salutation (`lib/greeting.ts`, « how are you » et « ça va » compris) reçoit l'ouverture seule, sans appel au LLM. Le LLM ne reçoit pas le texte de l'ouverture : le prompt dit qu'elle a été prononcée, interdit de la répéter, de se présenter ou de saluer, et demande une phrase honnête si on lui demande s'il est humain.
 - **Troisième personne** : l'avatar parle du candidat par son nom (`candidateName`), « you » du recruteur = le candidat, « I » réservé à l'avatar.
+- **Nom de l'avatar** (`avatarName`, étape 4) : « Nova » par défaut, `""` pour un avatar sans nom ; jamais égal à `candidateName` (avertissement au build, retour au défaut, ou sans nom si le défaut coïncide). Dit dans la révélation et le rappel court sans rien retirer à leur clarté (« I'm Nova, an AI avatar representing … ») ; sans nom, textes d'origine.
+- **Prompt système** (`lib/prompt.ts`, étape 4) : trois sections par ordre de priorité, la première l'emporte en cas de conflit : **Faits** (règle 5, chaque fait reste attaché à son projet, honnêteté sur la nature d'IA, rôle et refus de la manipulation), **Ton** (direct, chaleureux sans servilité, un peu d'esprit ; troisième personne ; au plus une remarque d'humour légère sur sa condition d'IA par entretien, jamais sur une question de faits, un refus ou aux dépens de l'interlocuteur ; la révélation n'est pas générée par le LLM), **Structure** (première phrase de 3 à 8 mots qui répond ; question factuelle ou fermée : deux phrases au plus ; comportementale : un seul exemple des notes en 4 à 6 phrases, contexte, actions, résultat chiffré si les notes en donnent un, sinon fin sur l'action ; ouverte : 2 à 4 phrases appuyées sur des faits ; 20 mots par phrase, trois éléments et deux noms de projet au plus, transitions rares). `lib/prompt.ts` reste sans dépendance (imports de types seulement) : `npm run bench:prompt` le charge tel quel.
+- **Source du profil** (`lib/profile.ts`) : interface `ProfileSource` ; seule implémentation, le fichier `cv` de `config.local.json`. Un futur connecteur la remplace sans toucher au reste. Format du profil : `docs/profil.md`.
+- **Banc du prompt** (`npm run bench:prompt -- [--ref main] [--runs 2] [--no-judge]`, manuel et payant, quelques centimes) : 13 questions (factuelles, comportementales, pièges sans réponse, « êtes-vous humain ? », manipulation) en entretien continu avec le vrai profil, prompt de `--ref` contre l'arbre de travail ; juge LLM (inventions, humour, structure, perspective, énumérations), aide à la relecture seulement. Rapport HTML et JSON dans `local/bench-prompt/` : il contient le profil, jamais commité.
 - **Écho** : casque recommandé. Protections : seuil d'interruption (`bargeInMs`, 600 ms de parole réelle par-dessus l'avatar), transcription reprenant surtout les mots de l'avatar ignorée, alerte `[vad]` si de la parole est détectée pendant que l'avatar parle.
-- **LLM** : `gpt-5.6-luna` par défaut, en streaming, `reasoning_effort: none`. `gpt-6-luna` reste possible mais son premier mot varie fortement (attente côté API). Logs `[llm]` : une ligne par appel (en-têtes, premier mot, fin, tokens dont cache et raisonnement, identifiant de requête) ; `openai-processing-ms` n'est pas exposé aux navigateurs (CORS). Prompt pour l'oral : première phrase de 3 à 6 mots, deux phrases au plus sauf demande de détails, trois éléments au plus, deux noms de projets au plus, contractions.
+- **LLM** : `gpt-5.6-luna` par défaut, en streaming, `reasoning_effort: none`. `gpt-6-luna` reste possible mais son premier mot varie fortement (attente côté API). Logs `[llm]` : une ligne par appel (en-têtes, premier mot, fin, tokens dont cache et raisonnement, identifiant de requête) ; `openai-processing-ms` n'est pas exposé aux navigateurs (CORS). Prompt pour l'oral : voir « Prompt système ».
 - **Voix** : valeurs par défaut dans `lib/config.ts` (`voice`, `openaiVoice`, `pitchSemitones`), les champs de `config.local.json` l'emportent : `en_US-norman-medium` (LibriVox, domaine public, entraînée de zéro), +1,5 demi-ton ; `ash` pour OpenAI. **Jamais `en_US-joe-medium` ni `en_US-libritts_r-medium` pour une publication** : affinées à partir de `lessac` (licence Blizzard 2013, recherche). Réglages Piper (`DEFAULT_PIPER_SCALES`) : length_scale 0,92, noise_scale 0,8, noise_w 1. Voix normalisée (−18 dBFS RMS, crête ≤ −1 dBFS). Découpe des réponses (`lib/chunks.ts`) uniquement à la ponctuation, jamais devant une conjonction ou une préposition, premier morceau court.
 - **Hauteur de la voix** (`pitchSemitones`) : synthèse Piper avec `length_scale` × f (f = 2^(n/12)), audio déclaré à une fréquence f fois plus haute (équivaut à un playbackRate de f) : débit inchangé, durées calculées justes, bouche synchronisée sur le son joué.
 - **Option `ttsProvider: "openai"`** (`gpt-4o-mini-tts`, PCM en streaming) : le flux arrive parfois plus lentement que le temps réel (trous dans la voix) ; pas pour la démo.
