@@ -65,13 +65,15 @@ export interface Sprite<T> {
 export interface AvatarAssets<T> {
   /** Plein cadre fixe : fond, corps, vêtements, tête sans yeux ni bouche, slogan et sa surimpression. */
   under: T;
-  /** Sourcils et cheveux de devant, par-dessus les yeux. */
-  over: Sprite<T>;
+  /** Sourcils et cheveux de devant, par-dessus les yeux (avatar SVG) ; absent pour le secours rendu depuis le modèle 3D. */
+  over?: Sprite<T> | undefined;
   /** aside : iris décalés (regard de côté, état « en réflexion ») ; absent si le dessin ne s'y prête pas. */
   eyes: { open: Sprite<T>; closed: Sprite<T>; aside?: Sprite<T> | undefined };
   mouths: Record<MouthShape, Sprite<T>>;
   /** Zone redessinée à chaque image : yeux et bouches. */
   region: Rect;
+  /** Position du marqueur IA relevée sur le modèle 3D au repos (secours) ; absente : positions fixes de l'avatar SVG. */
+  marking?: MarkingAnchors | undefined;
 }
 
 export async function mapAssets<A, B>(assets: AvatarAssets<A>, convert: (image: A) => Promise<B>): Promise<AvatarAssets<B>> {
@@ -79,7 +81,7 @@ export async function mapAssets<A, B>(assets: AvatarAssets<A>, convert: (image: 
   const mouths = await Promise.all(MOUTH_SHAPES.map(async (shape) => [shape, await sprite(assets.mouths[shape])] as const));
   return {
     under: await convert(assets.under),
-    over: await sprite(assets.over),
+    over: assets.over && (await sprite(assets.over)),
     eyes: {
       open: await sprite(assets.eyes.open),
       closed: await sprite(assets.eyes.closed),
@@ -87,6 +89,7 @@ export async function mapAssets<A, B>(assets: AvatarAssets<A>, convert: (image: 
     },
     mouths: Object.fromEntries(mouths) as Record<MouthShape, Sprite<B>>,
     region: assets.region,
+    marking: assets.marking,
   };
 }
 
@@ -201,7 +204,7 @@ export class AvatarRenderer {
 
   /** Marqueur IA : positions fixes sur le personnage SVG (cadrage inchangé jusqu'à 3e), voyant rond sur le revers. */
   markingAnchors(): MarkingAnchors {
-    return { light: MARKING.svg.light, text: MARKING.svg.text, shape: 'round' };
+    return this.assets.marking ?? { light: MARKING.svg.light, text: MARKING.svg.text, shape: 'round' };
   }
 
   setState(state: AvatarState) {
@@ -226,7 +229,7 @@ export class AvatarRenderer {
     if (this.complete) {
       ctx.drawImage(assets.under, region.x, region.y, region.width, region.height, region.x, region.y, region.width, region.height);
       // Sous le marqueur IA, peint ensuite par l'appelant : fond d'origine, pour qu'il ne s'empile pas.
-      const clear = MARKING_SVG_CLEARANCE;
+      const clear = this.assets.marking ? markingClearance(this.assets.marking) : MARKING_SVG_CLEARANCE;
       ctx.drawImage(assets.under, clear.x, clear.y, clear.width, clear.height, clear.x, clear.y, clear.width, clear.height);
     } else {
       ctx.drawImage(assets.under, 0, 0);
@@ -238,17 +241,30 @@ export class AvatarRenderer {
     const mouth = assets.mouths[shape];
     ctx.drawImage(eyes.image, eyes.x, eyes.y);
     ctx.drawImage(mouth.image, mouth.x, mouth.y);
-    if (this.complete) {
+    const over = assets.over;
+    if (over && this.complete) {
       ctx.save();
       ctx.beginPath();
       ctx.rect(region.x, region.y, region.width, region.height);
       ctx.clip();
-      ctx.drawImage(assets.over.image, assets.over.x, assets.over.y);
+      ctx.drawImage(over.image, over.x, over.y);
       ctx.restore();
-    } else {
-      ctx.drawImage(assets.over.image, assets.over.x, assets.over.y);
-      this.complete = true;
+    } else if (over) {
+      ctx.drawImage(over.image, over.x, over.y);
     }
+    this.complete = true;
     return shape;
   }
+}
+
+/** Zone redessinée sous le marqueur IA (voyant et halo, marquage) quand sa position vient du modèle 3D. */
+function markingClearance(marking: MarkingAnchors): Rect {
+  const halo = MARKING.haloRadius + 4;
+  const textHalfWidth = 50;
+  const textHalfHeight = MARKING.capHeight;
+  const x0 = Math.floor(Math.min(marking.light.x - halo, marking.text.x - textHalfWidth));
+  const y0 = Math.floor(Math.min(marking.light.y - halo, marking.text.y - textHalfHeight));
+  const x1 = Math.ceil(Math.max(marking.light.x + halo, marking.text.x + textHalfWidth));
+  const y1 = Math.ceil(Math.max(marking.light.y + halo, marking.text.y + textHalfHeight));
+  return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
 }

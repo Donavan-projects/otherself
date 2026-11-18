@@ -119,6 +119,13 @@ export default defineConfig({
           files.push({ absoluteSrc: resolve(root, dir, file), relativeDest: `${dest}/${file}` });
         }
       }
+      // Avatar de secours : images rendues depuis le modèle 3D (npm run vrm -- fallback), commitées.
+      const fallbackDir = resolve(root, 'avatar/secours');
+      if (existsSync(fallbackDir)) {
+        for (const file of readdirSync(fallbackDir).filter((name) => /\.(webp|json)$/.test(name))) {
+          files.push({ absoluteSrc: resolve(fallbackDir, file), relativeDest: `avatar-secours/${file}` });
+        }
+      }
       // Prototype VRM : modèle 3D allégé (npm run vrm -- optimize), commité ; la source exportée par VRoid ne l'est pas.
       if (existsSync(resolve(root, VRM_MODEL))) files.push({ absoluteSrc: resolve(root, VRM_MODEL), relativeDest: 'avatar-vrm/otherself.vrm' });
       for (const [dest, src] of Object.entries(VENDOR_FILES)) {

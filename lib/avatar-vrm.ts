@@ -96,6 +96,9 @@ export interface VrmPreviewOptions {
   angry?: number;
   /** Paupières fermées (vrai) ou ouvertes (faux) imposées (?blink=1|0), pour vérifier le mélange avec les expressions. */
   blink?: boolean;
+  /** Génération du secours : poids de relaxed fixe (sans atténuation par la bouche), regard de côté tête immobile. */
+  relaxed?: number;
+  gazeAside?: boolean;
 }
 
 export async function createVrmRenderer(
@@ -246,6 +249,11 @@ export class VrmAvatarRenderer implements FrameRenderer {
 
   setState(state: AvatarState) {
     this.motion.setState(state);
+  }
+
+  /** Génération du secours : rendu WebGL du personnage seul, sur fond transparent (lu juste après draw). */
+  get glCanvas(): HTMLCanvasElement {
+    return this.renderer.domElement;
   }
 
   markingAnchors(): MarkingAnchors {
@@ -486,7 +494,7 @@ class VrmMotion {
     // Expressions VRoid (Fcl_ALL_*) : elles touchent aussi bouche et paupières, d'où des poids faibles,
     // relaxed atténué quand la bouche s'ouvre et un clignement réduit d'autant que les yeux sont déjà plissés.
     const openness = Math.max(...VISEMES.map((name) => this.weights.get(name) ?? 0));
-    const relaxed = style.relaxed * (1 - RELAXED_MOUTH_DAMPING * Math.min(1, openness / 0.8));
+    const relaxed = this.preview.relaxed ?? style.relaxed * (1 - RELAXED_MOUTH_DAMPING * Math.min(1, openness / 0.8));
     this.setExpression('relaxed', relaxed);
     this.setExpression('angry', style.angry);
     const closed = this.preview.blink ?? (!still && this.blink.closed(now));
@@ -515,8 +523,11 @@ class VrmMotion {
       this.gaze.yaw = approach(this.gaze.yaw, this.gazeWanted.yaw, dt, 0.03);
       this.gaze.pitch = approach(this.gaze.pitch, this.gazeWanted.pitch, dt, 0.03);
     }
-    const asideYaw = this.asideSign * style.gazeAsideYaw * DEG;
-    const asideUp = style.gazeAsideUp * DEG;
+    // Génération du secours (?gazeAside) : regard de côté de la réflexion, tête immobile.
+    const aside = this.preview.gazeAside ? STATE_STYLES.reflexion : style;
+    const asideYaw = this.asideSign * aside.gazeAsideYaw * DEG;
+    const asideUp = aside.gazeAsideUp * DEG;
+    const headFollow = this.preview.gazeAside ? 0 : HEAD_FOLLOW_ASIDE;
     const jitterYaw = still ? 0 : this.gaze.yaw;
     const jitterPitch = still ? 0 : this.gaze.pitch;
     const gazeYaw = asideYaw + jitterYaw;
@@ -537,11 +548,11 @@ class VrmMotion {
     const motion = still ? 0 : 1;
     const elapsed = now - this.nodStart;
     const nod = elapsed >= 0 && elapsed < NOD_MS ? Math.sin((Math.PI * elapsed) / NOD_MS) * style.nod * DEG : 0;
-    const yaw = motion * (style.headDrift * 2.2 * DEG * drift(t, 0.3, 0.05, 0.13, 0.31) + s * 1.2 * DEG * drift(t, 2.1, 0.4, 0.9)) + 0.3 * jitterYaw + HEAD_FOLLOW_ASIDE * asideYaw;
+    const yaw = motion * (style.headDrift * 2.2 * DEG * drift(t, 0.3, 0.05, 0.13, 0.31) + s * 1.2 * DEG * drift(t, 2.1, 0.4, 0.9)) + 0.3 * jitterYaw + headFollow * asideYaw;
     const pitch =
       motion * (style.headDrift * 1.4 * DEG * drift(t, 1.7, 0.07, 0.19) + s * 1.6 * DEG * drift(t, 0.8, 1.6, 2.7)) -
       0.25 * jitterPitch -
-      HEAD_FOLLOW_ASIDE * asideUp +
+      headFollow * asideUp +
       style.headPitch * DEG +
       nod;
     const roll = motion * (style.headDrift * 1.2 * DEG * drift(t, 4.2, 0.04, 0.11) + s * 1.0 * DEG * drift(t, 3.3, 0.35, 0.8)) + style.headTilt * DEG;

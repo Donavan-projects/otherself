@@ -1,0 +1,60 @@
+{
+  "generator": "npm run vrm -- fallback",
+  "frame": {
+    "width": 1280,
+    "height": 720
+  },
+  "character": "personnage.webp",
+  "eyes": {
+    "rect": {
+      "x": 554,
+      "y": 216,
+      "width": 172,
+      "height": 65
+    },
+    "open": "yeux-ouverts.webp",
+    "closed": "yeux-fermes.webp",
+    "aside": "yeux-cote.webp"
+  },
+  "mouth": {
+    "rect": {
+      "x": 557,
+      "y": 318,
+      "width": 167,
+      "height": 82
+    },
+    "shapes": {
+      "repos": "bouche-repos.webp",
+      "A": "bouche-A.webp",
+      "E": "bouche-E.webp",
+      "O": "bouche-O.webp",
+      "M": "bouche-M.webp"
+    }
+  },
+  "marking": {
+    "light": {
+      "x": 578,
+      "y": 470.0000000000001
+    },
+    "text": {
+      "x": 652,
+      "y": 516.0000000000007
+    },
+    "shape": "tab",
+    "textFrame": {
+      "center": {
+        "x": 652,
+        "y": 516.0000000000007
+      },
+      "right": {
+        "x": 691.9720580391745,
+        "y": 516.9942747606592
+      },
+      "down": {
+        "x": 652.065294259407,
+        "y": 556.1633717142125
+      },
+      "unit": 40
+    }
+  }
+}
