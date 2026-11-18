@@ -1,3 +1,5 @@
+> **Document historique, dépassé (08/10/2026).** Pitch initial du projet sous son ancien nom, Contre-Recruteur, dans un esprit satirique abandonné depuis. Ce qui fait foi : la mission et les règles de [CLAUDE.md](../CLAUDE.md) ; présentation actuelle : [README.md](../README.md).
+
 # Contre-Recruteur — pitch & specs
 
 Oct 8, 2026 · @Donavan
