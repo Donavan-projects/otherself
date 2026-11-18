@@ -185,8 +185,8 @@ async function main() {
     results.push({ label: version.label, prompt, runs: all });
   }
 
-  // Révélations (règle 2), avec et sans nom : textes fixes, sans appel au LLM.
-  const current = versions[1]!.module as Required<PromptModule>;
+  // Révélations (règle 2), avec et sans nom : textes fixes de l'extension (lib/disclosure.ts), sans appel au LLM.
+  const current = (await import(pathToFileURL(resolve('lib/disclosure.ts')).href)) as Required<PromptModule>;
   const disclosures = (['en', 'fr'] as const).flatMap((language) =>
     ['Nova', ''].map((avatarName) => {
       const p = { ...persona, language, avatarName };

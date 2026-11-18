@@ -8,6 +8,7 @@
 import type { Browser } from 'wxt/browser';
 import { PORT_NAME, type FromOffscreen, type FromPage } from '@/lib/bridge-messages';
 import { loadDemoConfig } from '@/lib/config';
+import { llmEngine } from '@/lib/llm-engine';
 import { localFileProfile } from '@/lib/profile';
 import { withPronunciations } from '@/lib/pronunciation';
 import { Conversation } from '@/lib/conversation';
@@ -148,9 +149,9 @@ async function start() {
     log('openaiApiKey manquant dans config.local.json : pipeline voix inactif');
     return;
   }
-  const profile = await localFileProfile(config).load();
-  const cv = profile.text;
-  log(`profil chargé : ${profile.origin}, ${cv.length} caractères ; langue ${config.language} ; avatar ${config.avatarName ? `« ${config.avatarName} »` : 'sans nom'}`);
+  // Moteur conversationnel (contrat : lib/engine.ts) : reçoit son profil par la source du profil.
+  const engine = await llmEngine({ apiKey: config.openaiApiKey, model: config.llmModel })(localFileProfile(config), config);
+  log(`moteur conversationnel : ${engine.description}`);
   configureOnnxRuntime();
   // Voix : champs voice / openaiVoice / pitchSemitones de config.local.json, sinon celles de l'avatar (lib/config.ts).
   let voice: TtsEngine;
@@ -166,7 +167,7 @@ async function start() {
   // Retour pour l'utilisateur : joué ici, jamais dans l'onglet capturé.
   const monitor = config.monitorAvatar ? new AvatarMonitor(config.monitorVolume) : null;
   if (!monitor) log('retour audio de la voix de l’avatar désactivé (monitorAvatar: false)');
-  conversation = await Conversation.create(config, voice, cv, {
+  conversation = await Conversation.create(config, voice, engine, {
     speak: (responseId, audio) => {
       post({ type: 'speak', responseId, pcm: bufferToBase64(audio.samples.buffer), sampleRate: audio.sampleRate });
       monitor?.play(audio);

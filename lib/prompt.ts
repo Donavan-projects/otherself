@@ -1,59 +1,13 @@
-// Textes imposés par les règles : ouverture (révélation + mode « message ») et prompt système du LLM.
-// Sans dépendance (imports de types seulement) : chargé tel quel par scripts/bench-prompt.ts.
+// Prompt système du moteur conversationnel actuel (lib/llm-engine.ts) et convention de l'humour. Les textes fixes de
+// la transparence (révélation, rappel, ouverture) n'en font pas partie : lib/disclosure.ts, côté extension.
+// Imports avec l'extension .ts : chargé tel quel par scripts/bench-prompt.ts (Node).
 
 import type { Language } from './config';
+import { candidateLabel, possessive, type Persona } from './disclosure.ts';
 
-/** Qui parle et de qui : langue, candidat représenté, nom de l'avatar (vide : avatar sans nom). */
-export interface Persona {
-  language: Language;
-  candidateName: string;
-  avatarName: string;
-}
-
-const DEFAULT_NAME: Record<Language, string> = { en: 'the candidate', fr: 'le candidat' };
-
-/** Le candidat tel que l'avatar le nomme : son prénom, sinon « the candidate ». */
-export function candidateLabel(language: Language, candidateName: string): string {
-  return candidateName.trim() || DEFAULT_NAME[language];
-}
-
-const possessive = (name: string) => (/s$/i.test(name) ? `${name}'` : `${name}'s`);
-
-// Règle 2 : prononcée avant toute réponse, non désactivable. L'avatar parle du candidat à la troisième personne ;
-// « I » ne désigne que l'avatar. Son nom, s'il en a un, s'ajoute sans rien retirer : « avatar IA » reste dit en clair.
-function disclosure({ language, avatarName }: Persona, name: string): string {
-  const avatar = avatarName.trim();
-  if (language === 'fr') {
-    const who = avatar ? `je suis ${avatar}, un avatar IA qui représente ${name}` : `je suis un avatar IA qui représente ${name}`;
-    return `Bonjour. Avant de commencer, je tiens à être transparent : ${who}, et je réponds uniquement à partir de son CV et de ses notes.`;
-  }
-  const who = avatar ? `I'm ${avatar}, an AI avatar representing ${name}` : `I am an AI avatar representing ${name}`;
-  return `Hello. Before we begin, I want to be transparent: ${who}, and I answer only from ${possessive(name)} CV and notes.`;
-}
-
-/** Révélation seule (début de l'ouverture), sans messageText. */
-export function disclosureText(persona: Persona): string {
-  return disclosure(persona, candidateLabel(persona.language, persona.candidateName));
-}
-
-/** Rappel court quand l'ouverture a déjà été coupée deux fois (écho, interruptions), ou après une pause. */
-export function shortDisclosureText(persona: Persona): string {
-  const name = candidateLabel(persona.language, persona.candidateName);
-  const avatar = persona.avatarName.trim();
-  if (persona.language === 'fr') {
-    return avatar ? `Pour rappel, je suis ${avatar}, un avatar IA qui représente ${name}.` : `Pour rappel, je suis un avatar IA qui représente ${name}.`;
-  }
-  return avatar ? `As a reminder, I'm ${avatar}, an AI avatar representing ${name}.` : `As a reminder, I am an AI avatar representing ${name}.`;
-}
+export type { Persona } from './disclosure.ts';
 
 const LANGUAGE_NAME: Record<Language, string> = { en: 'English', fr: 'French' };
-
-/** Ouverture : révélation, puis la déclaration du candidat (messageText) si elle existe. */
-export function openingText(persona: Persona, messageText: string): string {
-  const first = disclosureText(persona);
-  const message = messageText.trim();
-  return message ? `${first} ${message}` : first;
-}
 
 /**
  * Humour (section « Ton ») : au plus une remarque par entretien, compte tenu par le code et non par le modèle. Le
