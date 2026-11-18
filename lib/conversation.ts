@@ -1,17 +1,18 @@
-// Orchestration du tour de parole, dans le document offscreen :
-// son du recruteur → VAD → transcription → LLM en streaming → Piper phrase par phrase
-// → page (micro injecté). Ne parle jamais pendant que le recruteur parle.
-// L'ouverture (révélation puis messageText) part à la fin de la première prise de parole
-// du recruteur, sans attendre la transcription, puis vient la réponse à sa question.
+// Tour de parole, côté extension, dans le document offscreen (contrat : lib/engine.ts, docs/moteur.md) :
+// son du recruteur → VAD → transcription → moteur conversationnel (texte en flux) → découpe en phrases → voix
+// phrase par phrase → page (micro injecté). Ne parle jamais pendant que le recruteur parle.
+// Garde ce qu'aucun moteur ne doit pouvoir contourner : l'ouverture (révélation puis messageText, texte fixe de
+// lib/disclosure.ts) part à la fin de la première prise de parole du recruteur, avant toute réponse ; le rappel court
+// après une pause ; les états de l'avatar et les hochements, calculés ici à partir de l'audio et de la lecture.
 
 import type { AvatarState } from './avatar-states';
 import type { DemoConfig } from './config';
 import { takeChunks } from './chunks';
+import { disclosureText, openingText, shortDisclosureText } from './disclosure';
+import type { ConversationEngine, RenderLink } from './engine';
 import { isGreetingOnly } from './greeting';
-import { streamReply, type ChatMessage } from './llm';
 import { clock, createLogger } from './log';
 import { int16ToFloat, resample } from './pcm';
-import { disclosureText, humorNote, openingText, shortDisclosureText, stripHumorMark, systemPrompt } from './prompt';
 import { createTranscriber, STT_SAMPLE_RATE, type Transcriber } from './stt';
 import type { SpeechAudio, TtsEngine } from './tts';
 import { Vad, VAD_SAMPLE_RATE } from './vad';
@@ -24,7 +25,6 @@ const logState = createLogger('etat');
 
 /** Audio gardé avant le début de parole confirmé, pour ne pas couper le premier mot. */
 const PREROLL_MS = 600;
-const MAX_HISTORY_MESSAGES = 12;
 /** L'ouverture complète est jouée au plus deux fois (rejouée une fois si elle a été coupée). */
 const MAX_OPENING_PLAYS = 2;
 /** Phrases de l'avatar gardées pour reconnaître leur écho dans la transcription. */
@@ -48,15 +48,8 @@ const PLAYBACK_START_TIMEOUT_MS = 4000;
 /** Écart minimal entre deux hochements de l'avatar à l'écoute. */
 const NOD_MIN_GAP_MS = 1500;
 
-/** Vers la page : lecture de la voix dans le micro injecté. */
-export interface PageLink {
-  speak(responseId: number, audio: SpeechAudio): void;
-  stop(): void;
-  /** Nouvel état de l'avatar (lib/avatar-states.ts), seulement quand il change. */
-  state(state: AvatarState, previous: AvatarState, reason: string): void;
-  /** Hochement : courte pause du recruteur pendant l'écoute. */
-  nod(): void;
-}
+/** Vers la page : voix (micro injecté), états et hochements (lib/engine.ts). */
+export type PageLink = RenderLink;
 
 interface Response {
   id: number;
@@ -115,11 +108,7 @@ export class Conversation {
   private shortDisclosureMs = Infinity;
   /** Question restée sans réponse audible (recruteur qui reprend la parole). */
   private carried = '';
-  private readonly history: ChatMessage[] = [];
-  /** Remarque d'humour sur sa condition d'IA déjà faite dans cet entretien (au plus une, voir lib/prompt.ts). */
-  private humorUsed = false;
   private readonly opening: string;
-  private readonly system: string;
   private openingAudio: Promise<SpeechAudio[]>;
   /** Durée de la révélation seule (début de l'ouverture), en ms d'audio. */
   private disclosureMs = Infinity;
@@ -131,13 +120,12 @@ export class Conversation {
   private constructor(
     private readonly config: DemoConfig,
     private readonly voice: TtsEngine,
-    cv: string,
+    private readonly engine: ConversationEngine,
     private readonly link: PageLink,
   ) {
+    // Le texte de l'ouverture n'est jamais donné au moteur : le LLM le recopiait mot pour mot.
     const opening = openingText(config, config.messageText);
     this.opening = opening;
-    // Le texte de l'ouverture n'est pas donné au LLM : il le recopiait mot pour mot.
-    this.system = systemPrompt(config, cv);
     // Ouverture synthétisée d'avance, phrase après phrase ; elle n'est jouée qu'une fois le
     // recruteur présent (fin de sa première prise de parole).
     // Révélation et message synthétisés à part : on sait ainsi quand la révélation a été entendue.
@@ -159,8 +147,8 @@ export class Conversation {
       });
   }
 
-  static async create(config: DemoConfig, voice: TtsEngine, cv: string, link: PageLink): Promise<Conversation> {
-    const conversation = new Conversation(config, voice, cv, link);
+  static async create(config: DemoConfig, voice: TtsEngine, engine: ConversationEngine, link: PageLink): Promise<Conversation> {
+    const conversation = new Conversation(config, voice, engine, link);
     conversation.vad = await Vad.create(config.silenceMs, {
       onSpeechStart: (startedAt) => conversation.onSpeechStart(startedAt),
       onSpeechEnd: (lastVoiceAt, durationMs) => void conversation.onSpeechEnd(lastVoiceAt, durationMs),
@@ -180,8 +168,7 @@ export class Conversation {
   /** Nouvelle page de la plateforme (autre onglet ou onglet rechargé) : nouvel entretien. */
   reset(reason: string) {
     this.interrupt(reason);
-    this.history.length = 0;
-    this.humorUsed = false;
+    this.engine.notify({ type: 'reset', reason });
     this.carried = '';
     this.preroll = [];
     this.prerollSamples = 0;
@@ -215,6 +202,7 @@ export class Conversation {
     this.carried = '';
     this.transcriber?.clear();
     this.vad.reset();
+    this.engine.notify({ type: 'pause', at: clickAt });
     this.updateState('pause demandée');
     log(`pause : pipeline d’écoute arrêté ${Date.now() - clickAt} ms après le clic (son du recruteur ignoré, aucune réponse)`);
   }
@@ -225,6 +213,7 @@ export class Conversation {
     this.paused = false;
     // Révélation jamais entendue : l'ouverture complète est encore à venir, pas besoin de rappel.
     if (this.revealed) this.reminderPending = true;
+    this.engine.notify({ type: 'resume', at: clickAt });
     this.updateState('reprise');
     log(
       `reprise ${Date.now() - clickAt} ms après le clic : ` +
@@ -510,13 +499,6 @@ export class Conversation {
   private async answer(response: Response, question: string, opening: Promise<void>) {
     const { signal } = response.controller;
     const { questionEndAt } = response;
-    const messages: ChatMessage[] = [
-      { role: 'system', content: this.system },
-      ...this.history.slice(-MAX_HISTORY_MESSAGES),
-      { role: 'system', content: humorNote(this.humorUsed) },
-      { role: 'user', content: question },
-    ];
-    log(`question envoyée au LLM (${this.config.llmModel}) : « ${question} »`);
     transcriptLine('Recruteur', question, this.speechStartedAt);
     const sentences: string[] = [];
     const queue: { wake: (() => void) | null; done: boolean } = { wake: null, done: false };
@@ -534,33 +516,23 @@ export class Conversation {
       return ready;
     };
     try {
-      const reply = await streamReply(
-        { apiKey: this.config.openaiApiKey, model: this.config.llmModel },
-        messages,
-        (delta) => {
-          if (response.timings.firstToken === undefined) {
-            response.timings.firstToken = Date.now() - questionEndAt;
-            log(`premier mot reçu ${response.timings.firstToken} ms après la fin de la question`);
-          }
-          // Signe de la remarque d'humour : retiré avant la voix et la transcription, compté une fois pour toutes.
-          const { text: clean, marked } = stripHumorMark(delta);
-          if (marked && !this.humorUsed) {
-            this.humorUsed = true;
-            log('remarque d’humour faite : plus aucune dans cet entretien');
-          }
-          buffer += clean;
-          const ready = take(false);
-          if (ready.length) {
-            sentences.push(...ready);
-            queue.wake?.();
-          }
-        },
-        signal,
-      );
-      sentences.push(...take(true));
-      this.history.push({ role: 'user', content: question }, { role: 'assistant', content: stripHumorMark(reply).text });
+      // Texte du moteur en flux, à n'importe quel grain : découpé ici en phrases pour la voix (lib/chunks.ts).
+      for await (const fragment of this.engine.reply({ text: question, startedAt: this.speechStartedAt, endedAt: questionEndAt }, signal)) {
+        if (signal.aborted) break;
+        if (response.timings.firstToken === undefined) {
+          response.timings.firstToken = Date.now() - questionEndAt;
+          log(`premier mot reçu ${response.timings.firstToken} ms après la fin de la question`);
+        }
+        buffer += fragment;
+        const ready = take(false);
+        if (ready.length) {
+          sentences.push(...ready);
+          queue.wake?.();
+        }
+      }
+      if (!signal.aborted) sentences.push(...take(true));
     } catch (error) {
-      if (!signal.aborted) log(`erreur : ${error instanceof Error ? error.message : String(error)}`);
+      if (!signal.aborted) log(`erreur : ${error instanceof Error ? error.message : String(error)} (moteur ${this.engine.description})`);
     } finally {
       queue.done = true;
       queue.wake?.();

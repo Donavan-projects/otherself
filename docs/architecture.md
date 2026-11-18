@@ -20,7 +20,8 @@ flowchart TB
     PREP["Préparation de l'avatar<br/>avatar-assets.ts · vrm-assets.ts"]
     subgraph OFF["Document offscreen : pipeline voix"]
       VAD["Détection de parole<br/>Silero VAD"]
-      CONV["Tour de parole<br/>conversation.ts"]
+      CONV["Tour de parole<br/>conversation.ts<br/>révélation, états, découpe"]
+      ENGINE["Moteur conversationnel<br/>llm-engine.ts<br/>contrat engine.ts"]
       TTS["Synthèse vocale<br/>Piper, locale"]
       MON["Retour audio<br/>pour l'utilisateur"]
     end
@@ -51,7 +52,8 @@ flowchart TB
   BRIDGE --> VAD
   VAD -->|"prise de parole"| CONV
   CONV <-->|"audio / texte"| STT
-  CONV <-->|"CV + question / réponse"| LLM
+  CONV <-->|"ce que le recruteur a dit / texte en flux"| ENGINE
+  ENGINE <-->|"profil + question / réponse"| LLM
   CONV -->|"révélation, déclaration, réponse"| TTS
   HF -.->|"modèle de voix seulement"| TTS
   TTS --> MON
@@ -81,7 +83,8 @@ enfin le document offscreen. Permissions : `activeTab`, `scripting`, `offscreen`
 
 ### Pipeline voix
 
-Dans le document offscreen (`entrypoints/offscreen/main.ts`, `lib/conversation.ts`).
+Dans le document offscreen (`entrypoints/offscreen/main.ts`, `lib/conversation.ts`). Le tour de parole est séparé du
+moteur conversationnel par un contrat (`lib/engine.ts`) : voir [moteur.md](moteur.md).
 
 - **Écoute** : le bouton OtherSelf injecté dans la page ouvre la fenêtre de partage standard de Chrome sur l'onglet
   courant, son compris (`lib/share-tab.ts`). La vidéo du partage est arrêtée aussitôt ; le son, c'est-à-dire ce que la
@@ -91,14 +94,17 @@ Dans le document offscreen (`entrypoints/offscreen/main.ts`, `lib/conversation.t
   d'une question est un silence de `silenceMs` (800 ms).
 - **Transcription** : session Realtime d'OpenAI (`gpt-live-transcribe`), alimentée pendant que le recruteur parle ; repli
   sur `/v1/audio/transcriptions` (`gpt-transcribe`) (`lib/stt.ts`).
-- **Réponse** : Chat Completions en streaming (`gpt-5.6-luna`), avec un prompt système qui contient le CV et les notes et
-  interdit d'inventer (`lib/llm.ts`, `lib/prompt.ts`).
+- **Réponse** : le moteur conversationnel (`lib/llm-engine.ts`) reçoit la transcription et rend le texte en flux :
+  Chat Completions en streaming (`gpt-5.6-luna`), avec un prompt système qui contient le profil (reçu par
+  `lib/profile.ts`) et interdit d'inventer (`lib/llm.ts`, `lib/prompt.ts`). Le tour de parole découpe ce flux en
+  phrases pour la voix et calcule les états de l'avatar.
 - **Synthèse vocale** : Piper en WebAssembly dans un worker (`lib/tts.ts`), morceau par morceau au fil du streaming
   (`lib/chunks.ts`), voix normalisée à −18 dBFS. Le modèle de voix est téléchargé une seule fois depuis Hugging Face
   (simple téléchargement de fichier, aucune donnée de l'entretien ni du candidat envoyée), puis gardé dans le stockage
   privé de l'extension ; la synthèse se fait ensuite entièrement en local.
 - **Révélation et déclaration** : à la fin de la première prise de parole du recruteur, l'avatar annonce qu'il est une
-  IA, puis lit `messageText` s'il est configuré, avant toute réponse ; ce texte ne passe pas par le LLM.
+  IA, puis lit `messageText` s'il est configuré, avant toute réponse ; ce texte fixe (`lib/disclosure.ts`) est joué par
+  le tour de parole et ne passe jamais par le moteur.
 - **Retour** : la voix repart vers la page par le pont, et l'utilisateur l'entend par le document offscreen
   (`lib/monitor.ts`), jamais par les haut-parleurs de l'onglet, dont le son est partagé.
 

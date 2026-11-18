@@ -3,7 +3,7 @@
 // la vitesse de synthèse et la variation de hauteur (indice de l'intonation), et permet d'écouter.
 
 import { loadDemoConfig } from '@/lib/config';
-import { candidateLabel, openingText } from '@/lib/prompt';
+import { candidateLabel, openingText } from '@/lib/disclosure';
 import { createPronouncer } from '@/lib/pronunciation';
 import { createLogger } from '@/lib/log';
 import { encodeWav, floatToInt16 } from '@/lib/pcm';

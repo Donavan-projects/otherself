@@ -168,11 +168,20 @@ sans structure STAR ni résultats chiffrés). Cause principale : les limites de 
 
 ### 6. Interface entre moteur conversationnel et rendu (sans connecteur)
 
+Fait le 18/11/2026 : contrat dans `lib/engine.ts`, moteur actuel dans `lib/llm-engine.ts`, textes fixes de la
+révélation dans `lib/disclosure.ts`, documentation dans `docs/moteur.md`. Écarts au plan d'origine, validés : les
+états et les hochements sont calculés par le tour de parole de l'extension (ils dépendent de l'audio et de la lecture
+réelle, qu'un moteur ne voit pas), et le découpage en phrases est fait par l'extension à partir du flux du moteur.
+
 - Formaliser ce qui existe déjà : le moteur reçoit le texte entendu et émet du texte à dire et des événements
   d'état (étape 2) ; le rendu ne connaît que ces événements et l'audio.
 - Un seul fichier de types décrit ce contrat, pour qu'un autre moteur (agent externe, autre service) puisse un
   jour le remplacer.
 - Pas de connecteur pour la démo. Tout moteur futur reste soumis aux règles 2, 3 et 5.
+- Piste, pas encore faite : un filtre de sortie dans l'extension, appliqué au flux de tout moteur avant la voix, qui
+  refuserait une phrase où l'avatar se dirait humain (« I am human », « je suis humain ») ou se ferait passer pour la
+  personne représentée (« I am Alex »). Aujourd'hui, ces règles relèvent du moteur (prompt) ; le filtre les
+  garantirait aussi hors du moteur. À concevoir sans faux positifs (une citation du recruteur, « he is human-centered »).
 - Profil du candidat : la source est déjà isolée derrière une interface (`lib/profile.ts`, `ProfileSource`) et son
   format documenté (`docs/profil.md`). Pistes pour plus tard :
   - conversion de n'importe quelle source (CV en PDF, Notion, second brain, Dots, Muse…) vers ce format,
