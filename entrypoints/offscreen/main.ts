@@ -7,7 +7,8 @@
 
 import type { Browser } from 'wxt/browser';
 import { PORT_NAME, type FromOffscreen, type FromPage } from '@/lib/bridge-messages';
-import { loadDemoConfig, loadLocalText } from '@/lib/config';
+import { loadDemoConfig } from '@/lib/config';
+import { localFileProfile } from '@/lib/profile';
 import { Conversation } from '@/lib/conversation';
 import { createLogger } from '@/lib/log';
 import { AvatarMonitor } from '@/lib/monitor';
@@ -146,8 +147,9 @@ async function start() {
     log('openaiApiKey manquant dans config.local.json : pipeline voix inactif');
     return;
   }
-  const cv = await loadLocalText(config.cv);
-  log(`CV et notes chargés (${cv.length} caractères), langue ${config.language}`);
+  const profile = await localFileProfile(config).load();
+  const cv = profile.text;
+  log(`profil chargé : ${profile.origin}, ${cv.length} caractères ; langue ${config.language} ; avatar ${config.avatarName ? `« ${config.avatarName} »` : 'sans nom'}`);
   configureOnnxRuntime();
   // Voix : champs voice / openaiVoice / pitchSemitones de config.local.json, sinon celles de l'avatar (lib/config.ts).
   let voice: TtsEngine;

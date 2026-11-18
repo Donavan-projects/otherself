@@ -132,16 +132,16 @@ export class Conversation {
     cv: string,
     private readonly link: PageLink,
   ) {
-    const opening = openingText(config.language, config.messageText, config.candidateName);
+    const opening = openingText(config, config.messageText);
     this.opening = opening;
     // Le texte de l'ouverture n'est pas donné au LLM : il le recopiait mot pour mot.
-    this.system = systemPrompt(config.language, cv, config.candidateName);
+    this.system = systemPrompt(config, cv);
     // Ouverture synthétisée d'avance, phrase après phrase ; elle n'est jouée qu'une fois le
     // recruteur présent (fin de sa première prise de parole).
     // Révélation et message synthétisés à part : on sait ainsi quand la révélation a été entendue.
     this.openingAudio = (async () => {
       const audio: SpeechAudio[] = [];
-      for (const sentence of splitSentences(disclosureText(config.language, config.candidateName))) {
+      for (const sentence of splitSentences(disclosureText(config))) {
         audio.push(await voice.synthesize(sentence));
       }
       this.disclosureMs = audio.reduce((sum, chunk) => sum + (chunk.samples.length / chunk.sampleRate) * 1000, 0);
@@ -150,7 +150,7 @@ export class Conversation {
       return audio;
     })();
     this.shortDisclosureAudio = this.openingAudio
-      .then(() => voice.synthesize(shortDisclosureText(config.language, config.candidateName)))
+      .then(() => voice.synthesize(shortDisclosureText(config)))
       .then((audio) => {
         this.shortDisclosureMs = (audio.samples.length / audio.sampleRate) * 1000;
         return audio;
@@ -478,7 +478,7 @@ export class Conversation {
     if (this.revealed) {
       // Reprise après une pause : la révélation complète a déjà été entendue, le rappel court suffit.
       audio = [await this.shortDisclosureAudio];
-      text = shortDisclosureText(this.config.language, this.config.candidateName);
+      text = shortDisclosureText(this.config);
       this.remember(text);
       log(`reprise après une pause : rappel court de la révélation (réponse ${response.id})`);
     } else if (this.openingPlays < MAX_OPENING_PLAYS) {
@@ -492,7 +492,7 @@ export class Conversation {
       );
     } else {
       audio = [await this.shortDisclosureAudio];
-      text = shortDisclosureText(this.config.language, this.config.candidateName);
+      text = shortDisclosureText(this.config);
       this.remember(text);
       log(`ouverture déjà coupée ${MAX_OPENING_PLAYS} fois : rappel court de la révélation (réponse ${response.id})`);
     }

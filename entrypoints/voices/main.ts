@@ -169,7 +169,7 @@ const config = await loadDemoConfig();
 // &jeu=entretien : l'ouverture réelle (révélation et messageText de config.local.json), une réponse type sur le
 // parcours du candidat et la phrase des noms de projets. &phrases=… : phrases libres, séparées par « | ».
 const interviewSet = [
-  openingText(config.language, config.messageText, config.candidateName),
+  openingText(config, config.messageText),
   "Donavan has fourteen years of operational experience. He now builds AI products and automation workflows.",
   'His recent projects include ADELIN, Curator Agent, IntelAgent, Familiar.dev, and Loupe.',
 ];
