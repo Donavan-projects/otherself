@@ -61,7 +61,8 @@ Ces trois choix se tiennent : à décider et valider ensemble.
 - **3b** : plan serré, et slogan retiré de la veste ;
 - **3c** : modification de la règle 1 de `CLAUDE.md`, puis badge « IA » (« AI » en anglais) au col avec voyant
   d'état (bleu : inactif et écoute ; ambre : réflexion ; vert : parole ; jamais éteint), puis retrait du bandeau ;
-- **3e** : secours généré à partir du modèle 3D à la place de l'avatar SVG.
+- **3e** : secours généré à partir du modèle 3D à la place de l'avatar SVG (fait le 18/11, planche validée ; reste le
+  test sur Meet avec le secours forcé).
 
 L'ancienne partie « contraste » (3d) est absorbée par le nouveau fond, sauf si le contraste pose encore problème.
 Le slogan « Automated candidate, just like you. » est retiré de l'avatar : la transparence repose sur le badge, le
@@ -114,7 +115,7 @@ voyant et la révélation vocale (règle 2).
   L'image de pause, sans avatar, n'a ni marquage ni voyant : son texte l'identifie (« Avatar IA en pause » / « AI
   avatar paused »).
 - Lisible dans une vignette d'environ 320×180 ; toujours visible de face et dans les mouvements de tête.
-- Avatar SVG de secours : même marquage ; voyant à l'endroit le plus proche d'un col, en attendant la sous-étape 3e.
+- Avatar de secours : même marquage et même voyant, à la position relevée sur le modèle au repos (sous-étape 3e).
 - La languette du col (28 × 24 px dans le cadre 1280×720, plan serré de 3b) est trop petite pour porter le texte :
   elle sert de voyant, le texte est imprimé juste à côté.
 - Vérifier que le voyant bleu se distingue des bandes lumineuses turquoise du fond Atrium.
