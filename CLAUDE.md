@@ -5,9 +5,15 @@ vont dans `CLAUDE.local.md` (non versionné, lu automatiquement par Claude Code 
 
 ## Mission
 
-Donner aux candidats un moyen de réagir à un entretien automatisé qu'ils jugent injuste : répondre par leur propre avatar IA, clairement identifié comme tel. Utilisable par tous, techniciens ou non. L'humour n'est plus le cœur du projet.
+Trois niveaux, du plus large au plus précis. Ne pas les confondre : OtherSelf n'est pas un androïde.
 
-`docs/spec.md` est le pitch initial (Contre-Recruteur, satirique) : en partie dépassé, ce fichier fait foi. Le projet s'appelle OtherSelf depuis le 24/10/2026 ; le dossier garde son ancien nom pour ne pas changer l'identifiant de l'extension.
+- **Le projet, OtherSelf** : une présence clairement artificielle qui représente quelqu'un en visioconférence. Elle parle au nom d'une personne, uniquement à partir de ce que cette personne lui a confié, et ne se fait jamais passer pour elle ni pour un humain. La transparence fait partie du projet, quel que soit l'avatar qui l'incarne : marquage « IA » et voyant d'état incrustés dans l'image, révélation vocale dès la première prise de parole. À terme, utilisable par tous, techniciens ou non.
+- **Le prototype, Nova** : cette présence incarnée par un androïde IA, Nova (avatar 3D, voix synthétique générique). Nova est un choix d'incarnation, pas le projet : son nom se règle dans la configuration (`avatarName`), son modèle 3D et son fond sont des fichiers remplaçables. Un autre avatar resterait soumis aux mêmes règles.
+- **La démo, l'entretien automatisé** : face à un recruteur IA qu'il juge injuste, le candidat répond par son propre avatar IA, clairement identifié comme tel. La symétrie rend le cas immédiatement lisible ; c'est la démonstration principale (vidéo, post LinkedIn). Les autres usages en visioconférence (réunions, présentations) restent des pistes.
+
+L'humour satirique du pitch initial n'est plus le cœur du projet ; Nova garde seulement un ton direct et chaleureux, avec un peu d'esprit.
+
+`docs/spec.md` (pitch initial, Contre-Recruteur, satirique) et `docs/visuel-otherself.md` (ancien personnage SVG) sont des traces historiques, dépassées : ce fichier fait foi. Le projet s'appelle OtherSelf depuis le 24/10/2026 ; le dossier garde son ancien nom pour ne pas changer l'identifiant de l'extension.
 
 ## Deux temps distincts
 
@@ -158,6 +164,8 @@ Tout le code de la démo est écrit en TypeScript dans l'extension (rendu de l'a
 3. **Test d'injection** : fait, voie A retenue (testée sur Google Meet).
 4. **Pipeline voix, avec le mode « message »** : fait. Son du recruteur → VAD → STT → LLM → Piper, la voix générée comme piste du micro injecté. Test sur Meet : `rehearsal` ne peut pas servir de recruteur (sa voix vient de la synthèse vocale du système, qui ne passe pas par le son de l'onglet).
 5. **Visuel OtherSelf** : fait, selon `docs/visuel-otherself.md` (avatar cartoon original en SVG à la place de la photo, remplacé depuis par l'avatar 3D, variantes et fond choisis dans `config.local.json`, `bannerText` configurable, bouche animée par la voix). Le bandeau garde les contraintes de la règle 1.
+
+**Bandeau des étapes 2 et 5 : plus actuel.** Remplacé le 17/11/2026 par le marquage « IA » et le voyant d'état (sous-étape 3c de `docs/feuille-de-route.md`, règle 1) ; `bannerText` n'existe plus.
 6. **Tournage** : après les étapes de `docs/feuille-de-route.md`. Enregistrement de la session (simple enregistrement d'écran) pour la vidéo et le post LinkedIn.
 
 Ne pas commencer une étape avant que la précédente fonctionne.

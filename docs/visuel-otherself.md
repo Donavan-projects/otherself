@@ -1,3 +1,5 @@
+> **Document historique, dépassé.** Direction visuelle de l'ancienne étape 5 (personnage SVG cartoon, slogan sur le t-shirt, bandeau), remplacée par Nova, l'avatar 3D, le plan serré et le marqueur IA (étape 3 de [feuille-de-route.md](feuille-de-route.md)). Ce qui fait foi : [CLAUDE.md](../CLAUDE.md) (règle 1, décisions « Avatar 3D », « Marqueur IA » et « Avatar de secours ») ; présentation actuelle : [README.md](../README.md).
+
 # OtherSelf — Ajustements visuels pour le prototype de démonstration
 
 ## Objectif

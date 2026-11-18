@@ -1,48 +1,87 @@
 # OtherSelf
 
-Une extension de navigateur qui explore la symétrie des entretiens de recrutement automatisés : face à un recruteur IA, votre propre avatar IA peut répondre en votre nom, en s'identifiant clairement comme une IA.
+*[English version](README.en.md)*
+
+Une présence clairement artificielle qui vous représente en visioconférence. Ce prototype l'incarne avec Nova, un androïde IA, et la démontre sur un cas précis : l'entretien d'embauche automatisé.
 
 ![Avatar OtherSelf : androïde 3D en style dessin animé, cheveux argentés, peau blanche, un œil bleu et un œil jaune, veste blanche à col montant ; sur la poitrine, les lettres « AI » imprimées en gris, et sur la languette du col un voyant bleu allumé. Fond flou : atrium futuriste de nuit, plantes et architecture lumineuse.](docs/images/otherself-apercu.png)
 
-*Image vidéo envoyée par l'extension (1280 × 720) : avatar 3D créé avec VRoid Studio, rendu dans le navigateur. Le marquage « AI » (« IA » en français) et le voyant d'état du col (bleu : en attente ou à l'écoute ; ambre : réflexion ; vert : parole) sont dessinés par le code dans chaque image : la plateforme ne peut pas les masquer. Voir [Licence et crédits](#licence-et-crédits).*
+*Image vidéo envoyée par l'extension (1280 × 720) : Nova, avatar 3D créé avec VRoid Studio, rendu dans le navigateur. Le marquage « AI » (« IA » en français) et le voyant d'état du col (bleu : en attente ou à l'écoute ; ambre : réflexion ; vert : parole) sont dessinés par le code dans chaque image : la plateforme ne peut pas les masquer. Voir [Licence et crédits](#licence-et-crédits).*
 
 > **Statut : prototype de démonstration.** Ce dépôt accompagne une vidéo de démonstration. Un projet complet, utilisable par tous sans compétences techniques, ne sera développé que si le sujet suscite de l'intérêt. Aucun support n'est garanti.
 
 > **Avertissement.** Utiliser OtherSelf dans une vraie candidature, c'est probablement renoncer au poste. Les plateformes d'entretien peuvent aussi interdire les outils automatisés dans leurs conditions d'utilisation.
 
-## Principe
+## OtherSelf : le concept
 
-Quand un entretien est mené par un système automatisé, OtherSelf remplace votre caméra et votre micro, dans l'onglet de l'entretien uniquement, par un avatar :
+OtherSelf est une présence artificielle assumée qui représente quelqu'un dans une visioconférence. Elle prend la place de votre caméra et de votre micro, parle en votre nom à partir de ce que vous lui avez confié, et ne se fait jamais passer pour vous ni pour un humain.
 
-1. il écoute la question posée par la plateforme ;
+La transparence fait partie du concept, quel que soit l'avatar choisi : un marquage « IA » et un voyant d'état sont incrustés dans chaque image, et la première chose que dit l'avatar, c'est qu'il est une IA.
+
+## Le prototype : Nova, l'androïde IA
+
+Le prototype incarne OtherSelf avec Nova, un androïde en 3D au style dessin animé, volontairement non humain. Nova est un choix d'incarnation, pas le projet : son nom se change dans la configuration, et le modèle 3D comme le fond sont des fichiers remplaçables.
+
+Ce que fait Nova :
+
+- **Se présente d'abord** : « Hello. Before we begin, I want to be transparent: I'm Nova, an AI avatar representing Alex… », puis, si vous le souhaitez, lit une déclaration que vous avez écrite.
+- **Montre son état** : le voyant de son col est bleu quand il attend ou écoute, ambre quand il réfléchit, vert quand il parle ; il détourne le regard pour réfléchir et hoche la tête quand son interlocuteur marque une pause.
+- **Répond à partir de votre profil**, sans rien inventer : un exemple concret pour une question du type « racontez une fois où… » (contexte, actions, résultat chiffré si vos notes en donnent un), une réponse courte pour une question factuelle, et une phrase honnête quand l'information n'est pas dans votre profil. Modèle de notes : [docs/profil.md](docs/profil.md).
+- **A un ton** : direct, chaleureux, avec un peu d'esprit ; il parle de vous à la troisième personne et s'autorise au plus une remarque légère sur sa condition d'IA par entretien.
+- **Se met en pause et reprend instantanément** : sa voix se coupe en quelques dizaines de millisecondes et l'image « Avatar IA en pause » le remplace, sans que la plateforme voie de coupure ; à la reprise, il rappelle en une phrase qu'il est une IA.
+- **Reste disponible sur une machine modeste** : sans accélération graphique, un avatar de secours (images du même personnage rendues à l'avance) prend le relais automatiquement, marqueur compris.
+
+```mermaid
+flowchart LR
+  P["Plateforme de visioconférence"] -->|"son de l'onglet"| D["Détection de parole<br/>locale"]
+  D --> T["Transcription<br/>OpenAI"]
+  T --> R["Réponse<br/>OpenAI"]
+  S["Source du profil<br/>CV et notes"] --> R
+  R --> V["Voix de synthèse<br/>Piper, locale"]
+  H["Hugging Face<br/>modèle de voix Piper<br/>téléchargé une fois"] -.->|"modèle de voix seulement"| V
+  E["Machine à états<br/>écoute, réflexion,<br/>parole, pause"]
+  D -.-> E
+  R -.-> E
+  V -.-> E
+  E -.->|"regard, voyant"| A
+  V --> A["Nova animé<br/>local"]
+  A --> M["Marqueur IA<br/>marquage et voyant,<br/>peints en dernier"]
+  M -->|"caméra et micro injectés"| P
+```
+
+La voix est synthétisée en local, dans le navigateur, par Piper : seul le modèle de voix est téléchargé, une fois, depuis Hugging Face, et aucune donnée de l'entretien ni du candidat ne lui est envoyée. Seules la transcription et la rédaction des réponses passent par l'API OpenAI. L'état de Nova (écoute, réflexion, parole, pause) est décidé à un seul endroit, puis suivi par le rendu ; le marqueur IA est peint en dernier dans l'image envoyée, la plateforme ne peut pas le masquer.
+
+Détail des composants, de ce qui reste local et de l'animation de l'avatar : [docs/architecture.md](docs/architecture.md).
+
+## La démo : l'entretien automatisé
+
+De plus en plus d'entretiens d'embauche sont menés par un système automatisé : une IA pose les questions, une autre évalue les réponses. La démo retourne la situation : face à un recruteur IA, le candidat répond par son propre avatar IA, clairement identifié comme tel. Cette symétrie rend le cas immédiatement lisible, et pose une question simple : si l'entretien est automatisé d'un côté, pourquoi pas de l'autre ?
+
+Pendant l'entretien, OtherSelf remplace votre caméra et votre micro, dans l'onglet de l'entretien uniquement :
+
+1. Nova écoute la question posée par la plateforme ;
 2. il annonce d'abord qu'il est une IA ;
 3. il peut ensuite lire une déclaration que vous avez écrite (par exemple, demander poliment un entretien avec un humain) ;
 4. puis il répond aux questions à partir de votre CV et de vos notes, sans rien inventer.
 
-```mermaid
-flowchart LR
-  P["Plateforme d'entretien"] -->|"son de l'onglet"| D["Détection de parole<br/>locale"]
-  D --> T["Transcription<br/>OpenAI"]
-  T --> R["Réponse à partir du CV<br/>OpenAI"]
-  R --> V["Voix de synthèse<br/>Piper, locale"]
-  H["Hugging Face<br/>modèle de voix Piper<br/>téléchargé une fois"] -.->|"modèle de voix seulement"| V
-  V --> A["Avatar animé + marqueur IA<br/>local"]
-  A -->|"caméra et micro injectés"| P
-```
+## Et ensuite ?
 
-La voix est synthétisée en local, dans le navigateur, par Piper : seul le modèle de voix est téléchargé, une fois, depuis Hugging Face, et aucune donnée de l'entretien ni du candidat ne lui est envoyée. Seules la transcription et la rédaction des réponses passent par l'API OpenAI.
+Des pistes, pas des promesses, seulement si le sujet intéresse :
 
-Détail des composants, de ce qui reste local et de l'animation de l'avatar : [docs/architecture.md](docs/architecture.md).
+- **D'autres usages en visioconférence** : réunions, présentations, toute situation où quelqu'un veut se faire représenter par une présence clairement artificielle.
+- **Un profil importé depuis n'importe quelle source** : CV en PDF, Notion, outil de notes…, converti au format du profil avec votre relecture, sans invention (chaque fait doit venir de la source).
+- **Une connexion à d'autres agents IA** : le moteur de réponse pourrait être remplacé par un autre agent, toujours soumis aux mêmes règles de transparence et de non-invention.
+- **Pour tous** : un assistant de configuration pour les non-techniciens, et une bouche pilotée par les sons prononcés plutôt que par le volume de la voix.
 
 ## Choix de conception
 
 Ces règles font partie du projet et ne sont pas désactivables :
 
 - **Marqueur IA toujours visible** : dans chaque image où l'avatar apparaît, le marquage « IA » (« AI » en anglais) est imprimé sur sa veste, près du visage, comme un numéro de série, et la languette de son col s'allume comme un voyant : bleu quand il attend ou écoute, ambre quand il réfléchit, vert quand il parle. Ils restent visibles même quand la plateforme recadre l'image, et le voyant ne s'éteint jamais tant que l'avatar est visible. Pendant une pause, l'image affichée à la place de l'avatar l'indique en toutes lettres (« Avatar IA en pause »). L'apparence volontairement non humaine de l'avatar et l'annonce vocale complètent ce marqueur.
-- **Révélation immédiate** : la première prise de parole de l'avatar annonce qu'il est une IA.
+- **Révélation immédiate** : la première prise de parole de l'avatar annonce qu'il est une IA, avec son nom s'il en a un.
 - **Aucun mode discret** : OtherSelf ne sert pas à tromper un interlocuteur humain, ni à souffler des réponses.
 - **Avatar cartoon uniquement** : pas d'import de photo, pas de clonage de visage ni de voix ; voix synthétique générique.
-- **Pas d'invention** : l'avatar ne répond qu'à partir de votre CV et de vos notes, sans inventer d'expérience, de diplôme ou de chiffre.
+- **Pas d'invention** : l'avatar ne répond qu'à partir de votre CV et de vos notes, sans inventer d'expérience, de diplôme ou de chiffre ; quand l'information manque, il le dit. Aucune consigne de ton ne passe avant cette règle.
 - **Permissions minimales** : l'extension n'agit que sur l'onglet où vous l'activez (`activeTab` + `scripting`, et `offscreen` pour le pipeline voix), jamais sur tous les sites. Pour entendre le recruteur, elle vous demande de partager cet onglet, son compris, par la fenêtre standard de Chrome : aucune permission en plus.
 
 ## Essayer le prototype (développeurs)
@@ -59,10 +98,10 @@ Chargez `.output/chrome-mv3` dans `chrome://extensions` (mode développeur, « C
 
 ## État d'avancement
 
-- Fait : page de répétition, injection caméra et micro, pipeline voix (écoute, transcription, réponse, synthèse vocale, révélation et déclaration configurable), marqueur IA incrusté (marquage sur la veste et voyant d'état sur la languette du col), testé sur Google Meet.
-- Fait : avatar 3D (modèle VRoid rendu avec three.js) : synchronisation labiale sur la voix, clignements, regard, mouvements de tête, respiration, physique des cheveux, plan serré (tête et épaules) ; avatar de secours automatique, rendu à l'avance depuis le même modèle. Testé sur Google Meet.
+- Fait : page de répétition, injection caméra et micro, pipeline voix (écoute, transcription, réponse, synthèse vocale, révélation et déclaration configurable), marqueur IA incrusté (marquage sur la veste et voyant d'état sur la languette du col), pause et reprise instantanées. Testé sur Google Meet.
+- Fait : Nova en 3D (modèle VRoid rendu avec three.js) : synchronisation labiale sur la voix, clignements, regard, mouvements de tête selon l'état, respiration, physique des cheveux, plan serré (tête et épaules) ; avatar de secours automatique, rendu à l'avance depuis le même modèle. Testé sur Google Meet.
+- Fait : personnalité et structure des réponses (exemples concrets, aucune invention, ton direct et chaleureux), vérifiées par un banc de questions en texte.
 - En cours : tournage de la démo.
-- Plus tard, si le sujet intéresse : bouche pilotée par les phonèmes plutôt que par le volume de la voix, assistant de configuration pour les non-techniciens.
 
 ## Licence et crédits
 
