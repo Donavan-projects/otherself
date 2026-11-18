@@ -1,7 +1,7 @@
 // États de l'avatar (étape 2 de docs/feuille-de-route.md) et table unique de leurs réglages.
 // L'état est décidé par lib/conversation.ts (document offscreen), seule source de vérité, puis
-// transmis à la page par le pont ; le rendu (lib/avatar-vrm.ts, lib/avatar.ts pour le SVG de
-// secours) ne fait que réagir. Sans dépendance : utilisé par l'offscreen, la page et les pages de test.
+// transmis à la page par le pont ; le rendu (lib/avatar-vrm.ts, lib/avatar.ts pour l'avatar
+// de secours) ne fait que réagir. Sans dépendance : utilisé par l'offscreen, la page et les pages de test.
 
 export const AVATAR_STATES = ['inactif', 'ecoute', 'reflexion', 'parole', 'pause'] as const;
 export type AvatarState = (typeof AVATAR_STATES)[number];
@@ -94,21 +94,10 @@ export const MARKING = {
    * les lettres. Le bas du texte descend vers y ≈ 537, toléré jusqu'à 545 (Meet ne recadre plus depuis le plan serré ;
    * la coupe 2:1 commence à y = 684). */
   text: { x: 652, y: 516 },
-  /** Avatar SVG de secours (cadrage plus large, jusqu'à 3e) : voyant rond sur le revers de la veste, au plus près
-   * d'un col ; marquage sur la poitrine, sous le revers. */
-  svg: { light: { x: 768, y: 404, radius: 8 }, text: { x: 800, y: 466 } },
 } as const;
-
-/**
- * Avatar SVG : zone redessinée sous le marqueur à chaque image (il ne redessine sinon que le visage), pour que voyant,
- * halo et marquage ne s'empilent pas d'une image à l'autre. Couvre le voyant et le marquage de MARKING.svg.
- */
-export const MARKING_SVG_CLEARANCE = { x: 730, y: 370, width: 150, height: 140 } as const;
 
 /** Part de l'écart du regard de côté suivie par la tête (le reste vient des yeux). */
 export const HEAD_FOLLOW_ASIDE = 0.12;
-/** Avatar SVG : décalage des iris quand le regard part de côté (fraction du rayon de l'iris). */
-export const SVG_GAZE_ASIDE = { x: 0.35, y: -0.3 } as const;
 
 const BASE: StateStyle = {
   gazeJitterYaw: 1.5,

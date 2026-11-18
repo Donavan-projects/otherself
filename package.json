@@ -13,7 +13,6 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "compile": "tsc --noEmit",
-    "check:avatar": "node --experimental-strip-types scripts/check-avatar-svg.ts",
     "postinstall": "wxt prepare",
     "vrm": "node --experimental-strip-types scripts/optimize-vrm.ts"
   },

@@ -1,51 +1,20 @@
-// Rendu de l'avatar cartoon dans un canvas 1280×720 : images préparées par l'extension
-// (lib/avatar-assets.ts), yeux et bouche animés ; le marqueur IA (lib/badge.ts) est peint ensuite par l'appelant. Tourne dans le monde MAIN
-// de l'onglet (voie A) comme dans les pages de l'extension (aperçu, banc d'essai).
+// Avatar de secours dans un canvas 1280×720 : images rendues à l'avance depuis le modèle 3D (avatar/secours/, préparées
+// par lib/fallback-assets.ts), yeux et bouche animés, sans respiration ni mouvement de tête ; le marqueur IA
+// (lib/badge.ts) est peint ensuite par l'appelant, à la position relevée sur le modèle. Tourne dans le monde MAIN de
+// l'onglet (voie A) comme dans les pages de l'extension (aperçu, banc d'essai). Formes de bouche et clignements
+// (MouthAnimator, BlinkAnimator) sont partagés avec l'avatar 3D.
 
-import { MARKING, MARKING_SVG_CLEARANCE, STATE_STYLES, type AvatarState } from './avatar-states';
+import { MARKING, STATE_STYLES, type AvatarState } from './avatar-states';
 import type { MarkingAnchors } from './badge';
 
 export const AVATAR_WIDTH = 1280;
 export const AVATAR_HEIGHT = 720;
-
-// Cadrage de webcam de l'avatar SVG de secours (inchangé jusqu'à la sous-étape 3e) : haut de la tête vers 13 % du
-// cadre, slogan du t-shirt au milieu de la poitrine (bas du slogan à y = 517).
-export const HEAD_TOP = 94;
-export const SLOGAN_BOTTOM = 517;
-// Plafond strict du bas du slogan quand le SVG le règle (data-bas-cadre sur badge_zone_texte).
-// scripts/check-avatar-svg.ts refuse toute valeur hors de [SLOGAN_BOTTOM, SLOGAN_BOTTOM_MAX].
-export const SLOGAN_BOTTOM_MIN = SLOGAN_BOTTOM;
-export const SLOGAN_BOTTOM_MAX = 550;
 
 export interface Rect {
   x: number;
   y: number;
   width: number;
   height: number;
-}
-
-export interface FrameLayout {
-  /** Échelle du SVG du personnage dans le cadre, et position de son coin haut gauche. */
-  scale: number;
-  left: number;
-  top: number;
-}
-
-/**
- * Cadre le personnage SVG : mis à l'échelle pour que le haut de sa tête soit à HEAD_TOP et le bas du slogan à
- * SLOGAN_BOTTOM (ou à sloganBottomInFrame, data-bas-cadre du SVG, entre SLOGAN_BOTTOM_MIN et SLOGAN_BOTTOM_MAX).
- */
-export function composeFrame(svg: { width: number; hairTop: number; sloganBottom: number; sloganBottomInFrame?: number }): FrameLayout {
-  const sloganBottom = svg.sloganBottomInFrame ?? SLOGAN_BOTTOM;
-  if (!(sloganBottom >= SLOGAN_BOTTOM_MIN && sloganBottom <= SLOGAN_BOTTOM_MAX)) {
-    throw new Error(`bas du slogan à y = ${sloganBottom} : hors de [${SLOGAN_BOTTOM_MIN}, ${SLOGAN_BOTTOM_MAX}]`);
-  }
-  const scale = (sloganBottom - HEAD_TOP) / (svg.sloganBottom - svg.hairTop);
-  return {
-    scale,
-    left: Math.round(AVATAR_WIDTH / 2 - (svg.width / 2) * scale),
-    top: Math.round(HEAD_TOP - svg.hairTop * scale),
-  };
 }
 
 export const MOUTH_SHAPES = ['repos', 'A', 'E', 'O', 'M'] as const;
@@ -63,17 +32,15 @@ export interface Sprite<T> {
  * passer au monde MAIN, ImageBitmap pour dessiner.
  */
 export interface AvatarAssets<T> {
-  /** Plein cadre fixe : fond, corps, vêtements, tête sans yeux ni bouche, slogan et sa surimpression. */
+  /** Plein cadre fixe : fond et personnage au repos (yeux ouverts, bouche fermée). */
   under: T;
-  /** Sourcils et cheveux de devant, par-dessus les yeux (avatar SVG) ; absent pour le secours rendu depuis le modèle 3D. */
-  over?: Sprite<T> | undefined;
-  /** aside : iris décalés (regard de côté, état « en réflexion ») ; absent si le dessin ne s'y prête pas. */
-  eyes: { open: Sprite<T>; closed: Sprite<T>; aside?: Sprite<T> | undefined };
+  /** Zones opaques (fond compris) : yeux ouverts, fermés, regard de côté (état « en réflexion »). */
+  eyes: { open: Sprite<T>; closed: Sprite<T>; aside: Sprite<T> };
   mouths: Record<MouthShape, Sprite<T>>;
   /** Zone redessinée à chaque image : yeux et bouches. */
   region: Rect;
-  /** Position du marqueur IA relevée sur le modèle 3D au repos (secours) ; absente : positions fixes de l'avatar SVG. */
-  marking?: MarkingAnchors | undefined;
+  /** Position du marqueur IA relevée sur le modèle 3D au repos. */
+  marking: MarkingAnchors;
 }
 
 export async function mapAssets<A, B>(assets: AvatarAssets<A>, convert: (image: A) => Promise<B>): Promise<AvatarAssets<B>> {
@@ -81,11 +48,10 @@ export async function mapAssets<A, B>(assets: AvatarAssets<A>, convert: (image: 
   const mouths = await Promise.all(MOUTH_SHAPES.map(async (shape) => [shape, await sprite(assets.mouths[shape])] as const));
   return {
     under: await convert(assets.under),
-    over: assets.over && (await sprite(assets.over)),
     eyes: {
       open: await sprite(assets.eyes.open),
       closed: await sprite(assets.eyes.closed),
-      aside: assets.eyes.aside && (await sprite(assets.eyes.aside)),
+      aside: await sprite(assets.eyes.aside),
     },
     mouths: Object.fromEntries(mouths) as Record<MouthShape, Sprite<B>>,
     region: assets.region,
@@ -202,9 +168,9 @@ export class AvatarRenderer {
     this.blink.setRange(STATE_STYLES[state].blinkMinMs, STATE_STYLES[state].blinkMaxMs, performance.now());
   }
 
-  /** Marqueur IA : positions fixes sur le personnage SVG (cadrage inchangé jusqu'à 3e), voyant rond sur le revers. */
+  /** Marqueur IA : position relevée sur le modèle 3D au repos (secours.json), fixe. */
   markingAnchors(): MarkingAnchors {
-    return this.assets.marking ?? { light: MARKING.svg.light, text: MARKING.svg.text, shape: 'round' };
+    return this.assets.marking;
   }
 
   setState(state: AvatarState) {
@@ -229,35 +195,24 @@ export class AvatarRenderer {
     if (this.complete) {
       ctx.drawImage(assets.under, region.x, region.y, region.width, region.height, region.x, region.y, region.width, region.height);
       // Sous le marqueur IA, peint ensuite par l'appelant : fond d'origine, pour qu'il ne s'empile pas.
-      const clear = this.assets.marking ? markingClearance(this.assets.marking) : MARKING_SVG_CLEARANCE;
+      const clear = markingClearance(assets.marking);
       ctx.drawImage(assets.under, clear.x, clear.y, clear.width, clear.height, clear.x, clear.y, clear.width, clear.height);
     } else {
       ctx.drawImage(assets.under, 0, 0);
     }
-    const aside = STATE_STYLES[this.state].gazeAsideYaw > 0 ? assets.eyes.aside : undefined;
-    const eyes = this.blink.closed(now) ? assets.eyes.closed : (aside ?? assets.eyes.open);
+    const aside = STATE_STYLES[this.state].gazeAsideYaw > 0;
+    const eyes = this.blink.closed(now) ? assets.eyes.closed : aside ? assets.eyes.aside : assets.eyes.open;
     // La bouche ne vit qu'en parlant.
     const shape = this.state === 'parole' ? this.mouth.update(this.level(), now) : 'repos';
     const mouth = assets.mouths[shape];
     ctx.drawImage(eyes.image, eyes.x, eyes.y);
     ctx.drawImage(mouth.image, mouth.x, mouth.y);
-    const over = assets.over;
-    if (over && this.complete) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(region.x, region.y, region.width, region.height);
-      ctx.clip();
-      ctx.drawImage(over.image, over.x, over.y);
-      ctx.restore();
-    } else if (over) {
-      ctx.drawImage(over.image, over.x, over.y);
-    }
     this.complete = true;
     return shape;
   }
 }
 
-/** Zone redessinée sous le marqueur IA (voyant et halo, marquage) quand sa position vient du modèle 3D. */
+/** Zone redessinée sous le marqueur IA (voyant et halo, marquage), pour qu'il ne s'empile pas d'une image à l'autre. */
 function markingClearance(marking: MarkingAnchors): Rect {
   const halo = MARKING.haloRadius + 4;
   const textHalfWidth = 50;

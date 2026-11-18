@@ -80,7 +80,7 @@ export default defineContentScript({
           background: await createImageBitmap(fileToBlob(sources.vrm.background)),
           camera: sources.vrm.camera,
         };
-        if (vrm) log(`avatar 3D reçu : modèle ${(vrm.model.byteLength / 1e6).toFixed(1)} Mo, l'avatar SVG sert de secours`);
+        if (vrm) log(`avatar 3D reçu : modèle ${(vrm.model.byteLength / 1e6).toFixed(1)} Mo, l'avatar de secours prend le relais`);
         log(`installation (${frame} ${location.href}) : avatar ${avatar.under.width}x${avatar.under.height}, marquage IA ${sources.marking ? 'reçu' : 'absent'}`);
 
         let voice: VoiceOutput | null = null;

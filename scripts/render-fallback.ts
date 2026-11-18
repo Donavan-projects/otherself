@@ -107,7 +107,7 @@ export async function renderFallback(): Promise<void> {
       `--disable-extensions-except=${EXTENSION}`, `--load-extension=${EXTENSION}`, '--no-first-run',
       // GPU de la machine : sans accélération, le rendu 3D refuse le WebGL logiciel et la génération échoue.
       '--enable-gpu', '--ignore-gpu-blocklist', '--use-angle=gl', 'about:blank',
-    ], { stdio: 'ignore' });
+    ], { stdio: 'ignore', detached: true });
     let endpoint: string | undefined;
     for (let i = 0; i < 50 && !endpoint; i += 1) {
       await sleep(200);
@@ -150,7 +150,12 @@ export async function renderFallback(): Promise<void> {
     cdp?.close();
     if (browser && browser.exitCode === null) {
       const exited = new Promise((done) => browser!.once('exit', done));
-      browser.kill();
+      // Tout le groupe : les processus enfants de Chromium (GPU, rendu) écrivent encore dans le profil sinon.
+      try {
+        process.kill(-browser.pid!, 'SIGTERM');
+      } catch {
+        browser.kill();
+      }
       await Promise.race([exited, sleep(5000)]);
     }
     // Profil temporaire : Chromium peut y écrire encore un instant après sa fin.

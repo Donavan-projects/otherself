@@ -40,7 +40,7 @@ export async function buildFallbackAssets(variant: FallbackVariant): Promise<Ava
   const data = (await response.json()) as FallbackData;
   if (data.frame.width !== AVATAR_WIDTH || data.frame.height !== AVATAR_HEIGHT) throw new Error('secours.json : cadre inattendu');
 
-  const background = await rasterize(await fetchText(`/avatar-svg/fonds/${variant.background}.svg`), AVATAR_WIDTH, AVATAR_HEIGHT);
+  const background = await rasterize(await fetchText(`/fonds/${variant.background}.svg`), AVATAR_WIDTH, AVATAR_HEIGHT);
   const under = canvas(AVATAR_WIDTH, AVATAR_HEIGHT);
   const ctx = context(under);
   ctx.drawImage(background, 0, 0);

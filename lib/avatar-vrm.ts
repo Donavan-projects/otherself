@@ -1,9 +1,9 @@
 // Rendu de l'avatar 3D (VRM) dans le canvas 1280×720 de la caméra injectée. Tourne dans le monde MAIN de
 // l'onglet (voie A) comme dans les pages de l'extension. three.js dessine le modèle dans un canvas WebGL hors DOM, à
 // fond transparent, recopié à chaque image dans le canvas 2D capturé, par-dessus le fond ; le marqueur IA (lib/badge.ts)
-// est peint en dernier dans ce canvas 2D par l'appelant (règle 1), exactement comme pour l'avatar SVG (lib/avatar.ts).
+// est peint en dernier dans ce canvas 2D par l'appelant (règle 1), exactement comme pour l'avatar de secours (lib/avatar.ts).
 //
-// Animation : bouche pilotée par le niveau de la voix (mêmes formes que le SVG, traduites en expressions VRM, avec
+// Animation : bouche pilotée par le niveau de la voix (mêmes formes que le secours, traduites en expressions VRM, avec
 // transitions lissées), clignements, regard vers la caméra avec petites saccades, respiration, mouvements de tête au
 // repos et en parlant, physique des cheveux (spring bones du modèle).
 
@@ -39,7 +39,7 @@ export interface VrmSources {
   camera: VrmCamera;
 }
 
-/** Rendu d'une image du flux : SVG (AvatarRenderer) ou VRM, dans le même canvas de sortie. */
+/** Rendu d'une image du flux : secours (AvatarRenderer) ou VRM, dans le même canvas de sortie. */
 export interface FrameRenderer {
   readonly canvas: HTMLCanvasElement;
   draw(now?: number): MouthShape;
@@ -54,7 +54,7 @@ export interface FrameRenderer {
   dispose?(): void;
 }
 
-// Bouche : formes du SVG → expressions VRM. M : lèvres fermées, donc rien d'ouvert.
+// Bouche : formes du secours → expressions VRM. M : lèvres fermées, donc rien d'ouvert.
 const MOUTH_EXPRESSIONS: Record<MouthShape, Partial<Record<VRMExpressionPresetName, number>>> = {
   repos: {},
   M: {},
@@ -108,7 +108,7 @@ export async function createVrmRenderer(
   log: (message: string) => void = () => {},
   preview: VrmPreviewOptions = {},
 ): Promise<VrmAvatarRenderer> {
-  // WebGL d'abord : sans accélération graphique, inutile de charger le modèle (l'appelant revient au SVG).
+  // WebGL d'abord : sans accélération graphique, inutile de charger le modèle (l'appelant revient au secours).
   const glCanvas = document.createElement('canvas');
   const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, alpha: true, antialias: true, premultipliedAlpha: true, powerPreference: 'high-performance' });
   try {
@@ -163,7 +163,7 @@ export class VrmAvatarRenderer implements FrameRenderer {
   private readonly textRight = new THREE.Vector3();
   private readonly textDown = new THREE.Vector3();
   private hasTextFrame = false;
-  private anchors: MarkingAnchors = { light: { x: MARKING.tab.x, y: MARKING.tab.y }, text: { ...MARKING.text }, shape: 'tab' };
+  private anchors: MarkingAnchors = { light: { x: MARKING.tab.x, y: MARKING.tab.y }, text: { ...MARKING.text } };
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -238,7 +238,6 @@ export class VrmAvatarRenderer implements FrameRenderer {
       this.anchors = {
         light: this.project(this.tabPoint),
         text: center,
-        shape: 'tab',
         ...(this.hasTextFrame
           ? { textFrame: { center, right: this.project(this.textRight), down: this.project(this.textDown), unit: TEXT_FRAME_UNIT } }
           : {}),
