@@ -61,8 +61,7 @@ Ces trois choix se tiennent : à décider et valider ensemble.
 - **3b** : plan serré, et slogan retiré de la veste ;
 - **3c** : modification de la règle 1 de `CLAUDE.md`, puis badge « IA » (« AI » en anglais) au col avec voyant
   d'état (bleu : inactif et écoute ; ambre : réflexion ; vert : parole ; jamais éteint), puis retrait du bandeau ;
-- **3e** : secours généré à partir du modèle 3D à la place de l'avatar SVG (fait le 18/11, planche validée ; reste le
-  test sur Meet avec le secours forcé).
+- **3e** : secours généré à partir du modèle 3D à la place de l'avatar SVG (fait et validé sur Meet le 18/11).
 
 L'ancienne partie « contraste » (3d) est absorbée par le nouveau fond, sauf si le contraste pose encore problème.
 Le slogan « Automated candidate, just like you. » est retiré de l'avatar : la transparence repose sur le badge, le
