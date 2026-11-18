@@ -152,7 +152,8 @@ sans structure STAR ni résultats chiffrés). Cause principale : les limites de 
 - Notes du candidat : proposer un modèle (pour chaque expérience clé : contexte, rôle, actions, résultat chiffré ;
   trois à cinq histoires couvrent la plupart des questions comportementales), la qualité des réponses étant
   plafonnée par celle des notes.
-- Durée cible d'une réponse longue : 20 à 30 secondes, acceptable pour la vidéo de démo.
+- Durée d'une réponse longue : 20 à 30 secondes est un plafond, pas un objectif. Mesuré au banc du prompt (18/11) :
+  ≈ 16 secondes pour une réponse comportementale (4 phrases, ≈ 40 mots), gardé tel quel.
 
 - Critère de fin : le jeu « entretien » de la page `voices` sur une dizaine de questions, dont des questions
   pièges sans réponse dans les notes et des questions comportementales ; aucune invention, ton reconnaissable,

@@ -11,7 +11,7 @@ import { isGreetingOnly } from './greeting';
 import { streamReply, type ChatMessage } from './llm';
 import { clock, createLogger } from './log';
 import { int16ToFloat, resample } from './pcm';
-import { disclosureText, openingText, shortDisclosureText, systemPrompt } from './prompt';
+import { disclosureText, humorNote, openingText, shortDisclosureText, stripHumorMark, systemPrompt } from './prompt';
 import { createTranscriber, STT_SAMPLE_RATE, type Transcriber } from './stt';
 import type { SpeechAudio, TtsEngine } from './tts';
 import { Vad, VAD_SAMPLE_RATE } from './vad';
@@ -116,6 +116,8 @@ export class Conversation {
   /** Question restée sans réponse audible (recruteur qui reprend la parole). */
   private carried = '';
   private readonly history: ChatMessage[] = [];
+  /** Remarque d'humour sur sa condition d'IA déjà faite dans cet entretien (au plus une, voir lib/prompt.ts). */
+  private humorUsed = false;
   private readonly opening: string;
   private readonly system: string;
   private openingAudio: Promise<SpeechAudio[]>;
@@ -179,6 +181,7 @@ export class Conversation {
   reset(reason: string) {
     this.interrupt(reason);
     this.history.length = 0;
+    this.humorUsed = false;
     this.carried = '';
     this.preroll = [];
     this.prerollSamples = 0;
@@ -510,6 +513,7 @@ export class Conversation {
     const messages: ChatMessage[] = [
       { role: 'system', content: this.system },
       ...this.history.slice(-MAX_HISTORY_MESSAGES),
+      { role: 'system', content: humorNote(this.humorUsed) },
       { role: 'user', content: question },
     ];
     log(`question envoyée au LLM (${this.config.llmModel}) : « ${question} »`);
@@ -538,7 +542,13 @@ export class Conversation {
             response.timings.firstToken = Date.now() - questionEndAt;
             log(`premier mot reçu ${response.timings.firstToken} ms après la fin de la question`);
           }
-          buffer += delta;
+          // Signe de la remarque d'humour : retiré avant la voix et la transcription, compté une fois pour toutes.
+          const { text: clean, marked } = stripHumorMark(delta);
+          if (marked && !this.humorUsed) {
+            this.humorUsed = true;
+            log('remarque d’humour faite : plus aucune dans cet entretien');
+          }
+          buffer += clean;
           const ready = take(false);
           if (ready.length) {
             sentences.push(...ready);
@@ -548,7 +558,7 @@ export class Conversation {
         signal,
       );
       sentences.push(...take(true));
-      this.history.push({ role: 'user', content: question }, { role: 'assistant', content: reply });
+      this.history.push({ role: 'user', content: question }, { role: 'assistant', content: stripHumorMark(reply).text });
     } catch (error) {
       if (!signal.aborted) log(`erreur : ${error instanceof Error ? error.message : String(error)}`);
     } finally {

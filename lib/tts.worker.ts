@@ -30,7 +30,7 @@ export type ToTtsWorker =
 export type FromTtsWorker =
   | { type: 'progress'; loaded: number; total: number; url: string }
   | { type: 'ready'; scales: PiperScales; speakers: string[] }
-  | { type: 'audio'; id: number; samples: Float32Array<ArrayBuffer>; sampleRate: number; elapsedMs: number }
+  | { type: 'audio'; id: number; samples: Float32Array<ArrayBuffer>; sampleRate: number; elapsedMs: number; phonemes: string }
   | { type: 'error'; id?: number; message: string };
 
 const scope = self as unknown as {
@@ -46,13 +46,16 @@ type Inference = { length_scale: number; noise_scale: number; noise_w: number };
 let inference: Inference | null = null;
 /** Locuteurs de la voix (speaker_id_map du même JSON) : nom → numéro. */
 let speakerMap: Record<string, number> = {};
+/** Phonèmes de la voix (phoneme_id_map du même JSON), à l'envers : numéro → symbole, pour le banc d'essai. */
+let phonemeById = new Map<number, string>();
 const parse = JSON.parse;
 JSON.parse = function (text: string, reviver?: (key: string, value: unknown) => unknown) {
   const value = parse(text, reviver) as unknown;
-  const candidate = (value as { inference?: Inference; espeak?: unknown; speaker_id_map?: Record<string, number> } | null) ?? null;
+  const candidate = (value as { inference?: Inference; espeak?: unknown; speaker_id_map?: Record<string, number>; phoneme_id_map?: Record<string, number[]> } | null) ?? null;
   if (candidate && typeof candidate === 'object' && candidate.inference && candidate.espeak) {
     inference = candidate.inference;
     speakerMap = candidate.speaker_id_map ?? {};
+    phonemeById = new Map(Object.entries(candidate.phoneme_id_map ?? {}).flatMap(([symbol, ids]) => ids.map((id) => [id, symbol] as const)));
   }
   return value;
 };
@@ -90,7 +93,14 @@ let speakerIndex: number | null = null;
 type Run = (this: unknown, feeds: Record<string, unknown>, ...rest: unknown[]) => Promise<unknown>;
 const sessionClass = ort.InferenceSession as unknown as { prototype: { run: Run } };
 const run = sessionClass.prototype.run;
+/** Phonèmes reçus par le modèle pour la phrase en cours (eSpeak NG), sans les marques de début, fin et séparation. */
+let phonemes: string[] = [];
 sessionClass.prototype.run = function (feeds, ...rest) {
+  const input = (feeds as { input?: { data?: ArrayLike<bigint | number> } }).input?.data;
+  if (input) {
+    const symbols = Array.from(input, (id) => phonemeById.get(Number(id)) ?? '').filter((symbol) => symbol && !['^', '$', '_'].includes(symbol));
+    phonemes.push(symbols.join(''));
+  }
   const replaced = speakerIndex !== null && 'sid' in feeds ? { ...feeds, sid: new ort.Tensor('int64', [speakerIndex]) } : feeds;
   return run.call(this, replaced, ...rest);
 };
@@ -146,10 +156,11 @@ scope.onmessage = ({ data: message }) => {
       applyPitch(pitchSemitones);
       chooseSpeaker(speaker);
       const started = performance.now();
+      phonemes = [];
       const wav = await ready.predict(text);
       const { samples, sampleRate } = decodeWav(await wav.arrayBuffer());
       // Fréquence déclarée × f : rejoué plus vite et plus haut, au débit d'origine (applyPitch).
-      scope.postMessage({ type: 'audio', id, samples, sampleRate: Math.round(sampleRate * pitchFactor), elapsedMs: performance.now() - started }, [samples.buffer]);
+      scope.postMessage({ type: 'audio', id, samples, sampleRate: Math.round(sampleRate * pitchFactor), elapsedMs: performance.now() - started, phonemes: phonemes.join(' | ') }, [samples.buffer]);
     } catch (error) {
       scope.postMessage({ type: 'error', id, message: errorMessage(error) });
     }

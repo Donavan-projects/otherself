@@ -29,6 +29,7 @@ const PASSTHROUGH_FIELDS = [
   'bargeInMs',
   'candidateName',
   'avatarName',
+  'pronunciations',
   'monitorAvatar',
   'monitorVolume',
   'previewWindow',
