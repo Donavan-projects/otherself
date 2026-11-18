@@ -47,7 +47,7 @@ export async function buildVrmAssets(variant: VrmVariant, modelName?: string): P
   // veste recule de plusieurs centimètres en quelques millimètres et la caméra sautait d'un réglage à l'autre.
   const camera = solveVrmCamera(top, { y: anchorY, z: shirt.frontZ(boneHeight(glb, VRM_DEPTH_REFERENCE)) });
   log(`repères : haut des cheveux ${top.y.toFixed(3)} m (y = ${VRM_HEAD_TOP}), languette du col ${anchorY.toFixed(3)} m (y = ${VRM_COLLAR_Y})`);
-  const background = await rasterize(await fetchText(`/avatar-svg/fonds/${variant.background}.svg`), AVATAR_WIDTH, AVATAR_HEIGHT);
+  const background = await rasterize(await fetchText(`/fonds/${variant.background}.svg`), AVATAR_WIDTH, AVATAR_HEIGHT);
   const assets: VrmAssets<Blob> = {
     model,
     background: await toBlob(background),

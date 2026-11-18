@@ -15,24 +15,20 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 
 | Champ | Valeurs | Rôle | Si absent |
 | --- | --- | --- | --- |
-| `avatar` | nom de fichier | Personnage : `avatar/<avatar>.svg` (voir `avatar/gabarit.svg`) | `otherself` |
 | `background` | nom de fichier | Fond : `avatar/fonds/<background>.svg` | `atrium` (autres fonds : `bureau-clair`, `bureau`, `interieur-clair`) |
-| `avatarRenderer` | `vrm` / `svg` | Rendu de l'avatar. `vrm` : modèle 3D `avatar/otherself.vrm` (VRoid), animé en WebGL, plan serré, marqueur IA (marquage et voyant de la languette du col) ; sans accélération graphique (rendu WebGL logiciel) ou en cas d'échec, l'avatar SVG prend le relais automatiquement. `svg` : avatar dessiné en 2D seul. Les champs `avatar`, `palette`, `hairstyle` et `accessories` ne concernent que le SVG (la voix reste celle du personnage SVG `avatar`) | `vrm` |
-| `palette` | objet | Variante de couleurs sans redessiner : classe de la palette du SVG → couleur CSS. Exemple : `{ "peau": "#a86f4c", "cheveux": "#151010", "vetement": "#5b6470", "barbe": "none" }`. Classes : `peau`, `peau-trait`, `cheveux`, `cheveux-trait`, `sourcils`, `barbe`, `vetement` (surchemise), `vetement-2` (t-shirt), `vetement-trait`, `iris`, `levres`, `badge-fond` (encre du slogan)… | Couleurs du SVG |
-| `hairstyle` | nom | Coiffure : sous-groupe `coiffure_<nom>` du SVG | `principale` |
-| `accessories` | liste de noms | Accessoires affichés : sous-groupes `accessoire_<nom>` | aucun |
+| `avatarRenderer` | `vrm` / `fallback` | Rendu de l'avatar. `vrm` : modèle 3D `avatar/otherself.vrm` (VRoid), animé en WebGL, plan serré, marqueur IA (marquage et voyant de la languette du col) ; sans accélération graphique (rendu WebGL logiciel) ou en cas d'échec, l'avatar de secours prend le relais automatiquement. `fallback` : avatar de secours seul (images rendues à l'avance depuis le modèle 3D : bouche, yeux, voyant et marquage animés, sans respiration ni mouvement de tête), utile pour le vérifier ; `svg`, ancien nom, est accepté. Les anciens champs `avatar`, `palette`, `hairstyle` et `accessories` (personnage SVG, retiré) sont ignorés, avec un avertissement au build | `vrm` |
 | `badgeText` | texte court | Marquage imprimé sur la veste de l'avatar à côté du voyant d'état (règle 1), en lettres pleines ; 12 caractères au plus | « IA » si `language` vaut `fr`, sinon « AI » (un texte vide est aussi remplacé) |
 | `language` | `en`, `fr` | Langue de l'entretien : transcription, réponses du LLM, phrase de révélation | `en` |
 | `candidateName` | texte | Prénom ou nom du candidat : l'avatar parle de lui à la troisième personne (« Alex a travaillé… »), et se présente comme « l'avatar IA qui représente Alex » | « the candidate » / « le candidat » |
 | `messageText` | texte | Mode « message » : déclaration prononcée juste après la révélation, avant de répondre aux questions | Révélation seule |
 | `cv` | md, txt | CV et notes du candidat, seule source des réponses (règle 5) | Avertissement au build ; l'avatar dit ne pas pouvoir répondre |
 | `openaiApiKey` | `sk-…` | Clé OpenAI (transcription et LLM) | Pipeline voix inactif, avertissement au build |
-| `voice` | identifiant Piper | Voix Piper de l'avatar : modèle téléchargé une seule fois depuis Hugging Face (aucune donnée de l'entretien ni du candidat envoyée), puis synthèse en local dans le navigateur (voir ci-dessous) | Voix du personnage : attribut `data-voix` du SVG (`en_US-norman-medium` pour `otherself`) |
+| `voice` | identifiant Piper | Voix Piper de l'avatar : modèle téléchargé une seule fois depuis Hugging Face (aucune donnée de l'entretien ni du candidat envoyée), puis synthèse en local dans le navigateur (voir ci-dessous) | `en_US-norman-medium` |
 | `ttsProvider` | `piper`, `openai` | Synthèse vocale : Piper (local, gratuit) ou OpenAI (même clé, payante, en streaming) | `piper` |
-| `openaiVoice` | voix OpenAI | Voix de la synthèse OpenAI (`ash`, `onyx`…) | Voix du personnage : attribut `data-voix-openai` du SVG (`ash`) |
+| `openaiVoice` | voix OpenAI | Voix de la synthèse OpenAI (`ash`, `onyx`…) | `ash` |
 | `openaiTtsModel` | modèle OpenAI | Modèle de synthèse OpenAI | `gpt-4o-mini-tts` |
 | `piperScales` | objet | Réglages Piper : `lengthScale` (débit, plus petit = plus rapide), `noiseScale` (variation de l'intonation), `noiseW` (variation du rythme). Comparer au banc d'essai des voix (popup) | `{ "lengthScale": 0.92, "noiseScale": 0.8, "noiseW": 1 }` |
-| `pitchSemitones` | −6 à +6 | Hauteur de la voix Piper, en demi-tons, sans changer le débit : synthèse avec un `length_scale` × 2^(n/12), rejouée 2^(n/12) fois plus vite (micro injecté et retour audio ; la bouche suit le son joué). À comparer à l'écoute au banc d'essai (`voix~1.5`) | Hauteur du personnage : attribut `data-voix-hauteur` du SVG (`1.5` pour `otherself`), sinon `0` |
+| `pitchSemitones` | −6 à +6 | Hauteur de la voix Piper, en demi-tons, sans changer le débit : synthèse avec un `length_scale` × 2^(n/12), rejouée 2^(n/12) fois plus vite (micro injecté et retour audio ; la bouche suit le son joué). À comparer à l'écoute au banc d'essai (`voix~1.5`) | `1.5` |
 | `monitorAvatar` | `true` / `false` | Retour audio : vous entendez la voix de l'avatar, jouée par l'extension hors de l'onglet de l'entretien (elle n'est donc jamais prise pour le recruteur) | Activé |
 | `monitorVolume` | 0 à 1 | Volume du retour audio | `0.8` |
 | `previewWindow` | `true` / `false` | Bouton « Aperçu de l'avatar » du popup, pour le tournage : fenêtre Picture-in-Picture montrant le flux vidéo envoyé à la plateforme, à l'endroit et sans son. `false` masque le bouton | Activé |

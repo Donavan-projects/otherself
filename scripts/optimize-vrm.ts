@@ -2,6 +2,8 @@
 // (avatar/android-source.vrm) n'est pas commité, seul le résultat (avatar/otherself.vrm) l'est.
 //   npm run vrm -- inspect [fichier]                 rapport seul (licence, expressions, poids)
 //   npm run vrm -- optimize [source] [destination]   allège puis affiche les deux rapports
+//   npm run vrm -- fallback                          images de l'avatar de secours (scripts/render-fallback.ts ;
+//                                                    après npm run build, avec un Chromium : voir ce fichier)
 //
 // Allègement, sans toucher au squelette ni à la physique :
 // - miniature retirée (meta.thumbnailImage), inutile au rendu ;
@@ -371,7 +373,10 @@ if (command === 'inspect') {
   report(sourcePath, source, readFileSync(sourcePath).byteLength);
   const size = writeGlb(destination, await optimize(source));
   report(destination, readGlb(destination), size);
+} else if (command === 'fallback') {
+  const { renderFallback } = await import('./render-fallback.ts');
+  await renderFallback();
 } else {
-  console.error('usage : npm run vrm -- inspect [fichier] | optimize [source] [destination]');
+  console.error('usage : npm run vrm -- inspect [fichier] | optimize [source] [destination] | fallback');
   process.exit(1);
 }

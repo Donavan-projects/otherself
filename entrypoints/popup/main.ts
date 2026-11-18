@@ -3,7 +3,8 @@
 // (consigne ou erreur). Les détails techniques vont dans les logs [inject] de la console du popup.
 
 import { mapAssets } from '@/lib/avatar';
-import { buildAvatarAssets, renderMarkingText } from '@/lib/avatar-assets';
+import { renderMarkingText } from '@/lib/avatar-assets';
+import { buildFallbackAssets } from '@/lib/fallback-assets';
 import { buildVrmAssets, mapVrmAssets } from '@/lib/vrm-assets';
 import { loadDemoConfig } from '@/lib/config';
 import { blobToFile, type SerializedSources } from '@/lib/injection-sources';
@@ -184,14 +185,14 @@ pauseButton.addEventListener('click', () => {
 /** Avatar préparé ici (page de l'extension), puis remis à la page sous forme d'images seulement. */
 async function loadSources(): Promise<SerializedSources> {
   const config = await loadDemoConfig();
-  const { assets } = await buildAvatarAssets(config);
-  // Avatar 3D (prototype) : préparé en plus du SVG, qui reste le secours dans la page.
+  // Secours (images rendues depuis le modèle 3D) : toujours préparé, il prend le relais dans la page si le 3D échoue.
+  const assets = await buildFallbackAssets(config);
   let vrm: SerializedSources['vrm'];
   if (config.avatarRenderer === 'vrm') {
     try {
       vrm = await mapVrmAssets(await buildVrmAssets(config), blobToFile);
     } catch (error) {
-      log(`avatar 3D indisponible (${error instanceof Error ? error.message : String(error)}) : avatar SVG utilisé`);
+      log(`avatar 3D indisponible (${error instanceof Error ? error.message : String(error)}) : avatar de secours utilisé`);
     }
   }
   return {

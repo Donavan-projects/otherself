@@ -7,7 +7,7 @@
 
 import type { Browser } from 'wxt/browser';
 import { PORT_NAME, type FromOffscreen, type FromPage } from '@/lib/bridge-messages';
-import { avatarVoices, loadDemoConfig, loadLocalText } from '@/lib/config';
+import { loadDemoConfig, loadLocalText } from '@/lib/config';
 import { Conversation } from '@/lib/conversation';
 import { createLogger } from '@/lib/log';
 import { AvatarMonitor } from '@/lib/monitor';
@@ -149,15 +149,14 @@ async function start() {
   const cv = await loadLocalText(config.cv);
   log(`CV et notes chargés (${cv.length} caractères), langue ${config.language}`);
   configureOnnxRuntime();
-  // Voix : champ voice / openaiVoice de config.local.json, sinon celle du personnage (SVG).
-  const defaults = await avatarVoices(config.avatar);
+  // Voix : champs voice / openaiVoice / pitchSemitones de config.local.json, sinon celles de l'avatar (lib/config.ts).
   let voice: TtsEngine;
   if (config.ttsProvider === 'openai') {
-    voice = new OpenAiVoice({ apiKey: config.openaiApiKey, model: config.openaiTtsModel, voice: config.openaiVoice || defaults.openai || 'ash' });
+    voice = new OpenAiVoice({ apiKey: config.openaiApiKey, model: config.openaiTtsModel, voice: config.openaiVoice });
   } else {
-    voice = await PiperVoice.load(config.voice || defaults.piper || 'en_US-ljspeech-medium', { ...DEFAULT_PIPER_SCALES, ...config.piperScales }, config.pitchSemitones ?? defaults.pitch ?? 0);
+    voice = await PiperVoice.load(config.voice, { ...DEFAULT_PIPER_SCALES, ...config.piperScales }, config.pitchSemitones);
   }
-  log(`synthèse vocale : ${voice.description}${config.voice || config.openaiVoice ? '' : ` (voix du personnage ${config.avatar})`}`);
+  log(`synthèse vocale : ${voice.description}`);
   // Retour pour l'utilisateur : joué ici, jamais dans l'onglet capturé.
   const monitor = config.monitorAvatar ? new AvatarMonitor(config.monitorVolume) : null;
   if (!monitor) log('retour audio de la voix de l’avatar désactivé (monitorAvatar: false)');

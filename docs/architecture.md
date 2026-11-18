@@ -29,7 +29,7 @@ flowchart TB
   subgraph TAB["Onglet de l'entretien"]
     subgraph MAIN["Script injecté, monde MAIN"]
       SHARE["Son de l'onglet partagé<br/>share-tab.ts"]
-      RENDER["Rendu de l'avatar<br/>VRM three.js, repli SVG<br/>+ marqueur IA en dernier"]
+      RENDER["Rendu de l'avatar<br/>VRM three.js, repli sur le secours<br/>+ marqueur IA en dernier"]
       VOICE["Voix de l'avatar<br/>page-audio.ts"]
       INJ["Caméra et micro injectés<br/>inject.ts"]
     end
@@ -68,11 +68,12 @@ flowchart TB
 `entrypoints/popup/main.ts`. Au clic sur « Activer sur cet onglet », le popup lit `config.local.json` (copié dans le
 build sous `local/`), puis prépare l'avatar :
 
-- `lib/avatar-assets.ts` construit toujours l'avatar SVG (calques rastérisés, slogan courbé sur le t-shirt) : c'est le
-  secours ;
+- `lib/fallback-assets.ts` prépare toujours l'avatar de secours : fond et personnage composés, zones des yeux et de la
+  bouche, position du marqueur, à partir des images de `avatar/secours/` rendues à l'avance depuis le modèle 3D
+  (`npm run vrm -- fallback`) ;
 - `lib/vrm-assets.ts` (rendu `vrm`, par défaut) lit `avatar/otherself.vrm`, calcule le cadrage d'après les os du
-  squelette (`lib/vrm-frame.ts`), dessine le slogan à plat avec les paramètres du SVG (zone, lignes, police, encre) et
-  rastérise le fond.
+  squelette (`lib/vrm-frame.ts`) et rastérise le fond ;
+- `lib/avatar-assets.ts` rend le marquage « IA » dans la police embarquée (la page ne peut pas la charger).
 
 Le popup injecte ensuite `content.js` (monde MAIN) et `bridge.js` (monde isolé) dans l'onglet actif, avec
 `scripting.executeScript` : la page reçoit des images et le modèle 3D, jamais la configuration ni la clé API. Il crée
@@ -107,8 +108,9 @@ Dans la page (`lib/inject.ts`), à la première demande de caméra :
 
 - **VRM** (`lib/avatar-vrm.ts`) : three.js et three-vrm dessinent le modèle dans un canvas WebGL hors DOM, à fond
   transparent. Il est recopié à chaque image dans le canvas 2D de 1280×720, par-dessus le fond.
-- **Repli SVG** (`lib/avatar.ts`) : si WebGL est logiciel (SwiftShader, llvmpipe), si le modèle ne se charge pas ou si le
-  contexte WebGL est perdu, l'avatar SVG prend le relais dans le même canvas, sans changer de piste vidéo.
+- **Secours** (`lib/avatar.ts`) : si WebGL est logiciel (SwiftShader, llvmpipe), si le modèle ne se charge pas ou si le
+  contexte WebGL est perdu, l'avatar de secours (images rendues depuis le même modèle, sans respiration ni mouvement
+  de tête) prend le relais dans le même canvas, sans changer de piste vidéo.
 - **Marqueur IA** (`lib/badge.ts`) : marquage « IA » imprimé sur la veste et voyant d'état sur la languette du col
   (bleu, ambre, vert selon l'état), peints en dernier dans le canvas 2D, à chaque image où l'avatar est visible, près du
   visage pour survivre aux recadrages. Ils font partie de l'image envoyée : la plateforme ne peut pas les masquer.
@@ -128,7 +130,7 @@ les fonctions d'origine et coupe les pistes.
 | Partage du son de l'onglet, routage audio, pont | Transcription : son du recruteur pendant ses prises de parole |
 | Détection de parole (Silero VAD) | Réponse : prompt système avec le CV et les notes, transcription des questions |
 | Synthèse vocale (Piper, modèle téléchargé une fois depuis Hugging Face), retour audio | Synthèse vocale OpenAI seulement si `ttsProvider` vaut `openai` (pas par défaut) |
-| Rendu de l'avatar (WebGL ou SVG), marqueur IA, injection | |
+| Rendu de l'avatar (WebGL ou secours), marqueur IA, injection | |
 
 La clé API ne quitte jamais le document offscreen. Hugging Face ne sert qu'à télécharger le modèle de voix Piper, une
 fois, sans clé ni donnée de l'entretien ou du candidat (comme toute requête web, ce téléchargement fait connaître
@@ -144,7 +146,7 @@ flowchart LR
   B --> A["AnalyserNode<br/>niveau RMS, 1024 échantillons"]
   A -->|"à chaque image, 30/s"| M["MouthAnimator<br/>lissage et seuils"]
   M --> F{"Forme<br/>repos · M · E · A · O"}
-  F -->|"avatar SVG"| S["image de bouche"]
+  F -->|"avatar de secours"| S["image de bouche"]
   F -->|"avatar VRM"| V["expressions aa ih ou ee oh<br/>transitions 45 ms / 80 ms"]
 ```
 
@@ -193,7 +195,7 @@ fermeture. Les formes s'enchaînent donc sans saut.
 - **Cheveux** : physique du modèle (spring bones VRM, 73 articulations), mise à jour à chaque image. Avant la première
   image, 60 images de physique laissent les cheveux retomber depuis la T-pose.
 
-### Partagé avec l'avatar SVG, propre au VRM
+### Partagé avec l'avatar de secours, propre au VRM
 
 | Partagé | Propre au VRM |
 | --- | --- |
@@ -202,8 +204,8 @@ fermeture. Les formes s'enchaînent donc sans saut.
 | Marqueur IA (marquage et voyant), peint par l'appelant | Regard, saccades, mouvements de tête, respiration, pose des bras, physique des cheveux |
 | | Plan serré par les os (cheveux à y = 54, languette du col à y = 470) ; marquage qui suit le tissu |
 
-L'avatar SVG n'a que des formes de bouche dessinées et des yeux ouverts ou fermés ; il ne redessine que la zone des
-yeux et de la bouche à chaque image.
+L'avatar de secours n'a que cinq images de bouche et trois d'yeux (ouverts, fermés, regard de côté), rendues à l'avance
+depuis le modèle 3D ; il ne redessine que les zones des yeux, de la bouche et du marqueur à chaque image.
 
 ### Limites actuelles
 

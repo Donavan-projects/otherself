@@ -7,36 +7,28 @@ import { badgeTextOrDefault } from './badge';
 export type Language = 'en' | 'fr';
 
 export interface DemoConfig {
-  /** Personnage : avatar/<avatar>.svg. */
-  avatar: string;
   /** Fond : avatar/fonds/<background>.svg. */
   background: string;
-  /** Rendu de l'avatar : vrm (modèle 3D avatar/otherself.vrm, par défaut ; repli automatique sur le SVG) ou svg (dessin 2D seul). */
-  avatarRenderer: 'svg' | 'vrm';
-  /** Variante de couleurs : classe de la palette du SVG → couleur (« none » pour masquer, ex. barbe). */
-  palette: Record<string, string>;
-  /** Coiffure : sous-groupe coiffure_<hairstyle> du SVG. */
-  hairstyle: string;
-  /** Accessoires : sous-groupes accessoire_<nom> affichés. */
-  accessories: string[];
+  /** Rendu de l'avatar : vrm (modèle 3D avatar/otherself.vrm, par défaut ; repli automatique sur le secours) ou fallback (secours seul : images rendues depuis le modèle 3D ; « svg » accepté). */
+  avatarRenderer: 'fallback' | 'vrm';
   testAudio: string | null;
   cv: string | null;
-  /** Texte de la pastille « ● IA » (règle 1) : jamais vide ; « IA » ou « AI » par défaut selon la langue. */
+  /** Texte du marquage imprimé sur la veste (règle 1) : jamais vide ; « IA » ou « AI » par défaut selon la langue. */
   badgeText: string;
   /** Déclaration prononcée après la révélation, avant les réponses (mode « message »). */
   messageText: string;
   language: Language;
   /** Prénom ou nom du candidat : l'avatar parle de lui à la troisième personne. */
   candidateName: string;
-  /** Identifiant de voix Piper, par exemple en_US-norman-medium ; vide : voix du personnage (data-voix du SVG). */
+  /** Identifiant de voix Piper ; par défaut en_US-norman-medium (domaine public). */
   voice: string;
   /** Synthèse vocale : piper (local, gratuit, par défaut) ou openai (payant, en streaming). */
   ttsProvider: 'piper' | 'openai';
-  /** Voix OpenAI ; vide : voix du personnage (data-voix-openai du SVG). */
+  /** Voix OpenAI (ttsProvider: openai) ; par défaut ash. */
   openaiVoice: string;
   openaiTtsModel: string;
-  /** Hauteur de la voix Piper en demi-tons (−6 à +6), sans changement de débit ; null : hauteur du personnage (data-voix-hauteur du SVG), sinon 0. */
-  pitchSemitones: number | null;
+  /** Hauteur de la voix Piper en demi-tons (−6 à +6), sans changement de débit ; par défaut +1,5. */
+  pitchSemitones: number;
   /** Réglages Piper (débit, intonation, rythme) ; absents : valeurs retenues dans lib/tts.ts. */
   piperScales: { lengthScale?: number; noiseScale?: number; noiseW?: number };
   /** Silence (ms) après lequel le recruteur est considéré comme ayant fini de parler. */
@@ -55,25 +47,23 @@ export interface DemoConfig {
 }
 
 const DEFAULTS: DemoConfig = {
-  avatar: 'otherself',
   background: 'atrium',
   avatarRenderer: 'vrm',
-  palette: {},
-  hairstyle: 'principale',
-  accessories: [],
   testAudio: null,
   cv: null,
   badgeText: 'AI',
   messageText: '',
   language: 'en',
   candidateName: '',
-  // Vide : voix du personnage. « high » est trop lent en WebAssembly sur la machine de référence.
-  voice: '',
+  // Voix de l'avatar (choisies à l'écoute le 29/10) : norman, LibriVox, domaine public, entraînée de zéro ; jamais joe
+  // ni libritts_r pour une publication (affinées à partir de lessac). « high » est trop lent en WebAssembly sur la
+  // machine de référence.
+  voice: 'en_US-norman-medium',
   ttsProvider: 'piper',
-  openaiVoice: '',
+  openaiVoice: 'ash',
   openaiTtsModel: 'gpt-4o-mini-tts',
   piperScales: {},
-  pitchSemitones: null,
+  pitchSemitones: 1.5,
   silenceMs: 800,
   bargeInMs: 600,
   openaiApiKey: '',
@@ -101,25 +91,19 @@ export async function loadDemoConfig(): Promise<DemoConfig> {
       ? Math.min(1, Math.max(0, Number(raw.monitorVolume)))
       : DEFAULTS.monitorVolume;
   config.ttsProvider = raw.ttsProvider === 'openai' ? 'openai' : 'piper';
-  config.voice = safeName(raw.voice) ?? '';
-  config.openaiVoice = safeName(raw.openaiVoice) ?? '';
+  config.voice = safeName(raw.voice) ?? DEFAULTS.voice;
+  config.openaiVoice = safeName(raw.openaiVoice) ?? DEFAULTS.openaiVoice;
   config.piperScales = Object.fromEntries(
     (['lengthScale', 'noiseScale', 'noiseW'] as const).flatMap((key) => {
       const value = Number((raw.piperScales as Record<string, unknown> | undefined)?.[key]);
       return Number.isFinite(value) && value > 0 ? [[key, value]] : [];
     }),
   );
-  config.pitchSemitones = clampPitch(raw.pitchSemitones);
-  config.avatar = safeName(raw.avatar) ?? DEFAULTS.avatar;
+  config.pitchSemitones = clampPitch(raw.pitchSemitones) ?? DEFAULTS.pitchSemitones;
   config.background = safeName(raw.background) ?? DEFAULTS.background;
-  config.avatarRenderer = raw.avatarRenderer === 'svg' ? 'svg' : 'vrm';
-  config.palette = Object.fromEntries(
-    Object.entries(raw.palette && typeof raw.palette === 'object' ? raw.palette : {}).filter(
-      ([name, color]) => safeName(name) !== null && typeof color === 'string' && /^[#\w(),.% -]+$/.test(color),
-    ),
-  );
-  config.hairstyle = safeName(raw.hairstyle) ?? DEFAULTS.hairstyle;
-  config.accessories = Array.isArray(raw.accessories) ? raw.accessories.flatMap((name) => safeName(name) ?? []) : [];
+  // fallback : avatar de secours seul (images rendues depuis le modèle 3D) ; « svg », ancien nom, est accepté.
+  const renderer = raw.avatarRenderer as string | undefined;
+  config.avatarRenderer = renderer === 'fallback' || renderer === 'svg' ? 'fallback' : 'vrm';
   config.bargeInMs = Number(raw.bargeInMs) >= 0 && raw.bargeInMs !== undefined ? Number(raw.bargeInMs) : DEFAULTS.bargeInMs;
   return config;
 }
@@ -133,16 +117,6 @@ function clampPitch(value: unknown): number | null {
 /** Nom de fichier ou de classe sans chemin ni caractère spécial. */
 function safeName(value: unknown): string | null {
   return typeof value === 'string' && /^[\w-]+$/.test(value) ? value : null;
-}
-
-/** Voix par défaut du personnage : attributs data-voix, data-voix-openai et data-voix-hauteur de la racine du SVG. */
-export async function avatarVoices(avatar: string): Promise<{ piper: string | null; openai: string | null; pitch: number | null }> {
-  const response = await fetch(localUrl(`/avatar-svg/${avatar}.svg`));
-  if (!response.ok) return { piper: null, openai: null, pitch: null };
-  const root = /<svg\b[^>]*>/.exec(await response.text())?.[0] ?? '';
-  const read = (name: string) => safeName(new RegExp(`\\s${name}="([^"]*)"`).exec(root)?.[1]);
-  const pitch = new RegExp('\\sdata-voix-hauteur="([^"]*)"').exec(root)?.[1];
-  return { piper: read('data-voix'), openai: read('data-voix-openai'), pitch: clampPitch(pitch) };
 }
 
 export async function loadLocalText(path: string | null): Promise<string> {

@@ -23,7 +23,7 @@ const log = createLogger('inject');
 
 export interface FakeMediaSources {
   avatar: AvatarAssets<ImageBitmap>;
-  /** Avatar 3D (prototype) : utilisé s'il est fourni et si WebGL est accéléré ; sinon, et en cas de panne, avatar SVG. */
+  /** Avatar 3D (prototype) : utilisé s'il est fourni et si WebGL est accéléré ; sinon, et en cas de panne, avatar de secours (images rendues depuis le modèle 3D). */
   vrm?: VrmSources | undefined;
   /** Texte de l'image de pause (« Avatar IA en pause ») : sans avatar, elle n'a ni marquage ni voyant (règle 1). */
   pauseText: string;
@@ -243,33 +243,33 @@ async function createVideoTrack(
     maxLevel = Math.max(maxLevel, value);
     return value;
   };
-  // Avatar 3D ou SVG, dessinés dans le même canvas : la piste capturée ne change pas en cas de repli.
+  // Avatar 3D ou secours, dessinés dans le même canvas : la piste capturée ne change pas en cas de repli.
   const canvas = document.createElement('canvas');
-  const svg = (): FrameRenderer => new AvatarRenderer(canvas, sources.avatar, measured);
+  const fallback = (): FrameRenderer => new AvatarRenderer(canvas, sources.avatar, measured);
   let renderer: FrameRenderer;
   if (sources.vrm) {
     try {
       renderer = await createVrmRenderer(canvas, sources.vrm, measured, log);
       log('rendu : avatar 3D (VRM)');
     } catch (error) {
-      log(`avatar 3D indisponible (${errorMessage(error)}) : avatar SVG utilisé`);
-      renderer = svg();
+      log(`avatar 3D indisponible (${errorMessage(error)}) : avatar de secours utilisé`);
+      renderer = fallback();
     }
   } else {
-    renderer = svg();
+    renderer = fallback();
   }
-  /** État courant, redonné au SVG en cas de repli. */
+  /** État courant, redonné au secours en cas de repli. */
   let avatarState: AvatarState = sources.initialState ?? 'inactif';
   renderer.setState?.(avatarState);
-  /** Image suivante ; si l'avatar 3D tombe en panne (contexte WebGL perdu…), repli définitif sur le SVG. */
+  /** Image suivante ; si l'avatar 3D tombe en panne (contexte WebGL perdu…), repli définitif sur le secours. */
   const draw = (now: number): MouthShape => {
     try {
       return renderer.draw(now);
     } catch (error) {
       if (renderer instanceof AvatarRenderer) throw error;
-      log(`avatar 3D en panne (${errorMessage(error)}) : repli sur l'avatar SVG`);
+      log(`avatar 3D en panne (${errorMessage(error)}) : repli sur l'avatar de secours`);
       renderer.dispose?.();
-      renderer = svg();
+      renderer = fallback();
       renderer.setState?.(avatarState);
       return renderer.draw(now);
     }
@@ -349,7 +349,7 @@ async function createVideoTrack(
     setPaused(value, clickAt) {
       if (value === paused) return;
       paused = value;
-      // L'avatar SVG ne redessine que la zone du visage : il repart d'une image entière.
+      // L'avatar de secours ne redessine que la zone du visage : il repart d'une image entière.
       if (!value) renderer.invalidate?.();
       if (clickAt !== undefined) pendingClick = { at: clickAt, label: value ? 'pause' : 'reprise' };
       log(value ? 'pause : image « Avatar en pause » à la place de l’avatar (pistes de la plateforme inchangées)' : 'reprise : avatar de nouveau dessiné');

@@ -1,9 +1,9 @@
 // Rendu de l'avatar 3D (VRM) dans le canvas 1280×720 de la caméra injectée. Tourne dans le monde MAIN de
 // l'onglet (voie A) comme dans les pages de l'extension. three.js dessine le modèle dans un canvas WebGL hors DOM, à
 // fond transparent, recopié à chaque image dans le canvas 2D capturé, par-dessus le fond ; le marqueur IA (lib/badge.ts)
-// est peint en dernier dans ce canvas 2D par l'appelant (règle 1), exactement comme pour l'avatar SVG (lib/avatar.ts).
+// est peint en dernier dans ce canvas 2D par l'appelant (règle 1), exactement comme pour l'avatar de secours (lib/avatar.ts).
 //
-// Animation : bouche pilotée par le niveau de la voix (mêmes formes que le SVG, traduites en expressions VRM, avec
+// Animation : bouche pilotée par le niveau de la voix (mêmes formes que le secours, traduites en expressions VRM, avec
 // transitions lissées), clignements, regard vers la caméra avec petites saccades, respiration, mouvements de tête au
 // repos et en parlant, physique des cheveux (spring bones du modèle).
 
@@ -39,7 +39,7 @@ export interface VrmSources {
   camera: VrmCamera;
 }
 
-/** Rendu d'une image du flux : SVG (AvatarRenderer) ou VRM, dans le même canvas de sortie. */
+/** Rendu d'une image du flux : secours (AvatarRenderer) ou VRM, dans le même canvas de sortie. */
 export interface FrameRenderer {
   readonly canvas: HTMLCanvasElement;
   draw(now?: number): MouthShape;
@@ -54,7 +54,7 @@ export interface FrameRenderer {
   dispose?(): void;
 }
 
-// Bouche : formes du SVG → expressions VRM. M : lèvres fermées, donc rien d'ouvert.
+// Bouche : formes du secours → expressions VRM. M : lèvres fermées, donc rien d'ouvert.
 const MOUTH_EXPRESSIONS: Record<MouthShape, Partial<Record<VRMExpressionPresetName, number>>> = {
   repos: {},
   M: {},
@@ -96,6 +96,9 @@ export interface VrmPreviewOptions {
   angry?: number;
   /** Paupières fermées (vrai) ou ouvertes (faux) imposées (?blink=1|0), pour vérifier le mélange avec les expressions. */
   blink?: boolean;
+  /** Génération du secours : poids de relaxed fixe (sans atténuation par la bouche), regard de côté tête immobile. */
+  relaxed?: number;
+  gazeAside?: boolean;
 }
 
 export async function createVrmRenderer(
@@ -105,7 +108,7 @@ export async function createVrmRenderer(
   log: (message: string) => void = () => {},
   preview: VrmPreviewOptions = {},
 ): Promise<VrmAvatarRenderer> {
-  // WebGL d'abord : sans accélération graphique, inutile de charger le modèle (l'appelant revient au SVG).
+  // WebGL d'abord : sans accélération graphique, inutile de charger le modèle (l'appelant revient au secours).
   const glCanvas = document.createElement('canvas');
   const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, alpha: true, antialias: true, premultipliedAlpha: true, powerPreference: 'high-performance' });
   try {
@@ -160,7 +163,7 @@ export class VrmAvatarRenderer implements FrameRenderer {
   private readonly textRight = new THREE.Vector3();
   private readonly textDown = new THREE.Vector3();
   private hasTextFrame = false;
-  private anchors: MarkingAnchors = { light: { x: MARKING.tab.x, y: MARKING.tab.y }, text: { ...MARKING.text }, shape: 'tab' };
+  private anchors: MarkingAnchors = { light: { x: MARKING.tab.x, y: MARKING.tab.y }, text: { ...MARKING.text } };
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -235,7 +238,6 @@ export class VrmAvatarRenderer implements FrameRenderer {
       this.anchors = {
         light: this.project(this.tabPoint),
         text: center,
-        shape: 'tab',
         ...(this.hasTextFrame
           ? { textFrame: { center, right: this.project(this.textRight), down: this.project(this.textDown), unit: TEXT_FRAME_UNIT } }
           : {}),
@@ -246,6 +248,11 @@ export class VrmAvatarRenderer implements FrameRenderer {
 
   setState(state: AvatarState) {
     this.motion.setState(state);
+  }
+
+  /** Génération du secours : rendu WebGL du personnage seul, sur fond transparent (lu juste après draw). */
+  get glCanvas(): HTMLCanvasElement {
+    return this.renderer.domElement;
   }
 
   markingAnchors(): MarkingAnchors {
@@ -486,7 +493,7 @@ class VrmMotion {
     // Expressions VRoid (Fcl_ALL_*) : elles touchent aussi bouche et paupières, d'où des poids faibles,
     // relaxed atténué quand la bouche s'ouvre et un clignement réduit d'autant que les yeux sont déjà plissés.
     const openness = Math.max(...VISEMES.map((name) => this.weights.get(name) ?? 0));
-    const relaxed = style.relaxed * (1 - RELAXED_MOUTH_DAMPING * Math.min(1, openness / 0.8));
+    const relaxed = this.preview.relaxed ?? style.relaxed * (1 - RELAXED_MOUTH_DAMPING * Math.min(1, openness / 0.8));
     this.setExpression('relaxed', relaxed);
     this.setExpression('angry', style.angry);
     const closed = this.preview.blink ?? (!still && this.blink.closed(now));
@@ -515,8 +522,11 @@ class VrmMotion {
       this.gaze.yaw = approach(this.gaze.yaw, this.gazeWanted.yaw, dt, 0.03);
       this.gaze.pitch = approach(this.gaze.pitch, this.gazeWanted.pitch, dt, 0.03);
     }
-    const asideYaw = this.asideSign * style.gazeAsideYaw * DEG;
-    const asideUp = style.gazeAsideUp * DEG;
+    // Génération du secours (?gazeAside) : regard de côté de la réflexion, tête immobile.
+    const aside = this.preview.gazeAside ? STATE_STYLES.reflexion : style;
+    const asideYaw = this.asideSign * aside.gazeAsideYaw * DEG;
+    const asideUp = aside.gazeAsideUp * DEG;
+    const headFollow = this.preview.gazeAside ? 0 : HEAD_FOLLOW_ASIDE;
     const jitterYaw = still ? 0 : this.gaze.yaw;
     const jitterPitch = still ? 0 : this.gaze.pitch;
     const gazeYaw = asideYaw + jitterYaw;
@@ -537,11 +547,11 @@ class VrmMotion {
     const motion = still ? 0 : 1;
     const elapsed = now - this.nodStart;
     const nod = elapsed >= 0 && elapsed < NOD_MS ? Math.sin((Math.PI * elapsed) / NOD_MS) * style.nod * DEG : 0;
-    const yaw = motion * (style.headDrift * 2.2 * DEG * drift(t, 0.3, 0.05, 0.13, 0.31) + s * 1.2 * DEG * drift(t, 2.1, 0.4, 0.9)) + 0.3 * jitterYaw + HEAD_FOLLOW_ASIDE * asideYaw;
+    const yaw = motion * (style.headDrift * 2.2 * DEG * drift(t, 0.3, 0.05, 0.13, 0.31) + s * 1.2 * DEG * drift(t, 2.1, 0.4, 0.9)) + 0.3 * jitterYaw + headFollow * asideYaw;
     const pitch =
       motion * (style.headDrift * 1.4 * DEG * drift(t, 1.7, 0.07, 0.19) + s * 1.6 * DEG * drift(t, 0.8, 1.6, 2.7)) -
       0.25 * jitterPitch -
-      HEAD_FOLLOW_ASIDE * asideUp +
+      headFollow * asideUp +
       style.headPitch * DEG +
       nod;
     const roll = motion * (style.headDrift * 1.2 * DEG * drift(t, 4.2, 0.04, 0.11) + s * 1.0 * DEG * drift(t, 3.3, 0.35, 0.8)) + style.headTilt * DEG;

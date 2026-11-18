@@ -2,7 +2,8 @@
 // pour voir bouche et clignements sans plateforme, avec les états enchaînés (?state= pour en imposer un).
 
 import { AvatarRenderer, mapAssets } from '@/lib/avatar';
-import { buildAvatarAssets, renderMarkingText } from '@/lib/avatar-assets';
+import { renderMarkingText } from '@/lib/avatar-assets';
+import { buildFallbackAssets } from '@/lib/fallback-assets';
 import { DemoCycle, isAvatarState } from '@/lib/avatar-states';
 import { AiMarking } from '@/lib/badge';
 import { loadDemoConfig } from '@/lib/config';
@@ -13,7 +14,7 @@ const log = createLogger('avatar');
 const canvas = document.querySelector<HTMLCanvasElement>('#avatar')!;
 
 const config = await loadDemoConfig();
-const { assets } = await buildAvatarAssets(config);
+const assets = await buildFallbackAssets(config);
 const bitmaps = await mapAssets(assets, (blob) => createImageBitmap(blob));
 
 // États enchaînés comme dans un entretien (lib/avatar-states.ts) ; ?state= impose un état.

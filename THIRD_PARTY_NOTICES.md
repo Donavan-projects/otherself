@@ -23,12 +23,12 @@ composants suivants. Ceux marqués « embarqué » font partie de l'extension co
 ## Voix
 
 Téléchargées depuis Hugging Face ([rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices), miroir
-`diffusionstudio/piper-voices`) ; une seule voix : celle du personnage (`data-voix` dans son SVG), ou celle
-choisie dans `config.local.json`.
+`diffusionstudio/piper-voices`) ; une seule voix : celle par défaut (`lib/config.ts`), ou celle choisie dans
+`config.local.json`.
 
 | Voix | Jeu de données | Licence du jeu de données (fiche du modèle) | Remarque |
 | --- | --- | --- | --- |
-| `en_US-norman-medium` (voix par défaut du personnage `otherself`) | [LibriVox](https://librivox.org) | domaine public | entraînée de zéro ; jouée par OtherSelf 1,5 demi-ton plus haut (`data-voix-hauteur`, réglage `pitchSemitones`), sans changer le débit : modification faite à la lecture, le modèle téléchargé n'est pas modifié |
+| `en_US-norman-medium` (voix par défaut) | [LibriVox](https://librivox.org) | domaine public | entraînée de zéro ; jouée par OtherSelf 1,5 demi-ton plus haut (réglage `pitchSemitones`), sans changer le débit : modification faite à la lecture, le modèle téléchargé n'est pas modifié |
 | `en_US-ljspeech-medium` | [LJ Speech](https://keithito.com/LJ-Speech-Dataset/) | domaine public | entraînée de zéro sur LJ Speech (Bryce Beattie) ; voix féminine |
 | `en_US-joe-medium` | [OHF-Voice voice-datasets](https://github.com/OHF-Voice/voice-datasets) | CC0 | **affinée à partir de la voix `lessac`**, elle-même entraînée sur le jeu Lessac (licence Blizzard 2013, recherche) : statut incertain : **à éviter pour toute publication** (vidéo, démo enregistrée) |
 
@@ -39,12 +39,12 @@ ne s'applique pas à elles.**
 
 | Fichier | Origine | Statut |
 | --- | --- | --- |
-| `avatar/otherself.svg` (personnage v4) | illustration de base générée avec ChatGPT (OpenAI) ; tête vectorisée à partir de cette image, palette fixe, calques du gabarit ; yeux, clignement et bouches redessinés à la main | mise à disposition sans revendication de droits |
 | `avatar/fonds/atrium.svg` (fond par défaut) | image générée avec ChatGPT (OpenAI), redimensionnée à 1280 × 720 et floutée (4 px), intégrée en WebP dans un SVG | mise à disposition sans revendication de droits |
 | `avatar/fonds/bureau.svg`, `avatar/fonds/bureau-clair.svg` | image générée avec ChatGPT (OpenAI), recadrée et retouchée (désaturée, éclaircie pour `bureau-clair`), intégrée en WebP dans un SVG | mise à disposition sans revendication de droits |
-| `docs/images/otherself-apercu.png` (capture du README) | image vidéo rendue par l'extension avec l'avatar 3D précédent (personnage au sweat noir, version de `avatar/otherself.vrm` antérieure au 16/11/2026, conservée dans l'historique git) et le fond `bureau-clair` ci-dessus, slogan et bandeau dessinés par le code ; à remplacer à la fin de l'étape 3 de la feuille de route | personnage : même créateur et mêmes conditions que le modèle actuel (VRM Public License 1.0, ci-dessous) ; reste de l'image mis à disposition sans revendication de droits |
+| `docs/images/otherself-apercu.png` (capture du README) | image vidéo rendue par l'extension (page `vrm.html`, état inactif) : avatar 3D `avatar/otherself.vrm` ci-dessous sur le fond `atrium` ci-dessus, marquage « AI » et voyant dessinés par le code | personnage : VRM Public License 1.0 (ci-dessous) ; reste de l'image mis à disposition sans revendication de droits |
 | `avatar/otherself.vrm` (avatar 3D « Android », par défaut) | modèle créé par l'auteur du projet avec [VRoid Studio](https://vroid.com/en/studio) (pixiv), à partir des éléments prédéfinis de l'application (visage, cheveux, veste), exporté en VRM 1.0 ; allégé par `scripts/optimize-vrm.ts` (miniature, pantalon et chaussures retirés, morph targets retirés sauf ceux des expressions et des sourcils, textures réduites à 1024 px). | [VRM Public License 1.0](https://vrm.dev/licenses/1.0/), selon les métadonnées du modèle : utilisation par tous, usage commercial autorisé, redistribution et modification autorisées, mention de l'auteur non requise ; usages violents, sexuels, politiques ou religieux et antisociaux non autorisés. Les éléments prédéfinis de VRoid Studio relèvent en outre des [conditions de VRoid Studio](https://vroid.pixiv.help/hc/en-us/articles/4405813333657) : l'usage, y compris commercial, d'un modèle créé avec l'application est autorisé, mais **une application qui génère des avatars à partir des pièces de VRoid demande une licence séparée de pixiv**. Un futur créateur d'avatar dans OtherSelf ne devra donc utiliser que des pièces qui ne viennent pas de VRoid |
-| `avatar/otherself-v1.svg`, `avatar/gabarit.svg`, `avatar/fonds/interieur-clair.svg` | dessinés directement en SVG pour le projet, avec Claude Code (Anthropic) | licence du dépôt (GPL-3.0-or-later) |
+| `avatar/secours/*.webp` (avatar de secours) | images rendues à partir de `avatar/otherself.vrm` par `scripts/render-fallback.ts` (personnage au repos, yeux, bouches), sans autre retouche | celles du modèle : [VRM Public License 1.0](https://vrm.dev/licenses/1.0/) et conditions de VRoid Studio, voir la ligne précédente |
+| `avatar/fonds/interieur-clair.svg` | dessinés directement en SVG pour le projet, avec Claude Code (Anthropic) | licence du dépôt (GPL-3.0-or-later) |
 
 Le marquage « IA » est dessiné par le code en DejaVu Sans Mono Bold (voir ci-dessus).
 

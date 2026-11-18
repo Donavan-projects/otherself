@@ -11,7 +11,7 @@ export interface SerializedFile {
 
 export interface SerializedSources {
   avatar: AvatarAssets<SerializedFile>;
-  /** Avatar 3D (avatarRenderer: vrm) ; l'avatar SVG ci-dessus sert de secours. */
+  /** Avatar 3D (avatarRenderer: vrm) ; l'avatar de secours ci-dessus prend le relais. */
   vrm?: VrmAssets<SerializedFile> | undefined;
   /** Marquage « IA » (règle 1) déjà rendu par le popup (lib/avatar-assets.ts, renderMarkingText). */
   marking: SerializedFile;

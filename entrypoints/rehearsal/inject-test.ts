@@ -3,7 +3,8 @@
 // config.local.json, ou avec ?inject&vrm.
 
 import { mapAssets } from '@/lib/avatar';
-import { buildAvatarAssets, renderMarkingText } from '@/lib/avatar-assets';
+import { renderMarkingText } from '@/lib/avatar-assets';
+import { buildFallbackAssets } from '@/lib/fallback-assets';
 import { loadDemoConfig, localUrl } from '@/lib/config';
 import { installFakeGetUserMedia } from '@/lib/inject';
 import { pauseText } from '@/lib/injection-sources';
@@ -25,7 +26,7 @@ async function loadTestAudio(): Promise<ArrayBuffer | null> {
 export async function setupInjectionTest() {
   const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
   const config = await loadDemoConfig();
-  const { assets } = await buildAvatarAssets(config);
+  const assets = await buildFallbackAssets(config);
   const avatar = await mapAssets(assets, (blob) => createImageBitmap(blob));
   const wantsVrm = config.avatarRenderer === 'vrm' || new URLSearchParams(location.search).has('vrm');
   const vrmAssets = wantsVrm ? await buildVrmAssets(config) : undefined;
