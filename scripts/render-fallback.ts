@@ -21,7 +21,7 @@ const TIMEOUT_MS = 120_000;
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-function findChromium(): string {
+export function findChromium(): string {
   const fromEnv = process.env.OTHERSELF_CHROMIUM;
   if (fromEnv) {
     if (!existsSync(fromEnv)) throw new Error(`OTHERSELF_CHROMIUM = ${fromEnv} : fichier introuvable`);
@@ -45,7 +45,7 @@ function findChromium(): string {
 }
 
 /** Identifiant d'une extension non empaquetée : dérivé du chemin absolu de son dossier. */
-function extensionId(path: string): string {
+export function extensionId(path: string): string {
   return [...createHash('sha256').update(path).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 }
 

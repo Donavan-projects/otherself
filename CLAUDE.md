@@ -118,6 +118,9 @@ scripts/
   optimize-vrm.ts      # MANUEL (npm run vrm) : inspection et allègement du VRM exporté par VRoid
   render-fallback.ts   # MANUEL (npm run vrm -- fallback) : images du secours rendues depuis le VRM dans Chromium
   bench-prompt.ts      # MANUEL, payant (npm run bench:prompt) : banc du prompt en texte seul, rapport dans local/
+  bench-chromium.ts    # socle des bancs automatisés : profil neuf, une seule page de banc, appels au LLM plafonnés
+  bench-recruiter.ts   # MANUEL, payant (npm run bench:recruteur) : entretien avec le recruteur IA, prise possible
+  bench-silences.ts    # MANUEL, payant (npm run bench:silences) : banc des silences de la voix
 recruteur/
   entretien.json       # script du recruteur IA fictif (marque inventée, répliques, voix), modifiable
 avatar/
