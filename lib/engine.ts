@@ -73,8 +73,8 @@ export type RenderEvent =
 
 /** Lien du tour de parole vers le rendu : voix de l'avatar (audio) et événements. */
 export interface RenderLink {
-  /** Morceau de voix à jouer dans le micro injecté, rattaché à une réponse. */
-  speak(responseId: number, audio: SpeechAudio): void;
+  /** Morceau de voix à jouer dans le micro injecté, rattaché à une réponse ; `text` : ce qu'il dit (sous-titres). */
+  speak(responseId: number, audio: SpeechAudio, text?: string): void;
   /** Coupe tout ce qui reste à jouer. */
   stop(): void;
   /** Nouvel état de l'avatar (lib/avatar-states.ts), seulement quand il change. */

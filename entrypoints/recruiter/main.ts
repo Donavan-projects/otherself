@@ -17,7 +17,9 @@ import type { AvatarState } from '@/lib/avatar-states';
 import { PAGE_TAG, type PageEnvelope } from '@/lib/bridge-messages';
 import { createLogger } from '@/lib/log';
 import { PiperVoice } from '@/lib/tts';
+import { loadDemoConfig } from '@/lib/config';
 import { configureOnnxRuntime } from '@/lib/vad';
+import { chooseFolder, Recording } from './recording';
 import script from '@/recruteur/entretien.json';
 
 const log = createLogger('recruteur');
@@ -27,7 +29,10 @@ interface Turn {
   kind: TurnKind;
   text: string;
 }
-const TURNS = script.turns as Turn[];
+// ?tours=n : entretien court (n − 1 premières répliques, puis la clôture), pour les essais.
+const ALL_TURNS = script.turns as Turn[];
+const shortened = Number(new URLSearchParams(location.search).get('tours'));
+const TURNS = shortened >= 2 && shortened < ALL_TURNS.length ? [...ALL_TURNS.slice(0, shortened - 1), ALL_TURNS[ALL_TURNS.length - 1]!] : ALL_TURNS;
 const PATIENCE_MS = { impatient: 700, patient: 2500 } as const;
 type Patience = keyof typeof PATIENCE_MS;
 /** Attente maximale du début de la réponse (la première comprend la révélation et la déclaration). */
@@ -76,7 +81,9 @@ declare global {
     __recruiter?: {
       prepare(): Promise<string>;
       activate(): Promise<string>;
-      start(patience: Patience): Promise<TurnResult[]>;
+      start(patience: Patience, options?: { record?: boolean }): Promise<TurnResult[]>;
+      /** Fichiers de la dernière prise (emplacements). */
+      saved: string[];
       shareButtonRect(): DOMRect | null;
       sharing(): boolean;
       results: TurnResult[];
@@ -149,6 +156,8 @@ async function prepare(): Promise<string> {
 }
 
 let currentLine: AudioBufferSourceNode | null = null;
+/** Pistes de l'avatar reçues par la page (getUserMedia), pour l'enregistrement. */
+let avatarTracks: { video: MediaStreamTrack; voice: MediaStreamTrack } | null = null;
 let recruiterSpeaking = false;
 
 /** Joue une réplique ; résout à sa fin (Date.now de début et de fin). */
@@ -248,7 +257,9 @@ async function activate(): Promise<string> {
   const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: true });
   video.srcObject = new MediaStream(stream.getVideoTracks());
   const [voiceTrack] = stream.getAudioTracks();
-  if (!voiceTrack) throw new Error('micro injecté absent');
+  const [videoTrack] = stream.getVideoTracks();
+  if (!voiceTrack || !videoTrack) throw new Error('caméra ou micro injectés absents');
+  avatarTracks = { video: videoTrack, voice: voiceTrack };
   // Écoute seulement (jamais vers les haut-parleurs de l'onglet : la voix de l'avatar reviendrait dans le partage).
   const ctx = audioContext();
   avatarAnalyser = ctx.createAnalyser();
@@ -314,16 +325,40 @@ function addRow(result: TurnResult) {
   }
 }
 
-async function start(patience: Patience): Promise<TurnResult[]> {
+async function start(patience: Patience, options: { record?: boolean } = {}): Promise<TurnResult[]> {
   stopped = false;
   results.length = 0;
   tbody.textContent = '';
+  window.__recruiter!.done = false;
+  window.__recruiter!.saved = [];
   const patienceMs = PATIENCE_MS[patience];
+  // Prise : toutes les pistes démarrent avant la première réplique, dans le même instant.
+  let recording: Recording | null = null;
+  if (options.record && avatarTracks) {
+    const config = await loadDemoConfig();
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-');
+    recording = new Recording(
+      {
+        avatarVideo: avatarTracks.video,
+        avatarVoice: avatarTracks.voice,
+        recruiterCanvas: canvas,
+        recruiterVoice: recruiterOut!,
+        context: audioContext(),
+        avatarElement: video,
+        recruiterName: script.name,
+        avatarName: config.avatarName || 'AI avatar',
+      },
+      `prise-${stamp}`,
+      { patience, patienceMs, recruiter: script.name, role: script.role, voice: script.voice, avatarName: config.avatarName, llmModel: config.llmModel },
+    );
+    recording.start();
+  }
   log(`entretien démarré : recruteur ${patience} (${patienceMs} ms de silence avant d'enchaîner), ${TURNS.length} répliques`);
   for (const [index, turn] of TURNS.entries()) {
     if (stopped) break;
     status(`réplique ${index + 1} / ${TURNS.length}`);
-    const { endedAt } = await speak(index);
+    const { startedAt, endedAt } = await speak(index);
+    recording?.recruiterLine(turn.text, startedAt, endedAt);
     log(`réplique ${index + 1} dite : « ${turn.text} »`);
     const heard = await listen(patienceMs, endedAt);
     const stateAtNext = avatarState;
@@ -342,6 +377,7 @@ async function start(patience: Patience): Promise<TurnResult[]> {
   }
   // Laisse la dernière réponse finir et ses mesures arriver (logs [tts] de l'offscreen) avant de conclure.
   await sleep(4000);
+  if (recording) window.__recruiter!.saved = await recording.stop();
   const cut = results.filter((result) => result.cutOff).length;
   const longest = Math.max(0, ...results.map((result) => result.longestSilenceMs));
   status(`entretien terminé : ${results.length} répliques, ${cut} réponse(s) coupée(s), plus long silence entendu ${longest} ms`);
@@ -372,7 +408,7 @@ run(
   buttons.start,
   async () => {
     buttons.stop.disabled = false;
-    await start(patienceSelect.value as Patience);
+    await start(patienceSelect.value as Patience, { record: document.querySelector<HTMLInputElement>('#record')!.checked });
   },
   () => {
     buttons.start.disabled = false;
@@ -396,6 +432,10 @@ window.__recruiter = {
   },
   sharing: () => window.__otherSelf?.sharing?.() ?? false,
   results,
+  saved: [],
   done: false,
 };
+document.querySelector('#folder')!.addEventListener('click', () => {
+  chooseFolder().then(status, (error: unknown) => status(`dossier non choisi : ${error instanceof Error ? error.message : String(error)}`));
+});
 status('prêt : préparer les répliques');

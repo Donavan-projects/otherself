@@ -163,8 +163,8 @@ async function start() {
   const monitor = config.monitorAvatar ? new AvatarMonitor(config.monitorVolume) : null;
   if (!monitor) log('retour audio de la voix de l’avatar désactivé (monitorAvatar: false)');
   conversation = await Conversation.create(config, voice, engine, {
-    speak: (responseId, audio) => {
-      post({ type: 'speak', responseId, pcm: bufferToBase64(audio.samples.buffer), sampleRate: audio.sampleRate });
+    speak: (responseId, audio, text) => {
+      post({ type: 'speak', responseId, pcm: bufferToBase64(audio.samples.buffer), sampleRate: audio.sampleRate, text });
       monitor?.play(audio);
     },
     stop: () => {

@@ -613,7 +613,7 @@ export class Conversation {
         this.updateState(`voix envoyée à la page mais jamais jouée après ${PLAYBACK_START_TIMEOUT_MS} ms (réponse ${response.id})`);
       }, PLAYBACK_START_TIMEOUT_MS);
     }
-    this.link.speak(response.id, audio);
+    this.link.speak(response.id, audio, info.text);
     const duration = (audio.samples.length / audio.sampleRate) * 1000;
     // Comme la page : à la suite de la voix en cours, sinon dès l'arrivée (pont et avance de lecture : ≈ 100 ms).
     this.playhead = Math.max(Date.now() + 100, this.playhead) + duration;

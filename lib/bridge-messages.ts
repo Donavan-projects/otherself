@@ -28,7 +28,7 @@ export type ToPage =
   /** Pont tout juste relié : la page renvoie son état (mic-ready). */
   | { type: 'hello' }
   /** Voix de l'avatar : PCM float 32 bits mono. */
-  | { type: 'speak'; responseId: number; pcm: string; sampleRate: number }
+  | { type: 'speak'; responseId: number; pcm: string; sampleRate: number; /** Texte prononcé (sous-titres de la page recruteur). */ text?: string }
   | { type: 'stop' }
   /** État de l'avatar décidé par lib/conversation.ts ; at : Date.now du changement. */
   | { type: 'state'; state: AvatarState; previous: AvatarState; at: number; reason: string }

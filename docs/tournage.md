@@ -1,4 +1,60 @@
-# Tournage de la démo avec OBS
+# Tournage de la démo
+
+Deux méthodes :
+
+- **Page recruteur IA (méthode principale)** : un recruteur automatisé fictif, Maren, qui annonce lui-même être une IA,
+  face à l'avatar injecté dans la même page. Pas de vraie plateforme (conditions d'utilisation, image d'un recruteur
+  réel, marque). La page enregistre elle-même la prise, pistes séparées et sous-titres compris : pas d'OBS.
+- **Plateforme réelle avec OBS** (plus bas) : enregistrement d'écran d'un vrai entretien, l'onglet de la plateforme et
+  la fenêtre d'aperçu de l'avatar.
+
+## Page recruteur IA et enregistrement intégré
+
+Page `chrome-extension://<identifiant>/recruiter.html` (identifiant de l'extension non empaquetée : voir
+`chrome://extensions`). Script de l'entretien : `recruteur/entretien.json` (prénom, poste, voix, répliques ; un
+`npm run build` après modification ; les répliques modifiées sont resynthétisées au premier chargement). `?tours=n` :
+entretien court (n − 1 premières répliques, puis la clôture), pour un essai.
+
+Avant : mêmes réglages que ci-dessous (« Avant la prise ») ; casque ou haut-parleurs bas (la voix de l'avatar est
+jouée pour vous par le retour audio de l'extension, jamais dans l'onglet) ; garder l'onglet au premier plan pendant
+toute la prise (le visuel du recruteur et l'aperçu composé sont dessinés à chaque image).
+
+1. **Préparer les répliques** : la voix du recruteur (`en_US-ljspeech-medium`) les synthétise une seule fois, puis
+   elles sortent du cache (prises identiques).
+2. **Activer l'avatar** : même code que sur une plateforme ; puis cliquer le bouton OtherSelf apparu dans la page et
+   partager **cet onglet, avec son son** (c'est ainsi que l'avatar entend le recruteur).
+3. **Recruteur** : `patient` (2,5 s de silence avant d'enchaîner) pour le tournage ; `impatient` (700 ms, comme une
+   plateforme) pour vérifier les silences.
+4. **Dossier des prises…** (une fois par session) : choisir `local/prises/` du dépôt (ignoré par git). Sans dossier
+   choisi, les fichiers vont dans les téléchargements.
+5. **Démarrer l'entretien** avec « Enregistrer la prise » coché. À la fin (dernière réplique, réponse et 4 s), les
+   fichiers sont écrits ; « Arrêter » termine la prise plus tôt.
+
+Fichiers d'une prise (`prise-AAAAMMJJ-HHMMSS…`, heure UTC), toutes les pistes démarrées dans le même instant (vérifié :
+mêmes durées à 0,2 s près, débuts de parole des voix au même instant que les sous-titres, à 0,05 s près) :
+
+| Fichier | Contenu |
+| --- | --- |
+| `…-avatar.webm` | vidéo de l'avatar telle qu'envoyée, 1280×720, marqueur IA compris |
+| `…-recruteur.webm` | vidéo du recruteur (visuel abstrait, 1280×720) |
+| `…-voix-avatar.webm`, `…-voix-recruteur.webm` | voix séparées (Opus), alignées sur les vidéos (fond continu à −120 dB : sans lui, Chrome n'écrit rien pendant les silences et la voix se décalait) |
+| `…-apercu.webm` | aperçu déjà composé : écran partagé (recruteur à gauche, avatar à droite), voix mixées, pour juger la prise |
+| `….srt` | sous-titres horodatés, interlocuteur nommé (« Maren: … », « Nova: … »), d'après les heures réelles de lecture |
+| `…-infos.json` | réglages de la prise (recruteur, patience, modèle), durée, taille des pistes |
+
+Les fichiers WebM écrits par le navigateur n'indiquent pas leur durée dans l'en-tête : certains lecteurs n'affichent
+pas de barre de progression ; un logiciel de montage les lit normalement.
+
+Logs utiles (console de la page) : `[recruteur]` (début de chaque réponse, plus long silence entendu, réponse coupée
+si le recruteur enchaîne trop tôt), `[tts] silences de la réponse …` (silences mesurés par l'extension et leur
+cause), `[prise]` (pistes, fichiers écrits).
+
+Prise automatique (Claude Code, sans intervention) : Chromium sans interface avec le GPU, l'option de test
+`--auto-accept-this-tab-capture` (partage de l'onglet accepté sans fenêtre), les fichiers déposés directement dans
+`local/prises/` ; appels OpenAI facturés sur la clé de `config.local.json` (quelques centimes par prise). Toujours un
+profil Chromium neuf : un profil réutilisé rouvre les onglets des passages précédents, qui tournent alors en double.
+
+## Plateforme réelle avec OBS
 
 Enregistrement d'écran d'un entretien : l'onglet de la plateforme et la fenêtre d'aperçu de l'avatar, son compris.
 Méthode testée sous Linux (X11) avec Chrome et OBS Studio.
