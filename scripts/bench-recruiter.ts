@@ -66,10 +66,12 @@ const holds = browser.logs.flatMap((line) => [...line.matchAll(/attente de (\d+)
 const fillers = browser.logs.filter((line) => /phrase d.attente jouée/.test(line)).length;
 const summary = [...browser.logs].reverse().find((line) => line.includes("silences de l'entretien"));
 const delays = results.map((result) => result.answerDelayMs).filter((delay): delay is number => delay !== null);
+const realStarts = browser.logs.flatMap((line) => [...line.matchAll(/vraie réponse : début prévu (\d+) ms/g)].map((match) => Number(match[1]))).sort((a, b) => a - b);
+const range = (values: number[]) => (values.length ? `${(Math.min(...values) / 1000).toFixed(1)}-${(Math.max(...values) / 1000).toFixed(1)} s (médiane ${(values[Math.floor(values.length / 2)]! / 1000).toFixed(1)} s)` : '-');
 console.log(
   `\n== ${patience}${args.get('charge') ? `, charge ${args.get('charge')}` : ''} : réponses coupées ${results.filter((result) => result.cutOff).length}/${results.length}, ` +
     `plus long silence entendu ${Math.max(0, ...results.map((result) => result.longestSilenceMs))} ms, attentes ${holds.length} (${holds.join(', ') || '-'}), ` +
-    `phrases d'attente ${fillers}, début du premier son ${delays.length ? `${(Math.min(...delays) / 1000).toFixed(1)}-${(Math.max(...delays) / 1000).toFixed(1)} s` : '-'}, appels au LLM ${browser.llmCalls}`,
+    `phrases d'attente ${fillers}, premier son après ${range([...delays].sort((a, b) => a - b))}, vraie réponse après ${range(realStarts)}, appels au LLM ${browser.llmCalls}`,
 );
 if (summary) console.log(`   ${summary.slice(summary.indexOf('silences'))}`);
 for (const result of results.filter((item) => item.cutOff)) console.log(`   coupée : réplique ${result.index + 1}, après ${result.voiceMs} ms de voix (« ${result.text.slice(0, 50)} »)`);

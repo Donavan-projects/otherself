@@ -63,6 +63,8 @@ function measureBridgeAudio(samples: Int16Array) {
 let conversation: Conversation | null = null;
 let warnedNotReady = false;
 let micReady = false;
+/** Pipeline préchauffé (Conversation.warm) : renvoyé à chaque connexion du pont. */
+let warm = false;
 /** Pause reçue avant que le pipeline soit prêt : appliquée à sa création. */
 let pausedAt: number | null = null;
 let connectionCount = 0;
@@ -88,6 +90,7 @@ browser.runtime.onConnect.addListener((connected) => {
   conversation?.setMicReady(false);
   // La page (nouvelle ou rechargée) apprend l'état courant de l'avatar.
   if (conversation) post({ type: 'state', state: conversation.state, previous: conversation.state, at: Date.now(), reason: 'pont relié' });
+  if (warm) post({ type: 'warm', at: Date.now() });
   if (!samePage) {
     conversation?.reset('nouvelle page de la plateforme');
     // Nouvelle page : elle part sans pause (la page renvoie son état à chaque connexion du pont).
@@ -163,8 +166,8 @@ async function start() {
   const monitor = config.monitorAvatar ? new AvatarMonitor(config.monitorVolume) : null;
   if (!monitor) log('retour audio de la voix de l’avatar désactivé (monitorAvatar: false)');
   conversation = await Conversation.create(config, voice, engine, {
-    speak: (responseId, audio, text) => {
-      post({ type: 'speak', responseId, pcm: bufferToBase64(audio.samples.buffer), sampleRate: audio.sampleRate, text });
+    speak: (responseId, audio, text, filler) => {
+      post({ type: 'speak', responseId, pcm: bufferToBase64(audio.samples.buffer), sampleRate: audio.sampleRate, text, filler });
       monitor?.play(audio);
     },
     stop: () => {
@@ -175,6 +178,11 @@ async function start() {
     nod: () => post({ type: 'nod', at: Date.now() }),
   });
   conversation.setMicReady(micReady);
+  // Préchauffage terminé : la page recruteur peut démarrer l'entretien et la prise sans saccade.
+  void conversation.warm.then(() => {
+    warm = true;
+    post({ type: 'warm', at: Date.now() });
+  });
   if (pausedAt !== null) conversation.pause(pausedAt);
   log('pipeline voix prêt : en attente du recruteur');
 }

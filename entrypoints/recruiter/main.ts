@@ -238,12 +238,20 @@ requestAnimationFrame(drawRecruiter);
 
 let avatarAnalyser: AnalyserNode | null = null;
 let avatarState: AvatarState = 'inactif';
+/** Pipeline de l'avatar préchauffé (ouverture, rappel, phrases d'attente synthétisés) : signal 'warm' de l'offscreen. */
+let pipelineWarm = false;
 window.addEventListener('message', (event) => {
   if (event.source !== window) return;
   const envelope = event.data as Partial<PageEnvelope> | null;
-  if (envelope?.[PAGE_TAG] !== 'to-page' || envelope.message?.type !== 'state') return;
-  avatarState = envelope.message.state;
+  if (envelope?.[PAGE_TAG] !== 'to-page') return;
+  if (envelope.message?.type === 'state') avatarState = envelope.message.state;
+  if (envelope.message?.type === 'warm' && !pipelineWarm) {
+    pipelineWarm = true;
+    log('avatar préchauffé (ouverture, rappel et phrases d’attente synthétisés)');
+  }
 });
+/** Délai après le préchauffage avant de démarrer : processeur revenu au calme (logs : temps de dessin). */
+const SETTLE_AFTER_WARM_MS = 3000;
 
 async function activate(): Promise<string> {
   const started = performance.now();

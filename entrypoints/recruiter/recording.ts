@@ -97,9 +97,11 @@ export class Recording {
   /** Toutes les pistes démarrent dans le même tour de boucle : même instant zéro pour la prise et les sous-titres. */
   start() {
     const { avatarVideo, avatarVoice, recruiterCanvas, recruiterVoice, context } = this.sources;
-    const video = pickType(['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']);
+    // VP8 plutôt que VP9 : encodage temps réel bien moins coûteux (mesuré : trois vidéos en VP9 et la synthèse vocale
+    // saturaient le processeur, piste de l'avatar à 25,8 images/s avec des écarts jusqu'à 380 ms).
+    const video = pickType(['video/webm;codecs=vp8', 'video/webm']);
     const audio = pickType(['audio/webm;codecs=opus', 'audio/webm']);
-    const both = pickType(['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']);
+    const both = pickType(['video/webm;codecs=vp8,opus', 'video/webm']);
     // Voix séparées, et mélange des deux pour l'aperçu (jamais vers les haut-parleurs). Chaque sortie reçoit un fond
     // continu quasi nul (−120 dB) : sans lui, Chrome n'écrit rien pendant les silences d'une piste audio seule, et la
     // voix se décalait par rapport aux vidéos (mesuré : voix de l'avatar commençant à sa première parole, 15 s trop tôt).
@@ -158,7 +160,7 @@ export class Recording {
     const envelope = event.data as Partial<PageEnvelope> | null;
     const message = envelope?.message;
     if (!message) return;
-    if (envelope[PAGE_TAG] === 'to-page' && message.type === 'speak') this.pendingTexts.push(message.text ?? '');
+    if (envelope[PAGE_TAG] === 'to-page' && message.type === 'speak') this.pendingTexts.push(message.filler ? `[phrase d'attente] ${message.text ?? ''}` : (message.text ?? ''));
     else if (envelope[PAGE_TAG] === 'to-page' && message.type === 'stop') {
       // Voix coupée : le sous-titre en cours s'arrête maintenant, les textes en attente ne seront pas dits.
       const now = Date.now();

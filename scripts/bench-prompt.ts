@@ -62,6 +62,8 @@ interface Answer {
   text: string;
   finish: string;
   ms: number;
+  /** Délai avant le premier mot (réponses en streaming, comme dans l'extension). */
+  firstTokenMs?: number;
   judge?: Judgement;
 }
 interface Judgement {
@@ -83,6 +85,8 @@ const option = (name: string, fallback: string) => {
 const ref = option('ref', 'main');
 const runs = Number(option('runs', '2'));
 const judgeEnabled = !args.includes('--no-judge');
+/** --modeles a,b : même prompt (arbre de travail), modèles comparés ; sinon prompt de --ref contre l'arbre de travail. */
+const models = option('modeles', '').split(',').map((name) => name.trim()).filter(Boolean);
 
 const config = JSON.parse(readFileSync('config.local.json', 'utf8')) as Record<string, unknown>;
 const apiKey = String(config.openaiApiKey ?? '');
@@ -114,13 +118,47 @@ async function chat(messages: { role: string; content: string }[], extra: Record
   return { text: choice.message.content.trim(), finish: choice.finish_reason, ms: Math.round(performance.now() - started) };
 }
 
-async function interview(system: string, module: PromptModule): Promise<Answer[]> {
+/** Réponse en streaming, comme lib/llm.ts : délai avant le premier mot et fin. */
+async function streamChat(chosenModel: string, messages: { role: string; content: string }[]): Promise<Answer> {
+  const started = performance.now();
+  const response = await fetch(API, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: chosenModel, messages, stream: true, reasoning_effort: 'none', max_completion_tokens: MAX_COMPLETION_TOKENS }),
+  });
+  if (!response.ok || !response.body) throw new Error(`${response.status} : ${(await response.text()).slice(0, 300)}`);
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '';
+  let text = '';
+  let finish = '';
+  let firstTokenMs: number | undefined;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ') || line.includes('[DONE]')) continue;
+      const chunk = JSON.parse(line.slice(6)) as { choices?: { delta?: { content?: string }; finish_reason?: string | null }[] };
+      const delta = chunk.choices?.[0]?.delta?.content;
+      if (delta) {
+        firstTokenMs ??= Math.round(performance.now() - started);
+        text += delta;
+      }
+      finish = chunk.choices?.[0]?.finish_reason ?? finish;
+    }
+  }
+  return { text: text.trim(), finish, ms: Math.round(performance.now() - started), firstTokenMs };
+}
+
+async function interview(system: string, module: PromptModule, chosenModel = model): Promise<Answer[]> {
   const history: { role: string; content: string }[] = [];
   const answers: Answer[] = [];
   let humorUsed = false;
   for (const question of QUESTIONS) {
     const note = module.humorNote ? [{ role: 'system', content: module.humorNote(humorUsed) }] : [];
-    const reply = await chat([{ role: 'system', content: system }, ...history.slice(-MAX_HISTORY_MESSAGES), ...note, { role: 'user', content: question.text }]);
+    const reply = await streamChat(chosenModel, [{ role: 'system', content: system }, ...history.slice(-MAX_HISTORY_MESSAGES), ...note, { role: 'user', content: question.text }]);
     const stripped = module.stripHumorMark?.(reply.text) ?? { text: reply.text, marked: false };
     if (stripped.marked) humorUsed = true;
     reply.text = stripped.text.trim();
@@ -165,17 +203,20 @@ async function main() {
   // Copie de l'ancien prompt hors du dépôt (tsc vérifie local/).
   const oldFile = join(mkdtempSync(join(tmpdir(), 'otherself-prompt-')), `prompt-${ref.replace(/\W/g, '_')}.ts`);
   writeFileSync(oldFile, execFileSync('git', ['show', `${ref}:lib/prompt.ts`], { encoding: 'utf8' }));
-  const versions: { label: string; module: PromptModule }[] = [
-    { label: `avant (${ref})`, module: (await import(pathToFileURL(oldFile).href)) as PromptModule },
-    { label: 'après (arbre de travail)', module: (await import(pathToFileURL(resolve('lib/prompt.ts')).href)) as PromptModule },
-  ];
+  const workingTree = (await import(pathToFileURL(resolve("lib/prompt.ts")).href)) as PromptModule;
+  const versions: { label: string; module: PromptModule; model: string }[] = models.length
+    ? models.map((name) => ({ label: name, module: workingTree, model: name }))
+    : [
+        { label: `avant (${ref})`, module: (await import(pathToFileURL(oldFile).href)) as PromptModule, model },
+        { label: "après (arbre de travail)", module: workingTree, model },
+      ];
   const results: { label: string; prompt: string; runs: Answer[][] }[] = [];
   for (const version of versions) {
     const prompt = buildPrompt(version.module);
     const all: Answer[][] = [];
     for (let run = 0; run < runs; run += 1) {
       process.stdout.write(`${version.label}, passage ${run + 1} `);
-      const answers = await interview(prompt, version.module);
+      const answers = await interview(prompt, version.module, version.model);
       if (judgeEnabled) {
         await Promise.all(answers.map(async (answer, index) => (answer.judge = await judge(QUESTIONS[index]!.text, QUESTIONS[index]!.kind, answer.text))));
       }
@@ -202,8 +243,11 @@ async function main() {
     const byKind = (kinds: Kind[]) => all.flatMap((answers) => answers.filter((_, i) => kinds.includes(QUESTIONS[i]!.kind)));
     const mean = (list: number[]) => (list.length ? (list.reduce((a, b) => a + b, 0) / list.length).toFixed(1) : '-');
     const behavioral = byKind(['comportementale']);
+    const firsts = flat.flatMap((a) => (a.firstTokenMs === undefined ? [] : [a.firstTokenMs])).sort((a, b) => a - b);
     return {
       label,
+      'premier mot, médiane (ms)': firsts.length ? firsts[Math.floor(firsts.length / 2)]! : '-',
+      'premier mot, pire cas (ms)': firsts.length ? firsts.at(-1)! : '-',
       'mots (factuelles et fermées)': mean(byKind(['factuelle', 'fermée']).map((a) => words(a.text))),
       'mots (comportementales)': mean(behavioral.map((a) => words(a.text))),
       'durée parlée estimée, comportementales (s)': mean(behavioral.map((a) => words(a.text) / WORDS_PER_SECOND)),

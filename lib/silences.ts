@@ -14,7 +14,8 @@ const GAP_TOLERANCE_MS = 40;
 const SILENCE_RMS = 0.008;
 const FRAME_MS = 10;
 
-export type PieceKind = 'ouverture' | 'réponse';
+/** attente : phrase d'attente (lib/fillers.ts), jouée juste avant la réponse. */
+export type PieceKind = 'ouverture' | 'attente' | 'réponse';
 
 /** Un morceau de voix envoyé à la page (une phrase, ou une partie de phrase coupée à une virgule). */
 export interface VoicePiece {

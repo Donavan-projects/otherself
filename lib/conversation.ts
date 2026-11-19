@@ -9,13 +9,14 @@ import type { AvatarState } from './avatar-states';
 import type { DemoConfig } from './config';
 import { takeChunks } from './chunks';
 import { disclosureText, openingText, shortDisclosureText } from './disclosure';
+import { fillerTexts } from './fillers';
 import type { ConversationEngine, RenderLink } from './engine';
 import { isGreetingOnly } from './greeting';
 import { clock, createLogger } from './log';
 import { int16ToFloat, resample } from './pcm';
 import { analyzePieces, describeResponse, measureSilence, SilenceSummary, type PieceKind, type VoicePiece } from './silences';
 import { createTranscriber, STT_SAMPLE_RATE, type Transcriber } from './stt';
-import { paceSpeech, pauseAfter } from './speech-pacing';
+import { paceSpeech, pauseAfter, SENTENCE_PAUSE_MS } from './speech-pacing';
 import { SpeechQueue } from './speech-queue';
 import type { SpeechAudio } from './tts';
 import type { VoicePool } from './voice-pool';
@@ -134,6 +135,12 @@ export class Conversation {
   private readonly openingTexts: string[];
   /** Fin prévue (Date.now) de la voix déjà envoyée à la page ; corrigée par les heures de lecture qu'elle renvoie. */
   private playhead = 0;
+  /** Ouverture, rappel et phrases d'attente synthétisés : plus aucune synthèse d'avance en cours. */
+  readonly warm: Promise<void>;
+  /** Phrases d'attente synthétisées d'avance (lib/fillers.ts), rythmées ; vides tant qu'elles ne sont pas prêtes. */
+  private fillers: { text: string; audio: SpeechAudio }[] = [];
+  /** Dernière phrase d'attente jouée : jamais deux fois de suite la même. */
+  private lastFiller = '';
   /** Silences de la voix dans cet entretien (résumé logué après chaque réponse). */
   private readonly silences = new SilenceSummary();
   /** Durée de la révélation seule (début de l'ouverture), en ms d'audio. */
@@ -172,6 +179,15 @@ export class Conversation {
         this.shortDisclosureMs = (audio.samples.length / audio.sampleRate) * 1000;
         return audio;
       });
+    // Phrases d'attente : synthétisées une seule fois, après l'ouverture et le rappel (pas en concurrence avec eux).
+    this.warm = this.shortDisclosureAudio
+      .then(async () => {
+        const ready: { text: string; audio: SpeechAudio }[] = [];
+        for (const text of fillerTexts(config)) ready.push({ text, audio: paceSpeech(await voice.synthesize(text), SENTENCE_PAUSE_MS) });
+        this.fillers = ready;
+        logTts(`phrases d'attente prêtes : ${ready.map(({ text, audio }) => `« ${text} » ${Math.round((audio.samples.length / audio.sampleRate) * 1000)} ms`).join(', ')}`);
+      })
+      .catch((error: unknown) => logTts(`phrases d'attente indisponibles : ${error instanceof Error ? error.message : String(error)}`));
   }
 
   static async create(config: DemoConfig, voice: VoicePool, engine: ConversationEngine, link: PageLink): Promise<Conversation> {
@@ -549,7 +565,26 @@ export class Conversation {
       signal,
       playhead: () => this.playhead,
       log: (line) => logTts(line),
+      // Phrase d'attente : jamais pendant l'ouverture (donc jamais avant la révélation), jamais deux fois de suite la même.
+      filler: (maxMs) => {
+        if (response.includesOpening || !this.revealed) return null;
+        const fitting = this.fillers.filter(({ text, audio }) => text !== this.lastFiller && (audio.samples.length / audio.sampleRate) * 1000 <= maxMs);
+        return fitting[Math.floor(Math.random() * fitting.length)] ?? null;
+      },
+      sendFiller: (audio, text) => {
+        const now = Date.now();
+        if (!this.send(response, audio, { kind: 'attente', text, textReadyAt: now, synthStartAt: now, synthEndAt: now })) return false;
+        this.lastFiller = text;
+        this.remember(text);
+        logTts(`phrase d'attente jouée « ${text} » (${now - questionEndAt} ms après la fin de la question, juste avant la réponse)`);
+        return true;
+      },
       send: (audio, piece) => {
+        if (!response.answerSent) {
+          // Début prévu de la vraie réponse (après une éventuelle phrase d'attente), comme la page le programmera.
+          const start = Math.max(Date.now() + 100, this.playhead);
+          logTts(`vraie réponse : début prévu ${start - questionEndAt} ms après la fin de la question`);
+        }
         if (!this.send(response, audio, { kind: 'réponse', ...piece })) return false;
         response.answerSent = true;
         response.answerStartedAt ??= Date.now();
@@ -613,7 +648,7 @@ export class Conversation {
         this.updateState(`voix envoyée à la page mais jamais jouée après ${PLAYBACK_START_TIMEOUT_MS} ms (réponse ${response.id})`);
       }, PLAYBACK_START_TIMEOUT_MS);
     }
-    this.link.speak(response.id, audio, info.text);
+    this.link.speak(response.id, audio, info.text, info.kind === 'attente');
     const duration = (audio.samples.length / audio.sampleRate) * 1000;
     // Comme la page : à la suite de la voix en cours, sinon dès l'arrivée (pont et avance de lecture : ≈ 100 ms).
     this.playhead = Math.max(Date.now() + 100, this.playhead) + duration;

@@ -20,6 +20,8 @@ const TRANSPORT_MS = 100;
 const MARGIN_MS = 200;
 /** Attente plus courte ignorée ; attente maximale avant de jouer. */
 const MIN_HOLD_MS = 50;
+/** Attente avant de jouer à partir de laquelle une phrase d'attente la remplit (lib/fillers.ts). */
+export const FILLER_MIN_HOLD_MS = 1500;
 const MAX_HOLD_MS = 4000;
 
 /** Ce que la file sait d'un morceau au moment de l'envoyer. */
@@ -37,6 +39,12 @@ export interface SpeechQueueOptions {
   send(audio: SpeechAudio, piece: QueuedPiece): boolean;
   /** Fin prévue (Date.now) de la voix déjà envoyée ; dans le passé : la lecture est à l'arrêt. */
   playhead(): number;
+  /**
+   * Phrase d'attente d'au plus `maxMs` (pause comprise), ou null ; elle est envoyée pour finir juste quand la réponse
+   * commence, sans silence après elle (un recruteur automatisé tient la réponse pour commencée dès le premier son).
+   */
+  filler?(maxMs: number): { audio: SpeechAudio; text: string } | null;
+  sendFiller?(audio: SpeechAudio, text: string): boolean;
   log(line: string): void;
 }
 
@@ -114,7 +122,15 @@ export class SpeechQueue {
             `attente de ${Math.round(hold)} ms avant de jouer « ${job.text.slice(0, 40)}${job.text.length > 40 ? '…' : ''} » : ` +
               `les morceaux suivants ne seraient pas prêts à temps (synthèse ${this.options.pool.model.ratio.toFixed(2)} × temps réel)`,
           );
-          await new Promise((resolve) => setTimeout(resolve, hold));
+          const filler = hold >= FILLER_MIN_HOLD_MS ? (this.options.filler?.(hold - TRANSPORT_MS) ?? null) : null;
+          if (filler) {
+            // Phrase d'attente calée pour finir à la fin de l'attente ; le morceau, envoyé aussitôt après, la suit sans trou.
+            await new Promise((resolve) => setTimeout(resolve, Math.max(0, hold - durationMs(filler.audio))));
+            if (signal.aborted) return;
+            this.options.sendFiller?.(filler.audio, filler.text);
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, hold));
+          }
           if (signal.aborted) return;
         }
       }
