@@ -10,6 +10,7 @@ import { encodeWav, floatToInt16 } from '@/lib/pcm';
 import { DEFAULT_PIPER_SCALES, PiperVoice, type PiperScales, type SpeechAudio } from '@/lib/tts';
 import { OpenAiVoice } from '@/lib/tts-openai';
 import { configureOnnxRuntime } from '@/lib/vad';
+import { DEFAULT_SILENCE_QUESTIONS, runSilenceBench } from './silences';
 
 const log = createLogger('tts');
 const DEFAULT_SENTENCES = [
@@ -174,72 +175,85 @@ async function measure(engine: string, label: string, sentence: number, text: st
 }
 
 const config = await loadDemoConfig();
-// &jeu=entretien : l'ouverture réelle (révélation et messageText de config.local.json), une réponse type sur le
-// parcours du candidat et la phrase des noms de projets. &phrases=… : phrases libres, séparées par « | ».
-const interviewSet = [
-  openingText(config, config.messageText),
-  "Donavan has fourteen years of operational experience. He now builds AI products and automation workflows.",
-  'His recent projects include ADELIN, Curator Agent, IntelAgent, Familiar.dev, and Loupe.',
-];
-// ?prononcer=Nova:Nohvah,Nowvah,Noh-vah : chaque graphie dans une phrase de révélation et seule, l'orthographe d'origine
-// en premier, sans dictionnaire ; voix, hauteur et réglages de config.local.json (sauf &voix=…).
-const toCompare = params.get('prononcer');
-const [word = '', spellingList = ''] = (toCompare ?? '').split(':');
-const spellings = toCompare ? [word.trim(), ...spellingList.split(',').map((item) => item.trim()).filter(Boolean)] : [];
-const candidate = candidateLabel(config.language, config.candidateName);
-const pronunciationSet = spellings.flatMap((spelling) =>
-  config.language === 'fr'
-    ? [`Je suis ${spelling}, un avatar IA qui représente ${candidate}.`, `${spelling}.`]
-    : [`I'm ${spelling}, an AI avatar representing ${candidate}.`, `${spelling}.`],
-);
-// Le jeu « entretien » et les phrases libres passent par le dictionnaire, comme dans l'entretien réel.
-const pronounce = createPronouncer(config.pronunciations);
-const SENTENCES = toCompare
-  ? pronunciationSet
-  : (params.get('jeu') === 'entretien'
-      ? interviewSet
-      : (params.get('phrases')?.split('|').map((item) => item.trim()).filter(Boolean) ?? DEFAULT_SENTENCES)
-    ).map(pronounce);
-if (toCompare && !params.has('voix')) {
-  piperVoices.splice(0, piperVoices.length, {
-    label: `${config.voice}${config.pitchSemitones ? ` ${config.pitchSemitones > 0 ? '+' : ''}${config.pitchSemitones} demi-ton(s)` : ''}`,
-    voiceId: config.voice,
-    speaker: undefined,
-    scales: { ...DEFAULT_PIPER_SCALES, ...config.piperScales },
-    pitchSemitones: config.pitchSemitones,
-  });
+// ?silences : banc des silences dans la voix (questions réelles, moteur et voix de config.local.json, voir silences.ts).
+if (params.has('silences')) {
+  document.querySelector<HTMLTableElement>('#voices')!.hidden = true;
+  document.querySelector<HTMLTableElement>('#silences')!.hidden = false;
+  const questions = params.get('questions')?.split('|').map((item) => item.trim()).filter(Boolean) ?? DEFAULT_SILENCE_QUESTIONS;
+  configureOnnxRuntime();
+  await runSilenceBench(config, questions, status, document.querySelector<HTMLTableSectionElement>('#silence-results')!);
+} else {
+  await runVoiceBench();
 }
-configureOnnxRuntime();
-// Voix consécutives sur le même modèle (locuteurs d'une voix libritts) : un seul chargement.
-let loaded = null as { voiceId: string; voice: PiperVoice } | null;
-for (const item of piperVoices) {
-  if (loaded?.voiceId !== item.voiceId) {
-    loaded?.voice.dispose();
-    status(`chargement de ${item.voiceId} (téléchargée une seule fois)…`);
-    const voice = await PiperVoice.load(item.speaker ? `${item.voiceId}#${item.speaker}` : item.voiceId, item.scales ?? settings[0]);
-    // Première phrase de chauffe, non mesurée : la première inférence est toujours plus lente.
-    await voice.synthesize('Hello.');
-    loaded = { voiceId: item.voiceId, voice };
+
+async function runVoiceBench() {
+  // &jeu=entretien : l'ouverture réelle (révélation et messageText de config.local.json), une réponse type sur le
+  // parcours du candidat et la phrase des noms de projets. &phrases=… : phrases libres, séparées par « | ».
+  const interviewSet = [
+    openingText(config, config.messageText),
+    "Donavan has fourteen years of operational experience. He now builds AI products and automation workflows.",
+    'His recent projects include ADELIN, Curator Agent, IntelAgent, Familiar.dev, and Loupe.',
+  ];
+  // ?prononcer=Nova:Nohvah,Nowvah,Noh-vah : chaque graphie dans une phrase de révélation et seule, l'orthographe d'origine
+  // en premier, sans dictionnaire ; voix, hauteur et réglages de config.local.json (sauf &voix=…).
+  const toCompare = params.get('prononcer');
+  const [word = '', spellingList = ''] = (toCompare ?? '').split(':');
+  const spellings = toCompare ? [word.trim(), ...spellingList.split(',').map((item) => item.trim()).filter(Boolean)] : [];
+  const candidate = candidateLabel(config.language, config.candidateName);
+  const pronunciationSet = spellings.flatMap((spelling) =>
+    config.language === 'fr'
+      ? [`Je suis ${spelling}, un avatar IA qui représente ${candidate}.`, `${spelling}.`]
+      : [`I'm ${spelling}, an AI avatar representing ${candidate}.`, `${spelling}.`],
+  );
+  // Le jeu « entretien » et les phrases libres passent par le dictionnaire, comme dans l'entretien réel.
+  const pronounce = createPronouncer(config.pronunciations);
+  const SENTENCES = toCompare
+    ? pronunciationSet
+    : (params.get('jeu') === 'entretien'
+        ? interviewSet
+        : (params.get('phrases')?.split('|').map((item) => item.trim()).filter(Boolean) ?? DEFAULT_SENTENCES)
+      ).map(pronounce);
+  if (toCompare && !params.has('voix')) {
+    piperVoices.splice(0, piperVoices.length, {
+      label: `${config.voice}${config.pitchSemitones ? ` ${config.pitchSemitones > 0 ? '+' : ''}${config.pitchSemitones} demi-ton(s)` : ''}`,
+      voiceId: config.voice,
+      speaker: undefined,
+      scales: { ...DEFAULT_PIPER_SCALES, ...config.piperScales },
+      pitchSemitones: config.pitchSemitones,
+    });
   }
-  const { voice } = loaded;
-  for (const scales of item.scales ? [item.scales] : settings) {
-    const label = `${scales.lengthScale} / ${scales.noiseScale} / ${scales.noiseW}`;
-    for (const [index, sentence] of SENTENCES.entries()) {
-      status(`${item.label}, ${label}, phrase ${index + 1}`);
-      await measure(`Piper ${item.label}`, label, index + 1, sentence, async (onAudio) =>
-        onAudio(await voice.synthesize(sentence, scales, item.speaker, item.pitchSemitones)),
-      );
+  configureOnnxRuntime();
+  // Voix consécutives sur le même modèle (locuteurs d'une voix libritts) : un seul chargement.
+  let loaded = null as { voiceId: string; voice: PiperVoice } | null;
+  for (const item of piperVoices) {
+    if (loaded?.voiceId !== item.voiceId) {
+      loaded?.voice.dispose();
+      status(`chargement de ${item.voiceId} (téléchargée une seule fois)…`);
+      const voice = await PiperVoice.load(item.speaker ? `${item.voiceId}#${item.speaker}` : item.voiceId, item.scales ?? settings[0]);
+      // Première phrase de chauffe, non mesurée : la première inférence est toujours plus lente.
+      await voice.synthesize('Hello.');
+      loaded = { voiceId: item.voiceId, voice };
+    }
+    const { voice } = loaded;
+    for (const scales of item.scales ? [item.scales] : settings) {
+      const label = `${scales.lengthScale} / ${scales.noiseScale} / ${scales.noiseW}`;
+      for (const [index, sentence] of SENTENCES.entries()) {
+        status(`${item.label}, ${label}, phrase ${index + 1}`);
+        await measure(`Piper ${item.label}`, label, index + 1, sentence, async (onAudio) =>
+          onAudio(await voice.synthesize(sentence, scales, item.speaker, item.pitchSemitones)),
+        );
+      }
     }
   }
-}
-loaded?.voice.dispose();
-for (const voiceName of openaiVoices) {
-  if (!config.openaiApiKey) break;
-  const voice = new OpenAiVoice({ apiKey: config.openaiApiKey, model: config.openaiTtsModel, voice: voiceName });
-  for (const [index, sentence] of SENTENCES.entries()) {
-    status(`OpenAI ${voiceName}, phrase ${index + 1}`);
-    await measure(`OpenAI ${voiceName}`, config.openaiTtsModel, index + 1, sentence, (onAudio) => voice.stream(sentence, onAudio));
+  loaded?.voice.dispose();
+  for (const voiceName of openaiVoices) {
+    if (!config.openaiApiKey) break;
+    const voice = new OpenAiVoice({ apiKey: config.openaiApiKey, model: config.openaiTtsModel, voice: voiceName });
+    for (const [index, sentence] of SENTENCES.entries()) {
+      status(`OpenAI ${voiceName}, phrase ${index + 1}`);
+      await measure(`OpenAI ${voiceName}`, config.openaiTtsModel, index + 1, sentence, (onAudio) => voice.stream(sentence, onAudio));
+    }
   }
+  window.__bench!.done = true;
+  status(`terminé : ${results.length} mesure(s)`);
 }
-window.__bench.done = true;
-status(`terminé : ${results.length} mesure(s)`);

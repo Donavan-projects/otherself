@@ -17,6 +17,8 @@ export type FromPage =
   /** La voix de l'avatar (re)commence à sortir dans le micro injecté. */
   | { type: 'playback-started'; responseId: number; at: number }
   | { type: 'playback-idle'; responseId: number }
+  /** Morceau de voix programmé dans le micro injecté : début et fin réels de sa lecture (Date.now), mesure des silences. */
+  | { type: 'playback-chunk'; responseId: number; startAt: number; endAt: number }
   /** Pause (voix coupée, pipeline arrêté) ou reprise ; at : Date.now du clic, pour mesurer les délais. */
   | { type: 'pause'; at: number }
   | { type: 'resume'; at: number };

@@ -115,6 +115,9 @@ browser.runtime.onConnect.addListener((connected) => {
       case 'playback-idle':
         conversation?.onPlaybackIdle(message.responseId);
         break;
+      case 'playback-chunk':
+        conversation?.onPlaybackChunk(message.responseId, message.startAt, message.endAt);
+        break;
       case 'pause':
         pausedAt = message.at;
         if (conversation) conversation.pause(message.at);

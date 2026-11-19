@@ -13,6 +13,7 @@ import type { ConversationEngine, RenderLink } from './engine';
 import { isGreetingOnly } from './greeting';
 import { clock, createLogger } from './log';
 import { int16ToFloat, resample } from './pcm';
+import { analyzePieces, describeResponse, measureSilence, SilenceSummary, type PieceKind, type VoicePiece } from './silences';
 import { createTranscriber, STT_SAMPLE_RATE, type Transcriber } from './stt';
 import type { SpeechAudio, TtsEngine } from './tts';
 import { Vad, VAD_SAMPLE_RATE } from './vad';
@@ -75,6 +76,26 @@ interface Response {
   sentAt?: number;
   /** La voix envoyée n'a jamais commencé à jouer dans le délai prévu : la réponse ne compte plus pour l'état. */
   playbackTimedOut?: boolean;
+  /** Morceaux de voix envoyés, dans l'ordre, avec leurs heures (mesure des silences, lib/silences.ts). */
+  pieces: VoicePiece[];
+  /** Morceaux dont la page a déjà renvoyé l'heure de lecture. */
+  scheduled: number;
+  silencesLogged: boolean;
+}
+
+/** Ce que l'on sait d'un morceau avant de l'envoyer : son texte et ses heures de préparation. */
+interface PieceInfo {
+  kind: PieceKind;
+  text: string;
+  textReadyAt: number;
+  synthStartAt: number;
+  synthEndAt: number;
+}
+
+/** Phrase prête à synthétiser, avec l'heure où le LLM l'a rendue. */
+interface ReadySentence {
+  text: string;
+  readyAt: number;
 }
 
 export class Conversation {
@@ -110,6 +131,10 @@ export class Conversation {
   private carried = '';
   private readonly opening: string;
   private openingAudio: Promise<SpeechAudio[]>;
+  /** Texte de chaque morceau de l'ouverture, dans l'ordre de openingAudio. */
+  private readonly openingTexts: string[];
+  /** Silences de la voix dans cet entretien (résumé logué après chaque réponse). */
+  private readonly silences = new SilenceSummary();
   /** Durée de la révélation seule (début de l'ouverture), en ms d'audio. */
   private disclosureMs = Infinity;
   private vad!: Vad;
@@ -126,6 +151,7 @@ export class Conversation {
     // Le texte de l'ouverture n'est jamais donné au moteur : le LLM le recopiait mot pour mot.
     const opening = openingText(config, config.messageText);
     this.opening = opening;
+    this.openingTexts = [...splitSentences(disclosureText(config)), ...splitSentences(config.messageText.trim())];
     // Ouverture synthétisée d'avance, phrase après phrase ; elle n'est jouée qu'une fois le
     // recruteur présent (fin de sa première prise de parole).
     // Révélation et message synthétisés à part : on sait ainsi quand la révélation a été entendue.
@@ -169,6 +195,7 @@ export class Conversation {
   reset(reason: string) {
     this.interrupt(reason);
     this.engine.notify({ type: 'reset', reason });
+    this.silences.reset();
     this.carried = '';
     this.preroll = [];
     this.prerollSamples = 0;
@@ -424,6 +451,7 @@ export class Conversation {
     if (!response.answerSent) this.carried = join(response.question, this.carried);
     log(`réponse ${response.id} interrompue : ${reason}`);
     this.logAnswer(response, true);
+    this.logSilences(response, true);
   }
 
   /** Vrai si la plupart des mots transcrits viennent d'être prononcés par l'avatar. */
@@ -454,6 +482,9 @@ export class Conversation {
       spoken: [],
       transcriptLogged: false,
       timings: {},
+      pieces: [],
+      scheduled: 0,
+      silencesLogged: false,
     };
     this.current = response;
     return response;
@@ -467,15 +498,18 @@ export class Conversation {
   private async sendOpening(response: Response) {
     let audio: SpeechAudio[];
     let text: string;
+    let texts: string[];
     if (this.revealed) {
       // Reprise après une pause : la révélation complète a déjà été entendue, le rappel court suffit.
       audio = [await this.shortDisclosureAudio];
       text = shortDisclosureText(this.config);
+      texts = [text];
       this.remember(text);
       log(`reprise après une pause : rappel court de la révélation (réponse ${response.id})`);
     } else if (this.openingPlays < MAX_OPENING_PLAYS) {
       audio = await this.openingAudio;
       text = this.opening;
+      texts = this.openingTexts;
       this.openingPlays += 1;
       this.remember(this.opening);
       log(
@@ -485,12 +519,15 @@ export class Conversation {
     } else {
       audio = [await this.shortDisclosureAudio];
       text = shortDisclosureText(this.config);
+      texts = [text];
       this.remember(text);
       log(`ouverture déjà coupée ${MAX_OPENING_PLAYS} fois : rappel court de la révélation (réponse ${response.id})`);
     }
-    for (const chunk of audio) {
+    // Ouverture préparée d'avance : texte et audio prêts dès maintenant.
+    const readyAt = Date.now();
+    for (const [index, chunk] of audio.entries()) {
       if (response.controller.signal.aborted) return;
-      this.send(response, chunk);
+      this.send(response, chunk, { kind: 'ouverture', text: texts[index] ?? text, textReadyAt: readyAt, synthStartAt: readyAt, synthEndAt: readyAt });
     }
     response.openingSent = true;
     transcriptLine('Avatar', text);
@@ -500,7 +537,7 @@ export class Conversation {
     const { signal } = response.controller;
     const { questionEndAt } = response;
     transcriptLine('Recruteur', question, this.speechStartedAt);
-    const sentences: string[] = [];
+    const sentences: ReadySentence[] = [];
     const queue: { wake: (() => void) | null; done: boolean } = { wake: null, done: false };
     // La réponse ne part qu'après l'ouverture ; le LLM, lui, n'attend pas.
     const speaker = opening.then(() =>
@@ -526,11 +563,15 @@ export class Conversation {
         buffer += fragment;
         const ready = take(false);
         if (ready.length) {
-          sentences.push(...ready);
+          const readyAt = Date.now();
+          sentences.push(...ready.map((text) => ({ text, readyAt })));
           queue.wake?.();
         }
       }
-      if (!signal.aborted) sentences.push(...take(true));
+      if (!signal.aborted) {
+        const readyAt = Date.now();
+        sentences.push(...take(true).map((text) => ({ text, readyAt })));
+      }
     } catch (error) {
       if (!signal.aborted) log(`erreur : ${error instanceof Error ? error.message : String(error)} (moteur ${this.engine.description})`);
     } finally {
@@ -553,27 +594,30 @@ export class Conversation {
   /** Synthétise et envoie les phrases dans l'ordre, au fur et à mesure qu'elles arrivent. */
   private async speakSentences(
     response: Response,
-    sentences: string[],
+    sentences: ReadySentence[],
     isDone: () => boolean,
     setWake: (resolve: () => void) => void,
   ) {
     const { signal } = response.controller;
     for (;;) {
-      const sentence = sentences.shift();
-      if (sentence === undefined) {
+      const next = sentences.shift();
+      if (next === undefined) {
         if (isDone()) return;
         await new Promise<void>((resolve) => setWake(resolve));
         continue;
       }
+      const sentence = next.text;
       // Piper rend la phrase d'un bloc ; OpenAI la rend par morceaux, envoyés dès qu'ils arrivent.
       let started = false;
       let refused = false;
+      const synthStartAt = Date.now();
       try {
         await this.voice.stream(
           sentence,
           (audio) => {
             if (signal.aborted || refused) return;
-            if (!this.send(response, audio)) {
+            const piece: PieceInfo = { kind: 'réponse', text: sentence, textReadyAt: next.readyAt, synthStartAt, synthEndAt: Date.now() };
+            if (!this.send(response, audio, piece)) {
               refused = true;
               return;
             }
@@ -593,7 +637,7 @@ export class Conversation {
     }
   }
 
-  private send(response: Response, audio: SpeechAudio): boolean {
+  private send(response: Response, audio: SpeechAudio, info: PieceInfo): boolean {
     // Pendant le seuil d'interruption, l'avatar continue : la parole entendue peut être un écho.
     if (this.vad.isSpeaking && !this.bargeIn) {
       this.interrupt('le recruteur parle');
@@ -609,7 +653,33 @@ export class Conversation {
       }, PLAYBACK_START_TIMEOUT_MS);
     }
     this.link.speak(response.id, audio);
+    response.pieces.push({
+      ...info,
+      sentAt: Date.now(),
+      durationMs: (audio.samples.length / audio.sampleRate) * 1000,
+      ...measureSilence(audio.samples, audio.sampleRate),
+    });
     return true;
+  }
+
+  /** La page a programmé un morceau de voix : heures réelles de sa lecture, dans l'ordre d'envoi. */
+  onPlaybackChunk(responseId: number, startAt: number, endAt: number) {
+    const response = this.current?.id === responseId ? this.current : null;
+    const piece = response?.pieces[response.scheduled];
+    if (!response || !piece) return;
+    response.scheduled += 1;
+    piece.playStartAt = startAt;
+    piece.playEndAt = endAt;
+  }
+
+  /** Silences de la réponse (plus long, cause) et résumé de l'entretien, une fois par réponse. */
+  private logSilences(response: Response, interrupted: boolean) {
+    if (response.silencesLogged || response.scheduled === 0) return;
+    response.silencesLogged = true;
+    const junctions = analyzePieces(response.pieces);
+    this.silences.add(junctions);
+    logTts(describeResponse(`la réponse ${response.id}`, response.pieces, junctions, interrupted));
+    logTts(this.silences.describe());
   }
 
   /** État courant de l'avatar (renvoyé à la page à chaque connexion du pont). */
@@ -683,7 +753,10 @@ export class Conversation {
       );
       this.markRevealed();
     }
-    if (response.finished) this.current = null;
+    if (response.finished) {
+      this.current = null;
+      this.logSilences(response, false);
+    }
     this.updateState('fin de la lecture de la voix');
   }
 }
