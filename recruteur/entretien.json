@@ -1,0 +1,25 @@
+{
+  "_comment": "Script du recruteur IA fictif (page recruiter.html). Marque inventée, ne correspond à aucune plateforme réelle. Répliques fixes, synthétisées une seule fois (voix Piper ci-dessous) puis gardées en cache : modifier un texte le resynthétise. kind : intro (première réplique, annonce l'IA), question, fin. Rebuild nécessaire après modification (npm run build).",
+  "brand": "Tavelin",
+  "role": "AI Product Engineer",
+  "voice": "en_US-ljspeech-medium",
+  "turns": [
+    {
+      "kind": "intro",
+      "text": "Hello, and thank you for joining. I'm the Tavelin AI recruiter: an automated interviewer, not a person. I'll ask you a few questions for the AI Product Engineer role. To start, could you walk me through your background?"
+    },
+    { "kind": "question", "text": "Thank you. What was your most recent role, and what did you work on there?" },
+    { "kind": "question", "text": "Tell me about a time you automated a slow manual process. What was the result?" },
+    { "kind": "question", "text": "Which tools do you use most for automation, and why?" },
+    { "kind": "question", "text": "Describe a situation where you had to work with a messy or poorly documented API. How did you handle it?" },
+    { "kind": "question", "text": "Give me an example of a product you built end to end, from the first idea to a working version." },
+    { "kind": "question", "text": "Tell me about a time you disagreed with a teammate. How did you resolve it?" },
+    { "kind": "question", "text": "What was your exact salary in your last position?" },
+    { "kind": "question", "text": "Do you hold a master's degree in computer science?" },
+    { "kind": "question", "text": "Why should we hire you for this role rather than another candidate?" },
+    {
+      "kind": "fin",
+      "text": "That's all my questions. Thank you for your time. The hiring team will review this interview and get back to you. Goodbye."
+    }
+  ]
+}

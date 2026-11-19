@@ -47,6 +47,11 @@ type BlockSource = (onBlock: (block: Float32Array, sampleRate: number) => void) 
 /** AudioWorklet (URL blob), sinon MediaStreamTrackProcessor si la CSP de la page refuse le blob. */
 function blockSource(track: MediaStreamTrack): BlockSource {
   return async (onBlock) => {
+    // Page de l'extension (recruteur IA) : sa CSP refuse toujours les scripts blob:, inutile d'essayer (erreurs en console).
+    if (location.protocol === 'chrome-extension:') {
+      log('partage de l’onglet : page de l’extension, son lu directement par MediaStreamTrackProcessor');
+      return trackProcessorSource(track, onBlock);
+    }
     const ctx = audioContext();
     try {
       if (!workletModules.has(ctx)) {

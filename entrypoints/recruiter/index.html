@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OtherSelf · Recruteur IA (fictif)</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; padding: 20px; background: #0e1117; color: #e6e8ee; font: 14px/1.45 system-ui, sans-serif; }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      p.note { margin: 0 0 14px; color: #9aa3b2; max-width: 1100px; }
+      .stage { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 1600px; }
+      .tile { position: relative; background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 16 / 9; }
+      .tile canvas, .tile video { width: 100%; height: 100%; display: block; object-fit: contain; }
+      .tile .name { position: absolute; left: 10px; bottom: 8px; padding: 2px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.55); font-size: 13px; }
+      .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0; }
+      button { padding: 7px 14px; border-radius: 7px; border: 1px solid #39414f; background: #1b2130; color: inherit; font: inherit; cursor: pointer; }
+      button:disabled { opacity: 0.45; cursor: default; }
+      select { padding: 6px; border-radius: 7px; background: #1b2130; color: inherit; border: 1px solid #39414f; }
+      #status { color: #9aa3b2; }
+      table { border-collapse: collapse; margin-top: 10px; font-size: 13px; max-width: 1600px; }
+      td, th { border-bottom: 1px solid #2a303c; padding: 5px 8px; text-align: left; vertical-align: top; }
+      td.num { text-align: right; font-variant-numeric: tabular-nums; }
+      .late { color: #ffb347; }
+    </style>
+  </head>
+  <body>
+    <h1>Recruteur IA fictif</h1>
+    <p class="note">
+      Page de démonstration : un recruteur automatisé inventé (marque fictive, voix de synthèse), qui annonce lui-même être une IA, face à
+      l'avatar injecté dans cette page comme sur une plateforme. Son de l'onglet partagé : bouton OtherSelf, puis « Démarrer ».
+    </p>
+    <div class="stage">
+      <div class="tile"><canvas id="recruiter" width="1280" height="720"></canvas><span class="name" id="recruiter-name">AI Recruiter</span></div>
+      <div class="tile"><video id="candidate" autoplay muted playsinline></video><span class="name">Candidat (avatar IA)</span></div>
+    </div>
+    <div class="controls">
+      <button id="prepare">1. Préparer les répliques</button>
+      <button id="activate" disabled>2. Activer l'avatar</button>
+      <label>Recruteur
+        <select id="patience">
+          <option value="impatient">impatient (700 ms de silence)</option>
+          <option value="patient">patient (2,5 s de silence)</option>
+        </select>
+      </label>
+      <button id="start" disabled>3. Démarrer l'entretien</button>
+      <button id="stop" disabled>Arrêter</button>
+      <span id="status"></span>
+    </div>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Réplique du recruteur</th><th>Début de la réponse</th><th>Voix de l'avatar</th><th>Plus long silence entendu</th><th>Enchaînement</th></tr>
+      </thead>
+      <tbody id="turns"></tbody>
+    </table>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -70,6 +70,7 @@ entrypoints/
   popup/               # pastille d'état, Activer, Pause / Reprendre, aperçu, Retirer complètement ; outils de dév. repliés
   options/             # assistant de setup : clé API, CV, voix
   rehearsal/           # page « faux recruteur » pour tester sans plateforme réelle
+  recruiter/           # recruteur IA fictif (démo publique) : avatar injecté dans la page, vrai partage de l'onglet
   avatar/              # page de l'avatar (aperçu animé, voix simulée)
   voices/              # banc d'essai des voix : Piper (voix, réglages, hauteur, phonèmes, graphies) et OpenAI, délais, écoute
   vrm/                 # aperçu de l'avatar 3D (VRM) : voix simulée, images/s, temps de dessin
@@ -90,6 +91,8 @@ lib/
   vrm-assets.ts        # avatar 3D, pages de l'extension : cadrage (plan serré), fond
   vrm-frame.ts         # avatar 3D : caméra et projection (sans three.js), partagées popup / page
   glb.ts               # lecture / écriture GLB (VRM) sans dépendance (script et extension)
+  activation.ts        # pages de l'extension : préparation de l'avatar et document offscreen (popup, recruteur)
+  silences.ts          # mesure des silences dans la voix de l'avatar (cause, résumé par entretien)
   conversation.ts      # tour de parole : ouverture (révélation + messageText), écho, découpe en phrases, latence, états
   avatar-states.ts     # états de l'avatar (inactif, écoute, réflexion, parole, pause) : table unique des réglages
   config.ts            # lecture de local/config.json (généré depuis config.local.json)
@@ -114,6 +117,8 @@ scripts/
   optimize-vrm.ts      # MANUEL (npm run vrm) : inspection et allègement du VRM exporté par VRoid
   render-fallback.ts   # MANUEL (npm run vrm -- fallback) : images du secours rendues depuis le VRM dans Chromium
   bench-prompt.ts      # MANUEL, payant (npm run bench:prompt) : banc du prompt en texte seul, rapport dans local/
+recruteur/
+  entretien.json       # script du recruteur IA fictif (marque inventée, répliques, voix), modifiable
 avatar/
   otherself.vrm        # avatar 3D allégé (commité, l'androïde depuis le 16/11) ; sources VRoid *-source.vrm ignorées par git
   secours/             # avatar de secours généré depuis otherself.vrm (WebP + secours.json, commité)
