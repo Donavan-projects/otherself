@@ -181,7 +181,11 @@ if (params.has('silences')) {
   document.querySelector<HTMLTableElement>('#silences')!.hidden = false;
   const questions = params.get('questions')?.split('|').map((item) => item.trim()).filter(Boolean) ?? DEFAULT_SILENCE_QUESTIONS;
   configureOnnxRuntime();
-  await runSilenceBench(config, questions, status, document.querySelector<HTMLTableSectionElement>('#silence-results')!);
+  // &voix-paralleles=1|2 : imposer le nombre de voix en parallèle (comparaisons ; sinon selon la machine).
+  // &threads=n : threads de calcul par voix.
+  const voices = params.has('voix-paralleles') ? Number(params.get('voix-paralleles')) : undefined;
+  const threads = params.has('threads') ? Number(params.get('threads')) : undefined;
+  await runSilenceBench(config, questions, status, document.querySelector<HTMLTableSectionElement>('#silence-results')!, voices, threads);
 } else {
   await runVoiceBench();
 }

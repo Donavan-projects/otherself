@@ -1,4 +1,4 @@
-// Recruteur IA fictif (démo publique, sans plateforme réelle) : marque inventée (recruteur/entretien.json), visuel
+// Recruteur IA fictif (démo publique, sans plateforme réelle) : personnage inventé, Maren (recruteur/entretien.json), visuel
 // abstrait sans visage, voix Piper différente de celle de l'avatar. Le recruteur annonce lui-même être une IA.
 //
 // La page sert de plateforme : l'avatar y est injecté par le même code que sur Meet (entrypoints/content.ts et
@@ -48,7 +48,7 @@ const buttons = {
   stop: document.querySelector<HTMLButtonElement>('#stop')!,
 };
 const patienceSelect = document.querySelector<HTMLSelectElement>('#patience')!;
-document.querySelector('#recruiter-name')!.textContent = `${script.brand} · AI Recruiter`;
+document.querySelector('#recruiter-name')!.textContent = `${script.name} · AI Recruiter`;
 
 const status = (message: string) => {
   statusEl.textContent = message;
@@ -213,14 +213,14 @@ function drawRecruiter(now: number) {
   ctx.textAlign = 'left';
   ctx.font = '700 34px system-ui, sans-serif';
   ctx.fillStyle = '#e6e8ee';
-  ctx.fillText(script.brand, 40, 64);
+  ctx.fillText(script.name, 40, 64);
   ctx.font = '400 22px system-ui, sans-serif';
   ctx.fillStyle = '#9aa3b2';
-  ctx.fillText(`${script.role} · automated interview`, 40, 98);
+  ctx.fillText(`AI Recruiter · ${script.role} interview`, 40, 98);
   ctx.textAlign = 'center';
   ctx.font = '500 22px system-ui, sans-serif';
   ctx.fillStyle = '#c9d2e8';
-  ctx.fillText('This interviewer is an AI. Fictional company, for demonstration only.', cx, height - 40);
+  ctx.fillText('This interviewer is an AI. Fictional, for demonstration only.', cx, height - 40);
   requestAnimationFrame(drawRecruiter);
 }
 requestAnimationFrame(drawRecruiter);
@@ -340,6 +340,8 @@ async function start(patience: Patience): Promise<TurnResult[]> {
           (cutOff ? ` ; ENCHAÎNE ALORS QUE L'AVATAR N'AVAIT PAS FINI (état ${stateAtNext}, ${patienceMs} ms de silence)` : ''),
       );
   }
+  // Laisse la dernière réponse finir et ses mesures arriver (logs [tts] de l'offscreen) avant de conclure.
+  await sleep(4000);
   const cut = results.filter((result) => result.cutOff).length;
   const longest = Math.max(0, ...results.map((result) => result.longestSilenceMs));
   status(`entretien terminé : ${results.length} répliques, ${cut} réponse(s) coupée(s), plus long silence entendu ${longest} ms`);

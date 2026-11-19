@@ -121,7 +121,8 @@ export class PiperVoice implements TtsEngine {
   }
 
   /** `voice` : identifiant Piper, suivi de « #locuteur » pour une voix à plusieurs locuteurs (ex. en_US-libritts-high#p3922). */
-  static async load(voice: string, scales: Partial<PiperScales> = DEFAULT_PIPER_SCALES, pitchSemitones = 0): Promise<PiperVoice> {
+  /** `threads` : threads de calcul d'ONNX Runtime pour cette voix (voir limitThreads dans tts.worker.ts). */
+  static async load(voice: string, scales: Partial<PiperScales> = DEFAULT_PIPER_SCALES, pitchSemitones = 0, threads = navigator.hardwareConcurrency ?? 1): Promise<PiperVoice> {
     const [voiceId = voice, speaker] = voice.split('#');
     const started = performance.now();
     const worker = new Worker(new URL('./tts.worker.ts', import.meta.url));
@@ -149,6 +150,7 @@ export class PiperVoice implements TtsEngine {
         speaker,
         pitchSemitones,
         scales,
+        threads,
         wasmPaths: {
           onnxWasm: localUrl('/vendor/ort/'),
           piperData: localUrl('/vendor/piper/piper_phonemize.data'),
@@ -158,7 +160,7 @@ export class PiperVoice implements TtsEngine {
       worker.postMessage(init);
     });
     const piper = new PiperVoice(worker, voice, ready.scales, ready.speakers, pitchSemitones);
-    log(`voix ${piper.description} prête dans un worker (${Math.round(performance.now() - started)} ms)`);
+    log(`voix ${piper.description} prête dans un worker, ${threads} thread(s) de calcul (${Math.round(performance.now() - started)} ms)`);
     return piper;
   }
 

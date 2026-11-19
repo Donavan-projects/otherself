@@ -23,6 +23,8 @@ export type ToTtsWorker =
       /** Hauteur en demi-tons (0 : voix d'origine), voir applyPitch. */
       pitchSemitones?: number;
       scales: Partial<PiperScales>;
+      /** Threads de calcul d'ONNX Runtime pour cette voix (voir limitThreads). */
+      threads: number;
       wasmPaths: { onnxWasm: string; piperData: string; piperWasm: string };
     }
   | { type: 'synth'; id: number; text: string; scales?: Partial<PiperScales>; speaker?: string; pitchSemitones?: number };
@@ -122,8 +124,20 @@ let queue: Promise<void> = Promise.resolve();
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+/**
+ * Threads de calcul : piper-tts-web demande navigator.hardwareConcurrency threads (8 sur la machine de référence), et
+ * ONNX Runtime les accepte dès que SharedArrayBuffer existe, ce qui est le cas dans les pages d'extension même non
+ * isolées. Chaque voix occupait alors tous les cœurs, et deux voix en parallèle s'étouffaient (mesuré : 0,19 × temps
+ * réel seule, 0,4 à 0,8 × à deux). La valeur demandée remplace celle de la bibliothèque (propriété figée avant qu'elle
+ * ne l'écrive ; ONNX Runtime la lit à la création de la session).
+ */
+function limitThreads(threads: number) {
+  Object.defineProperty(ort.env.wasm as unknown as object, 'numThreads', { get: () => threads, set: () => undefined, configurable: true });
+}
+
 scope.onmessage = ({ data: message }) => {
   if (message.type === 'init') {
+    limitThreads(message.threads);
     session = TtsSession.create({
       voiceId: message.voiceId,
       wasmPaths: message.wasmPaths,

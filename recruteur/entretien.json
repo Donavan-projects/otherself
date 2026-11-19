@@ -1,12 +1,12 @@
 {
-  "_comment": "Script du recruteur IA fictif (page recruiter.html). Marque inventée, ne correspond à aucune plateforme réelle. Répliques fixes, synthétisées une seule fois (voix Piper ci-dessous) puis gardées en cache : modifier un texte le resynthétise. kind : intro (première réplique, annonce l'IA), question, fin. Rebuild nécessaire après modification (npm run build).",
-  "brand": "Tavelin",
+  "_comment": "Script du recruteur IA fictif (page recruiter.html). Personnage inventé (prénom vérifié : aucun recruteur IA ni outil de recrutement réel ne le porte), sans marque ni plateforme réelle. Répliques fixes, synthétisées une seule fois (voix Piper ci-dessous) puis gardées en cache : modifier un texte le resynthétise. kind : intro (première réplique, annonce l'IA), question, fin. Rebuild nécessaire après modification (npm run build).",
+  "name": "Maren",
   "role": "AI Product Engineer",
   "voice": "en_US-ljspeech-medium",
   "turns": [
     {
       "kind": "intro",
-      "text": "Hello, and thank you for joining. I'm the Tavelin AI recruiter: an automated interviewer, not a person. I'll ask you a few questions for the AI Product Engineer role. To start, could you walk me through your background?"
+      "text": "Hello, and thank you for joining. I'm Maren, an AI recruiter: an automated interviewer, not a person. I'll ask you a few questions for the AI Product Engineer role. To start, could you walk me through your background?"
     },
     { "kind": "question", "text": "Thank you. What was your most recent role, and what did you work on there?" },
     { "kind": "question", "text": "Tell me about a time you automated a slow manual process. What was the result?" },

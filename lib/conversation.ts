@@ -15,7 +15,10 @@ import { clock, createLogger } from './log';
 import { int16ToFloat, resample } from './pcm';
 import { analyzePieces, describeResponse, measureSilence, SilenceSummary, type PieceKind, type VoicePiece } from './silences';
 import { createTranscriber, STT_SAMPLE_RATE, type Transcriber } from './stt';
-import type { SpeechAudio, TtsEngine } from './tts';
+import { paceSpeech, pauseAfter } from './speech-pacing';
+import { SpeechQueue } from './speech-queue';
+import type { SpeechAudio } from './tts';
+import type { VoicePool } from './voice-pool';
 import { Vad, VAD_SAMPLE_RATE } from './vad';
 
 const log = createLogger('llm');
@@ -92,11 +95,7 @@ interface PieceInfo {
   synthEndAt: number;
 }
 
-/** Phrase prête à synthétiser, avec l'heure où le LLM l'a rendue. */
-interface ReadySentence {
-  text: string;
-  readyAt: number;
-}
+
 
 export class Conversation {
   private transcriber: Transcriber | null = null;
@@ -133,6 +132,8 @@ export class Conversation {
   private openingAudio: Promise<SpeechAudio[]>;
   /** Texte de chaque morceau de l'ouverture, dans l'ordre de openingAudio. */
   private readonly openingTexts: string[];
+  /** Fin prévue (Date.now) de la voix déjà envoyée à la page ; corrigée par les heures de lecture qu'elle renvoie. */
+  private playhead = 0;
   /** Silences de la voix dans cet entretien (résumé logué après chaque réponse). */
   private readonly silences = new SilenceSummary();
   /** Durée de la révélation seule (début de l'ouverture), en ms d'audio. */
@@ -144,7 +145,7 @@ export class Conversation {
 
   private constructor(
     private readonly config: DemoConfig,
-    private readonly voice: TtsEngine,
+    private readonly voice: VoicePool,
     private readonly engine: ConversationEngine,
     private readonly link: PageLink,
   ) {
@@ -173,7 +174,7 @@ export class Conversation {
       });
   }
 
-  static async create(config: DemoConfig, voice: TtsEngine, engine: ConversationEngine, link: PageLink): Promise<Conversation> {
+  static async create(config: DemoConfig, voice: VoicePool, engine: ConversationEngine, link: PageLink): Promise<Conversation> {
     const conversation = new Conversation(config, voice, engine, link);
     conversation.vad = await Vad.create(config.silenceMs, {
       onSpeechStart: (startedAt) => conversation.onSpeechStart(startedAt),
@@ -220,6 +221,7 @@ export class Conversation {
     this.interrupt('pause demandée par l’utilisateur');
     // Même sans réponse en cours : coupe le retour audio et ce que la page jouerait encore.
     this.link.stop();
+    this.playhead = 0;
     this.paused = true;
     if (this.bargeIn) clearInterval(this.bargeIn.timer);
     this.bargeIn = null;
@@ -444,6 +446,7 @@ export class Conversation {
     }
     response.controller.abort();
     this.link.stop();
+    this.playhead = 0;
     this.avatarSpeakingSince = null;
     this.current = null;
     this.updateState(`réponse interrompue : ${reason}`);
@@ -527,7 +530,9 @@ export class Conversation {
     const readyAt = Date.now();
     for (const [index, chunk] of audio.entries()) {
       if (response.controller.signal.aborted) return;
-      this.send(response, chunk, { kind: 'ouverture', text: texts[index] ?? text, textReadyAt: readyAt, synthStartAt: readyAt, synthEndAt: readyAt });
+      const pieceText = texts[index] ?? text;
+      // Mêmes pauses régulières que les réponses (lib/speech-pacing.ts).
+      this.send(response, paceSpeech(chunk, pauseAfter(pieceText)), { kind: 'ouverture', text: pieceText, textReadyAt: readyAt, synthStartAt: readyAt, synthEndAt: readyAt });
     }
     response.openingSent = true;
     transcriptLine('Avatar', text);
@@ -537,12 +542,23 @@ export class Conversation {
     const { signal } = response.controller;
     const { questionEndAt } = response;
     transcriptLine('Recruteur', question, this.speechStartedAt);
-    const sentences: ReadySentence[] = [];
-    const queue: { wake: (() => void) | null; done: boolean } = { wake: null, done: false };
-    // La réponse ne part qu'après l'ouverture ; le LLM, lui, n'attend pas.
-    const speaker = opening.then(() =>
-      this.speakSentences(response, sentences, () => queue.done, (resolve) => (queue.wake = resolve)),
-    );
+    // Morceaux de la réponse : synthèse dès que le texte est écrit, envoi dans l'ordre après l'ouverture, attente avant
+    // de jouer si les suivants risquent d'arriver en retard (lib/speech-queue.ts).
+    const queue = new SpeechQueue({
+      pool: this.voice,
+      signal,
+      playhead: () => this.playhead,
+      log: (line) => logTts(line),
+      send: (audio, piece) => {
+        if (!this.send(response, audio, { kind: 'réponse', ...piece })) return false;
+        response.answerSent = true;
+        response.answerStartedAt ??= Date.now();
+        response.spoken.push(piece.text);
+        this.remember(piece.text);
+        return true;
+      },
+    });
+    const speaker = queue.play(opening);
 
     let buffer = '';
     let words = 0;
@@ -561,22 +577,13 @@ export class Conversation {
           log(`premier mot reçu ${response.timings.firstToken} ms après la fin de la question`);
         }
         buffer += fragment;
-        const ready = take(false);
-        if (ready.length) {
-          const readyAt = Date.now();
-          sentences.push(...ready.map((text) => ({ text, readyAt })));
-          queue.wake?.();
-        }
+        for (const text of take(false)) queue.push(text);
       }
-      if (!signal.aborted) {
-        const readyAt = Date.now();
-        sentences.push(...take(true).map((text) => ({ text, readyAt })));
-      }
+      if (!signal.aborted) for (const text of take(true)) queue.push(text);
     } catch (error) {
       if (!signal.aborted) log(`erreur : ${error instanceof Error ? error.message : String(error)} (moteur ${this.engine.description})`);
     } finally {
-      queue.done = true;
-      queue.wake?.();
+      queue.end();
     }
     await speaker;
     response.finished = true;
@@ -589,52 +596,6 @@ export class Conversation {
     if (response.transcriptLogged || response.spoken.length === 0) return;
     response.transcriptLogged = true;
     transcriptLine('Avatar', response.spoken.join(' ') + (interrupted ? ' […] (interrompu)' : ''), response.answerStartedAt);
-  }
-
-  /** Synthétise et envoie les phrases dans l'ordre, au fur et à mesure qu'elles arrivent. */
-  private async speakSentences(
-    response: Response,
-    sentences: ReadySentence[],
-    isDone: () => boolean,
-    setWake: (resolve: () => void) => void,
-  ) {
-    const { signal } = response.controller;
-    for (;;) {
-      const next = sentences.shift();
-      if (next === undefined) {
-        if (isDone()) return;
-        await new Promise<void>((resolve) => setWake(resolve));
-        continue;
-      }
-      const sentence = next.text;
-      // Piper rend la phrase d'un bloc ; OpenAI la rend par morceaux, envoyés dès qu'ils arrivent.
-      let started = false;
-      let refused = false;
-      const synthStartAt = Date.now();
-      try {
-        await this.voice.stream(
-          sentence,
-          (audio) => {
-            if (signal.aborted || refused) return;
-            const piece: PieceInfo = { kind: 'réponse', text: sentence, textReadyAt: next.readyAt, synthStartAt, synthEndAt: Date.now() };
-            if (!this.send(response, audio, piece)) {
-              refused = true;
-              return;
-            }
-            if (started) return;
-            started = true;
-            response.answerSent = true;
-            response.answerStartedAt ??= Date.now();
-            response.spoken.push(sentence);
-            this.remember(sentence);
-          },
-          signal,
-        );
-      } catch (error) {
-        if (!signal.aborted) log(`synthèse impossible : ${error instanceof Error ? error.message : String(error)} (« ${sentence} »)`);
-      }
-      if (signal.aborted) return;
-    }
   }
 
   private send(response: Response, audio: SpeechAudio, info: PieceInfo): boolean {
@@ -653,6 +614,9 @@ export class Conversation {
       }, PLAYBACK_START_TIMEOUT_MS);
     }
     this.link.speak(response.id, audio);
+    const duration = (audio.samples.length / audio.sampleRate) * 1000;
+    // Comme la page : à la suite de la voix en cours, sinon dès l'arrivée (pont et avance de lecture : ≈ 100 ms).
+    this.playhead = Math.max(Date.now() + 100, this.playhead) + duration;
     response.pieces.push({
       ...info,
       sentAt: Date.now(),
@@ -670,6 +634,7 @@ export class Conversation {
     response.scheduled += 1;
     piece.playStartAt = startAt;
     piece.playEndAt = endAt;
+    this.playhead = Math.max(this.playhead, endAt);
   }
 
   /** Silences de la réponse (plus long, cause) et résumé de l'entretien, une fois par réponse. */
