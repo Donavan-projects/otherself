@@ -17,8 +17,12 @@ import { wordCount, type VoicePool } from './voice-pool';
 
 /** Acheminement d'un morceau jusqu'à sa lecture dans la page (pont, avance de la page), compté dans la prévision. */
 const TRANSPORT_MS = 100;
-/** Marge de sécurité de la prévision. */
-const MARGIN_MS = 200;
+/**
+ * Marge de sécurité de la prévision. 350 ms depuis le premier morceau synthétisé seul (20/11) : les suivants partent
+ * plus tard, et un trou de 697 ms (synthèse 123 ms en retard, acheminement 254 ms au lieu de 100) a fait enchaîner un
+ * recruteur impatient avec 200 ms.
+ */
+const MARGIN_MS = 350;
 /** Attente plus courte ignorée ; attente maximale avant de jouer. */
 const MIN_HOLD_MS = 50;
 const MAX_HOLD_MS = 4000;
