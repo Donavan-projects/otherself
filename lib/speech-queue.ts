@@ -22,6 +22,8 @@ const MARGIN_MS = 200;
 /** Attente plus courte ignorée ; attente maximale avant de jouer. */
 const MIN_HOLD_MS = 50;
 const MAX_HOLD_MS = 4000;
+/** Morceau synthétisé en même temps que le premier (au lieu d'après lui) s'il a plus de mots que ce multiple. */
+const PARALLEL_WORDS_RATIO = 2.5;
 
 /** Ce que la file sait d'un morceau au moment de l'envoyer. */
 export interface QueuedPiece {
@@ -68,9 +70,11 @@ export class SpeechQueue {
     const job: Job = { text, words: wordCount(text), readyAt, settled: Promise.resolve() };
     // Premier morceau prioritaire : les suivants attendent la fin de sa synthèse. En parallèle, les deux voix se
     // partagent le processeur et le premier sort ≈ 1,7 fois plus lentement (mesuré le 20/11 : 0,41 contre 0,23 × temps
-    // réel), ce qui retarde le début de la réponse ; les suivants ont toute la durée du premier pour être prêts.
+    // réel), ce qui retarde le début de la réponse ; les suivants ont toute la durée du premier pour être prêts. Sauf
+    // morceau bien plus long que le premier : attendu, il ne serait pas prêt à la fin du premier et imposerait une
+    // attente avant de jouer (mesuré : 1,5 s, prise pour la fin de la réponse par un recruteur impatient).
     const first = this.jobs[0];
-    const turn = first ? first.settled : Promise.resolve();
+    const turn = first && job.words <= PARALLEL_WORDS_RATIO * first.words ? first.settled : Promise.resolve();
     job.settled = turn
       .then(() => (this.options.signal.aborted ? Promise.reject(new Error('réponse interrompue')) : this.options.pool.synthesize(text, this.options.signal, (at) => (job.startedAt = at))))
       .then(
@@ -115,7 +119,7 @@ export class SpeechQueue {
       const now = Date.now();
       if (index === 0) {
         const naturalStart = Math.max(now + TRANSPORT_MS, this.options.playhead());
-        const hold = Math.min(MAX_HOLD_MS, this.requiredStart(index, now) - naturalStart);
+        const hold = Math.min(MAX_HOLD_MS, this.requiredStart(index, now, durationMs(job.audio)) - naturalStart);
         if (hold >= MIN_HOLD_MS) {
           this.holds.push(hold);
           this.options.log(
@@ -134,14 +138,30 @@ export class SpeechQueue {
    * Attente nécessaire avant de jouer le morceau `index` pour que les morceaux suivants déjà écrits s'enchaînent sans
    * trou : chacun doit être prêt (prévision) avant la fin de la voix qui le précède.
    */
+  /**
+   * Début prévu (Date.now) de la réponse, attente avant de jouer comprise, sans la voix pas encore envoyée (phrase
+   * d'attente à caler) ; null tant qu'aucun morceau n'est écrit. Sert à caler la phrase d'attente pour qu'elle finisse
+   * juste avant (lib/conversation.ts).
+   */
+  predictedStart(now = Date.now()): number | null {
+    const first = this.jobs[0];
+    if (!first) return null;
+    const { model } = this.options.pool;
+    const predicted = model.predict(first.words);
+    const ready = first.audio || first.failed ? now : Math.max(now, (first.startedAt ?? now) + predicted.synthMs);
+    const audioMs = first.audio ? durationMs(first.audio) : predicted.audioMs + SENTENCE_PAUSE_MS;
+    const natural = Math.max(ready + TRANSPORT_MS, this.options.playhead());
+    return Math.max(natural, Math.min(natural + MAX_HOLD_MS, this.requiredStart(0, ready, audioMs)));
+  }
+
   /** Début au plus tôt (Date.now) du morceau `index` pour que les morceaux suivants déjà écrits arrivent à temps. */
-  private requiredStart(index: number, now: number): number {
+  private requiredStart(index: number, now: number, firstAudioMs: number): number {
     const { model, concurrency, inProgress } = this.options.pool;
     // Voix : libre maintenant, ou à la fin prévue de sa synthèse en cours.
     const slots = inProgress.map((running) => Math.max(now + MIN_HOLD_MS, running.startedAt + model.predict(running.words).synthMs));
     while (slots.length < concurrency) slots.push(now);
     slots.sort((a, b) => a - b);
-    let covered = durationMs(this.jobs[index]!.audio!);
+    let covered = firstAudioMs;
     let start = now;
     for (const job of this.jobs.slice(index + 1)) {
       const predicted = model.predict(job.words);

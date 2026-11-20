@@ -101,6 +101,10 @@ interface Response {
   sentAt?: number;
   /** La voix envoyée n'a jamais commencé à jouer dans le délai prévu : la réponse ne compte plus pour l'état. */
   playbackTimedOut?: boolean;
+  /** Phrase d'attente choisie pour ce tour (lib/fillers.ts), partie ou non, et minuterie de son départ. */
+  filler?: Filler | undefined;
+  fillerSent?: boolean;
+  fillerTimer?: number;
   /** Morceaux de voix envoyés, dans l'ordre, avec leurs heures (mesure des silences, lib/silences.ts). */
   pieces: VoicePiece[];
   /** Morceaux dont la page a déjà renvoyé l'heure de lecture. */
@@ -496,30 +500,43 @@ export class Conversation {
       logTts(`pas de phrase d'attente : ${why}`);
       return;
     }
-    // Tirage sans remise parmi les phrases permises (longues : grosses attentes seulement).
+    // Tirage sans remise parmi les phrases permises (longues : grosses attentes seulement) ; retirée de la réserve
+    // seulement si elle est jouée. Heure de départ calée plus tard, sur le début prévu de la réponse (scheduleFiller).
     const allowed = (filler: Filler) => !filler.long || predicted >= FILLER_LONG_DELAY_MS;
     if (!this.fillerBag.some(allowed)) this.fillerBag = this.fillers.filter((filler) => !this.fillerBag.includes(filler)).concat(this.fillerBag);
     const choices = this.fillerBag.filter(allowed);
-    const filler = choices[Math.floor(Math.random() * choices.length)];
-    if (!filler) return;
-    this.fillerBag = this.fillerBag.filter((item) => item !== filler);
-    const plannedAt = Math.max(questionEndAt + FILLER_EARLIEST_MS, questionEndAt + predicted - audioMs(filler.audio));
+    response.filler = choices[Math.floor(Math.random() * choices.length)];
+  }
+
+  /**
+   * Phrase d'attente choisie (maybeFiller) calée pour finir, pause comprise (≈ 300 ms), au début prévu de la réponse
+   * d'après la file (synthèse du premier morceau et attente avant de jouer comprises) : pas de trou après elle. Recalée
+   * à chaque nouveau morceau écrit, tant qu'elle n'est pas partie ; jamais avant FILLER_EARLIEST_MS. Réponse prête
+   * avant : pas de phrase d'attente ; prête pendant : elle attend la fin de la phrase et sa pause.
+   */
+  private scheduleFiller(response: Response, queue: SpeechQueue) {
+    const filler = response.filler;
+    if (!filler || response.fillerSent || response.answerSent) return;
+    const start = queue.predictedStart();
+    if (start === null) return;
+    const at = Math.max(response.questionEndAt + FILLER_EARLIEST_MS, start - audioMs(filler.audio));
+    clearTimeout(response.fillerTimer);
     const play = () => {
-      if (response.controller.signal.aborted || this.current !== response) return;
+      if (response.controller.signal.aborted || this.current !== response || response.fillerSent) return;
       if (response.answerSent) return logTts(`phrase d'attente « ${filler.text} » pas jouée : réponse prête avant`);
       if (this.vad.isSpeaking) return logTts(`phrase d'attente « ${filler.text} » pas jouée : le recruteur parle`);
       const now = Date.now();
       if (!this.send(response, filler.audio, { kind: 'attente', text: filler.text, textReadyAt: now, synthStartAt: now, synthEndAt: now })) return;
+      response.fillerSent = true;
       this.previousHadFiller = true;
+      this.fillerBag = this.fillerBag.filter((item) => item !== filler);
       this.remember(filler.text);
       logTts(
-        `phrase d'attente jouée « ${filler.text} » ${now - questionEndAt} ms après la fin de la question, ` +
-          `fin prévue ${Math.round(now - questionEndAt + audioMs(filler.audio))} ms (délai prévu de la réponse ${Math.round(predicted)} ms)`,
+        `phrase d'attente jouée « ${filler.text} » ${now - response.questionEndAt} ms après la fin de la question, ` +
+          `fin ${Math.round(now - response.questionEndAt + audioMs(filler.audio))} ms, réponse prévue à ${start - response.questionEndAt} ms`,
       );
     };
-    const wait = plannedAt - Date.now();
-    if (wait > 0) setTimeout(play, wait);
-    else play();
+    response.fillerTimer = window.setTimeout(play, Math.max(0, at - Date.now()));
   }
 
   private interrupt(reason: string) {
@@ -682,8 +699,10 @@ export class Conversation {
         }
         buffer += fragment;
         for (const text of take(false)) queue.push(text);
+        this.scheduleFiller(response, queue);
       }
       if (!signal.aborted) for (const text of take(true)) queue.push(text);
+      this.scheduleFiller(response, queue);
     } catch (error) {
       if (!signal.aborted) log(`erreur : ${error instanceof Error ? error.message : String(error)} (moteur ${this.engine.description})`);
     } finally {
