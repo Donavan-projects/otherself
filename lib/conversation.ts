@@ -9,7 +9,7 @@ import type { AvatarState } from './avatar-states';
 import type { DemoConfig } from './config';
 import { takeChunks } from './chunks';
 import { disclosureText, openingText, shortDisclosureText } from './disclosure';
-import { fillerTexts } from './fillers';
+import { fillerTexts, isRealQuestion } from './fillers';
 import type { ConversationEngine, RenderLink } from './engine';
 import { isGreetingOnly } from './greeting';
 import { clock, createLogger } from './log';
@@ -52,6 +52,16 @@ const HEARD_MARGIN_MS = 300;
 const PLAYBACK_START_TIMEOUT_MS = 4000;
 /** Écart minimal entre deux hochements de l'avatar à l'écoute. */
 const NOD_MIN_GAP_MS = 1500;
+/**
+ * Phrase d'attente : jouée après une vraie question si le délai prévu avant la réponse dépasse ce seuil, dès que la
+ * transcription est connue (≈ 1,4 s après la fin de la question ; il faut le texte pour savoir si c'est une question)
+ * et jamais avant FILLER_EARLIEST_MS. Délai prévu : moyenne glissante des délais mesurés (fin de question → début
+ * de la vraie réponse), départ prudent.
+ */
+const FILLER_MIN_DELAY_MS = 3000;
+const FILLER_EARLIEST_MS = 900;
+const ANSWER_DELAY_START_MS = 4000;
+const ANSWER_DELAY_EWMA = 0.3;
 
 /** Vers la page : voix (micro injecté), états et hochements (lib/engine.ts). */
 export type PageLink = RenderLink;
@@ -141,6 +151,8 @@ export class Conversation {
   private fillers: { text: string; audio: SpeechAudio }[] = [];
   /** Dernière phrase d'attente jouée : jamais deux fois de suite la même. */
   private lastFiller = '';
+  /** Délai prévu entre la fin d'une question et le début de la vraie réponse (moyenne glissante des mesures). */
+  private answerDelay = ANSWER_DELAY_START_MS;
   /** Silences de la voix dans cet entretien (résumé logué après chaque réponse). */
   private readonly silences = new SilenceSummary();
   /** Durée de la révélation seule (début de l'ouverture), en ms d'audio. */
@@ -438,7 +450,37 @@ export class Conversation {
       this.updateState('salutation : ouverture seule');
       return;
     }
+    this.maybeFiller(response, question, lastVoiceAt);
     await this.answer(response, question, opening);
+  }
+
+  /**
+   * Phrase d'attente (lib/fillers.ts) après une vraie question, si le délai prévu avant la réponse est long : jamais
+   * pendant l'ouverture (donc jamais avant la révélation), jamais pendant que le recruteur parle, jamais deux fois de
+   * suite la même. La réponse la suit après la pause comprise dans son audio (≈ 300 ms), ou plus tard si elle n'est
+   * pas prête (lib/speech-queue.ts, attente avant de jouer). Hors du moteur : ni au LLM ni dans l'historique.
+   */
+  private maybeFiller(response: Response, question: string, questionEndAt: number) {
+    if (response.includesOpening || !this.revealed || this.fillers.length === 0) return;
+    if (!isRealQuestion(question, this.config.language)) {
+      logTts(`pas de phrase d'attente : pas une vraie question (« ${question.slice(0, 60)} »)`);
+      return;
+    }
+    if (this.answerDelay < FILLER_MIN_DELAY_MS) return;
+    const play = () => {
+      if (response.controller.signal.aborted || this.vad.isSpeaking || response.answerSent || this.current !== response) return;
+      const choices = this.fillers.filter(({ text }) => text !== this.lastFiller);
+      const filler = choices[Math.floor(Math.random() * choices.length)];
+      if (!filler) return;
+      const now = Date.now();
+      if (!this.send(response, filler.audio, { kind: 'attente', text: filler.text, textReadyAt: now, synthStartAt: now, synthEndAt: now })) return;
+      this.lastFiller = filler.text;
+      this.remember(filler.text);
+      logTts(`phrase d'attente jouée « ${filler.text} » ${now - questionEndAt} ms après la fin de la question (délai prévu ${Math.round(this.answerDelay)} ms)`);
+    };
+    const wait = questionEndAt + FILLER_EARLIEST_MS - Date.now();
+    if (wait > 0) setTimeout(play, wait);
+    else play();
   }
 
   private interrupt(reason: string) {
@@ -565,25 +607,12 @@ export class Conversation {
       signal,
       playhead: () => this.playhead,
       log: (line) => logTts(line),
-      // Phrase d'attente : jamais pendant l'ouverture (donc jamais avant la révélation), jamais deux fois de suite la même.
-      filler: (maxMs) => {
-        if (response.includesOpening || !this.revealed) return null;
-        const fitting = this.fillers.filter(({ text, audio }) => text !== this.lastFiller && (audio.samples.length / audio.sampleRate) * 1000 <= maxMs);
-        return fitting[Math.floor(Math.random() * fitting.length)] ?? null;
-      },
-      sendFiller: (audio, text) => {
-        const now = Date.now();
-        if (!this.send(response, audio, { kind: 'attente', text, textReadyAt: now, synthStartAt: now, synthEndAt: now })) return false;
-        this.lastFiller = text;
-        this.remember(text);
-        logTts(`phrase d'attente jouée « ${text} » (${now - questionEndAt} ms après la fin de la question, juste avant la réponse)`);
-        return true;
-      },
       send: (audio, piece) => {
         if (!response.answerSent) {
           // Début prévu de la vraie réponse (après une éventuelle phrase d'attente), comme la page le programmera.
           const start = Math.max(Date.now() + 100, this.playhead);
           logTts(`vraie réponse : début prévu ${start - questionEndAt} ms après la fin de la question`);
+          if (!response.includesOpening) this.answerDelay += ANSWER_DELAY_EWMA * (start - questionEndAt - this.answerDelay);
         }
         if (!this.send(response, audio, { kind: 'réponse', ...piece })) return false;
         response.answerSent = true;

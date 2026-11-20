@@ -20,8 +20,6 @@ const TRANSPORT_MS = 100;
 const MARGIN_MS = 200;
 /** Attente plus courte ignorée ; attente maximale avant de jouer. */
 const MIN_HOLD_MS = 50;
-/** Attente avant de jouer à partir de laquelle une phrase d'attente la remplit (lib/fillers.ts). */
-export const FILLER_MIN_HOLD_MS = 1500;
 const MAX_HOLD_MS = 4000;
 
 /** Ce que la file sait d'un morceau au moment de l'envoyer. */
@@ -39,12 +37,6 @@ export interface SpeechQueueOptions {
   send(audio: SpeechAudio, piece: QueuedPiece): boolean;
   /** Fin prévue (Date.now) de la voix déjà envoyée ; dans le passé : la lecture est à l'arrêt. */
   playhead(): number;
-  /**
-   * Phrase d'attente d'au plus `maxMs` (pause comprise), ou null ; elle est envoyée pour finir juste quand la réponse
-   * commence, sans silence après elle (un recruteur automatisé tient la réponse pour commencée dès le premier son).
-   */
-  filler?(maxMs: number): { audio: SpeechAudio; text: string } | null;
-  sendFiller?(audio: SpeechAudio, text: string): boolean;
   log(line: string): void;
 }
 
@@ -112,25 +104,19 @@ export class SpeechQueue {
         this.options.log(`synthèse impossible : ${job.failed ?? 'inconnue'} (« ${job.text} »)`);
         continue;
       }
-      // Premier morceau de la réponse, lecture à l'arrêt (pas d'ouverture en cours) : la suite ne doit pas s'interrompre.
+      // Premier morceau de la réponse : il commencerait dès son arrivée, ou après la voix déjà envoyée (ouverture,
+      // phrase d'attente et sa pause). La suite ne doit pas s'interrompre : son début est retardé si besoin.
       const now = Date.now();
-      if (index === 0 && this.options.playhead() <= now + TRANSPORT_MS) {
-        const hold = this.requiredHold(index, now);
+      if (index === 0) {
+        const naturalStart = Math.max(now + TRANSPORT_MS, this.options.playhead());
+        const hold = Math.min(MAX_HOLD_MS, this.requiredStart(index, now) - naturalStart);
         if (hold >= MIN_HOLD_MS) {
           this.holds.push(hold);
           this.options.log(
             `attente de ${Math.round(hold)} ms avant de jouer « ${job.text.slice(0, 40)}${job.text.length > 40 ? '…' : ''} » : ` +
               `les morceaux suivants ne seraient pas prêts à temps (synthèse ${this.options.pool.model.ratio.toFixed(2)} × temps réel)`,
           );
-          const filler = hold >= FILLER_MIN_HOLD_MS ? (this.options.filler?.(hold - TRANSPORT_MS) ?? null) : null;
-          if (filler) {
-            // Phrase d'attente calée pour finir à la fin de l'attente ; le morceau, envoyé aussitôt après, la suit sans trou.
-            await new Promise((resolve) => setTimeout(resolve, Math.max(0, hold - durationMs(filler.audio))));
-            if (signal.aborted) return;
-            this.options.sendFiller?.(filler.audio, filler.text);
-          } else {
-            await new Promise((resolve) => setTimeout(resolve, hold));
-          }
+          await new Promise((resolve) => setTimeout(resolve, hold));
           if (signal.aborted) return;
         }
       }
@@ -142,7 +128,8 @@ export class SpeechQueue {
    * Attente nécessaire avant de jouer le morceau `index` pour que les morceaux suivants déjà écrits s'enchaînent sans
    * trou : chacun doit être prêt (prévision) avant la fin de la voix qui le précède.
    */
-  private requiredHold(index: number, now: number): number {
+  /** Début au plus tôt (Date.now) du morceau `index` pour que les morceaux suivants déjà écrits arrivent à temps. */
+  private requiredStart(index: number, now: number): number {
     const { model, concurrency, inProgress } = this.options.pool;
     // Voix : libre maintenant, ou à la fin prévue de sa synthèse en cours.
     const slots = inProgress.map((running) => Math.max(now + MIN_HOLD_MS, running.startedAt + model.predict(running.words).synthMs));
@@ -165,6 +152,6 @@ export class SpeechQueue {
       start = Math.max(start, ready + TRANSPORT_MS + MARGIN_MS - covered);
       covered += job.audio ? durationMs(job.audio) : predicted.audioMs + SENTENCE_PAUSE_MS;
     }
-    return Math.min(MAX_HOLD_MS, start - now);
+    return start;
   }
 }
