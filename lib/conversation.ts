@@ -528,6 +528,7 @@ export class Conversation {
       const now = Date.now();
       const latest = queue.predictedStart(now);
       if (latest !== null && now + audioMs(filler.audio) > latest + FILLER_OVERRUN_MS) {
+        response.filler = undefined;
         return logTts(`phrase d'attente « ${filler.text} » pas jouée : elle finirait ${Math.round(now + audioMs(filler.audio) - latest)} ms après le début prévu de la réponse`);
       }
       if (!this.send(response, filler.audio, { kind: 'attente', text: filler.text, textReadyAt: now, synthStartAt: now, synthEndAt: now })) return;
