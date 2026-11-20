@@ -4,7 +4,8 @@ Deux méthodes :
 
 - **Page recruteur IA (méthode principale)** : un recruteur automatisé fictif, Maren, qui annonce lui-même être une IA,
   face à l'avatar injecté dans la même page. Pas de vraie plateforme (conditions d'utilisation, image d'un recruteur
-  réel, marque). La page enregistre elle-même la prise, pistes séparées et sous-titres compris : pas d'OBS.
+  réel, marque). La page enregistre elle-même la prise (voix séparées, sous-titres, journal du rendu), puis les
+  vidéos sont rendues après coup : pas d'OBS.
 - **Plateforme réelle avec OBS** (plus bas) : enregistrement d'écran d'un vrai entretien, l'onglet de la plateforme et
   la fenêtre d'aperçu de l'avatar.
 
@@ -17,7 +18,7 @@ entretien court (n − 1 premières répliques, puis la clôture), pour un essai
 
 Avant : mêmes réglages que ci-dessous (« Avant la prise ») ; casque ou haut-parleurs bas (la voix de l'avatar est
 jouée pour vous par le retour audio de l'extension, jamais dans l'onglet) ; garder l'onglet au premier plan pendant
-toute la prise (le visuel du recruteur et l'aperçu composé sont dessinés à chaque image).
+toute la prise.
 
 1. **Préparer les répliques** : la voix du recruteur (`en_US-ljspeech-medium`) les synthétise une seule fois, puis
    elles sortent du cache (prises identiques).
@@ -29,21 +30,35 @@ toute la prise (le visuel du recruteur et l'aperçu composé sont dessinés à c
    choisi, les fichiers vont dans les téléchargements.
 5. **Démarrer l'entretien** avec « Enregistrer la prise » coché. À la fin (dernière réplique, réponse et 4 s), les
    fichiers sont écrits ; « Arrêter » termine la prise plus tôt.
+6. **Rendre les vidéos** : `npm run rendu:prise -- local/prises/prise-AAAAMMJJ-HHMMSS` (ou page
+   `render.html`, bouton « Dossier des prises… »). Quelques minutes, hors temps réel.
 
-Fichiers d'une prise (`prise-AAAAMMJJ-HHMMSS…`, heure UTC), toutes les pistes démarrées dans le même instant (vérifié :
-mêmes durées à 0,2 s près, débuts de parole des voix au même instant que les sous-titres, à 0,05 s près) :
+**La vidéo est un nouveau rendu de la prise, pas l'image envoyée en direct.** Pendant l'entretien, aucune vidéo n'est
+encodée : la page n'enregistre que les deux voix et un journal horodaté de tout ce qui pilote l'image (graine du hasard
+du rendu, états, hochements, clignements, saccades, pause, répliques du recruteur, phrases d'attente, sous-titres).
+Encoder trois vidéos pendant que l'avatar synthétise sa voix et dessine le rendu 3D saturait le processeur (mesuré le
+20/11 : vidéo à 22,9 images/s, trous jusqu'à 1,6 s, à chaque réponse), et retardait les réponses. Après la prise, la
+page `render.html` (Chromium sans interface, GPU) refait les images à 30 images/s exactes d'un temps virtuel, **par la
+même logique et le même code qu'en injection** (`lib/avatar-frames.ts` : avatar 3D, marqueur IA peint en dernier,
+image de pause ; même graine, mêmes états aux mêmes instants), la bouche pilotée par la voix enregistrée ; le
+recruteur par le même dessin (`entrypoints/recruiter/visual.ts`) piloté par sa voix enregistrée. Ce qu'un
+interlocuteur réel aurait vu en direct suit les mêmes règles, mais son image dépendait de la charge de la machine.
+
+Fichiers d'une prise (`prise-AAAAMMJJ-HHMMSS…`, heure UTC) :
 
 | Fichier | Contenu |
 | --- | --- |
-| `…-avatar.webm` | vidéo de l'avatar telle qu'envoyée, 1280×720, marqueur IA compris |
-| `…-recruteur.webm` | vidéo du recruteur (visuel abstrait, 1280×720) |
-| `…-voix-avatar.webm`, `…-voix-recruteur.webm` | voix séparées (Opus), alignées sur les vidéos (fond continu à −120 dB : sans lui, Chrome n'écrit rien pendant les silences et la voix se décalait) |
-| `…-apercu.webm` | aperçu déjà composé : écran partagé (recruteur à gauche, avatar à droite), voix mixées, pour juger la prise |
-| `….srt` | sous-titres horodatés, interlocuteur nommé (« Maren: … », « Nova: … »), d'après les heures réelles de lecture |
+| `…-voix-avatar.webm`, `…-voix-recruteur.webm` | voix séparées (Opus), enregistrées pendant l'entretien, démarrées dans le même instant (fond continu à −120 dB : sans lui, Chrome n'écrit rien pendant les silences et la voix se décalait) |
+| `….srt` | sous-titres horodatés, interlocuteur nommé (« Maren: … », « Nova: … »), d'après les heures réelles de lecture ; phrases d'attente marquées `[phrase d'attente]` |
+| `…-journal.json` | journal du rendu : graine, événements de l'avatar depuis son activation, répliques du recruteur, phrases d'attente, sous-titres (ms depuis le début de la prise) |
 | `…-infos.json` | réglages de la prise (recruteur, patience, modèle), durée, taille des pistes |
+| `…-avatar.webm` | **rendu après coup** : vidéo de Nova, 1280×720, 30 images/s exactes, marqueur IA compris |
+| `…-recruteur.webm` | **rendu après coup** : vidéo du recruteur (visuel abstrait, 1280×720) |
+| `…-apercu.webm` | **rendu après coup** : écran partagé (recruteur à gauche, Nova à droite, 1920×540), voix mixées |
 
-Les fichiers WebM écrits par le navigateur n'indiquent pas leur durée dans l'en-tête : certains lecteurs n'affichent
-pas de barre de progression ; un logiciel de montage les lit normalement.
+Vérification d'une prise rendue : `npm run check:prise -- local/prises/prise-…` (images par seconde et écarts entre
+images de chaque vidéo, voix continues et calées sur les sous-titres). Le rendu indique aussi combien de clignements
+et de saccades de la prise il a reproduits à l'identique (même heure prévue).
 
 Logs utiles (console de la page) : `[recruteur]` (début de chaque réponse, plus long silence entendu, réponse coupée
 si le recruteur enchaîne trop tôt), `[tts] silences de la réponse …` (silences mesurés par l'extension et leur

@@ -6,6 +6,7 @@
 // le voyant (couleur de l'état, fondue, halo, respiration en réflexion) est redessiné à chaque image.
 // Réglages : MARKING dans lib/avatar-states.ts. Sans API d'extension : tourne aussi dans le monde MAIN.
 
+import { renderClock } from './render-random';
 import { MARKING, STATE_FADE, type AvatarState } from './avatar-states';
 
 type Rgb = [number, number, number];
@@ -44,7 +45,7 @@ export class AiMarking {
   }
 
   /** Dessine voyant et marquage ; à appeler en dernier, après tout le reste de l'image. */
-  draw(ctx: Context2D, anchors: MarkingAnchors, now = performance.now()) {
+  draw(ctx: Context2D, anchors: MarkingAnchors, now = renderClock.now()) {
     const dt = this.previous === null ? 1 : Math.min(0.5, Math.max(0, (now - this.previous) / 1000));
     this.previous = now;
     const target = this.target();

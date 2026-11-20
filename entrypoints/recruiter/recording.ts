@@ -1,8 +1,11 @@
-// Enregistrement brut d'une prise sur la page recruteur IA : pistes séparées, toutes démarrées dans le même instant
-// (vidéo de l'avatar telle qu'envoyée, 1280×720 ; vidéo du recruteur ; voix de l'avatar ; voix du recruteur), un aperçu
-// déjà composé (écran partagé, voix mixées) pour juger la prise, des sous-titres SRT horodatés avec les deux
-// interlocuteurs, et un fichier d'informations. Les sous-titres partent des heures réelles de lecture : répliques du
-// recruteur jouées ici, morceaux de voix de l'avatar programmés par la page (playback-chunk) avec leur texte (speak).
+// Enregistrement brut d'une prise sur la page recruteur IA, sans aucune vidéo encodée pendant l'entretien (le
+// processeur ne fait que l'entretien) : les deux voix (pistes séparées, démarrées dans le même instant), des
+// sous-titres SRT horodatés avec les deux interlocuteurs, un fichier d'informations et un journal horodaté de tout ce
+// qui pilote l'image (graine du hasard du rendu, états, hochements, clignements, saccades, pause, répliques du
+// recruteur, phrases d'attente, sous-titres). Les vidéos (Nova, recruteur, aperçu composé) sont rendues ensuite, hors
+// temps réel, par la page render (scripts/render-prise.ts) : même code de rendu et de marqueur qu'en injection.
+// Les sous-titres partent des heures réelles de lecture : répliques du recruteur jouées ici, morceaux de voix de
+// l'avatar programmés par la page (playback-chunk) avec leur texte (speak).
 // Rangement : dossier choisi par l'utilisateur (sélecteur de dossier du navigateur, par exemple local/prises/ du
 // dépôt, ignoré par git), sinon téléchargements. Aucune permission d'extension (règle 6).
 
@@ -10,17 +13,21 @@ import { PAGE_TAG, type PageEnvelope } from '@/lib/bridge-messages';
 import { createLogger } from '@/lib/log';
 
 const log = createLogger('prise');
-const PREVIEW_WIDTH = 1920;
-const PREVIEW_HEIGHT = 540;
+
+/** Événement du rendu de l'avatar (lib/render-random.ts) : heure performance.now() de la page, détails. */
+export interface RenderJournalEvent {
+  kind: string;
+  at: number;
+  [detail: string]: number | string;
+}
 
 export interface RecordingSources {
-  avatarVideo: MediaStreamTrack;
   avatarVoice: MediaStreamTrack;
-  recruiterCanvas: HTMLCanvasElement;
   /** Voix du recruteur : nœud dont la sortie est la voix seule. */
   recruiterVoice: AudioNode;
   context: AudioContext;
-  avatarElement: HTMLVideoElement;
+  /** Événements du rendu de l'avatar depuis sa création (création et graine comprises). */
+  renderEvents: RenderJournalEvent[];
   recruiterName: string;
   /** Nom de l'avatar dans les sous-titres (avatarName, sinon « AI avatar »). */
   avatarName: string;
@@ -80,12 +87,14 @@ async function save(name: string, blob: Blob): Promise<string> {
 export class Recording {
   private readonly recorders: { name: string; recorder: MediaRecorder; chunks: Blob[] }[] = [];
   private readonly cues: Cue[] = [];
+  private readonly recruiterLines: { start: number; end: number; text: string }[] = [];
+  private readonly fillers: { at: number; text: string }[] = [];
+  /** Début de la prise : Date.now() et performance.now() du même instant. */
+  private startedPerf = 0;
   /** Textes de l'avatar reçus (speak), en attente de leur heure de lecture (playback-chunk), dans l'ordre. */
   private readonly pendingTexts: string[] = [];
   private startedAt = 0;
-  private composing = 0;
   private readonly onMessage = (event: MessageEvent) => this.listen(event);
-  private readonly preview = document.createElement('canvas');
   private floor: ConstantSourceNode | null = null;
 
   constructor(
@@ -96,13 +105,11 @@ export class Recording {
 
   /** Toutes les pistes démarrent dans le même tour de boucle : même instant zéro pour la prise et les sous-titres. */
   start() {
-    const { avatarVideo, avatarVoice, recruiterCanvas, recruiterVoice, context } = this.sources;
-    // VP8 plutôt que VP9 : encodage temps réel bien moins coûteux (mesuré : trois vidéos en VP9 et la synthèse vocale
-    // saturaient le processeur, piste de l'avatar à 25,8 images/s avec des écarts jusqu'à 380 ms).
-    const video = pickType(['video/webm;codecs=vp8', 'video/webm']);
+    const { avatarVoice, recruiterVoice, context } = this.sources;
+    // Aucune vidéo encodée en direct : trois encodages, deux voix Piper et le rendu 3D saturaient le processeur
+    // (mesuré le 20/11 : vidéo de l'avatar à 22,9 images/s, trous jusqu'à 1,6 s, à chaque réponse).
     const audio = pickType(['audio/webm;codecs=opus', 'audio/webm']);
-    const both = pickType(['video/webm;codecs=vp8,opus', 'video/webm']);
-    // Voix séparées, et mélange des deux pour l'aperçu (jamais vers les haut-parleurs). Chaque sortie reçoit un fond
+    // Voix séparées (jamais vers les haut-parleurs). Chaque sortie reçoit un fond
     // continu quasi nul (−120 dB) : sans lui, Chrome n'écrit rien pendant les silences d'une piste audio seule, et la
     // voix se décalait par rapport aux vidéos (mesuré : voix de l'avatar commençant à sa première parole, 15 s trop tôt).
     const floor = context.createConstantSource();
@@ -117,42 +124,27 @@ export class Recording {
     };
     const avatarOut = output(avatarIn);
     const recruiterOut = output(recruiterVoice);
-    const mix = output(recruiterVoice, avatarIn);
-    // Aperçu composé : recruteur à gauche, avatar à droite.
-    this.preview.width = PREVIEW_WIDTH;
-    this.preview.height = PREVIEW_HEIGHT;
-    const draw = () => {
-      const ctx = this.preview.getContext('2d')!;
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, PREVIEW_WIDTH, PREVIEW_HEIGHT);
-      ctx.drawImage(recruiterCanvas, 0, 0, PREVIEW_WIDTH / 2, PREVIEW_HEIGHT);
-      ctx.drawImage(this.sources.avatarElement, PREVIEW_WIDTH / 2, 0, PREVIEW_WIDTH / 2, PREVIEW_HEIGHT);
-    };
-    // Minuterie régulière (pas requestAnimationFrame, ralenti sous charge) : 30 images/s.
-    this.composing = window.setInterval(draw, 1000 / 30);
-    draw();
-    const tracks: [string, MediaStream, string, number][] = [
-      ['avatar', new MediaStream([avatarVideo]), video, 8_000_000],
-      ['recruteur', recruiterCanvas.captureStream(30), video, 4_000_000],
-      ['voix-avatar', avatarOut, audio, 0],
-      ['voix-recruteur', recruiterOut, audio, 0],
-      ['apercu', new MediaStream([...this.preview.captureStream(30).getVideoTracks(), ...mix.getAudioTracks()]), both, 6_000_000],
+    const tracks: [string, MediaStream][] = [
+      ['voix-avatar', avatarOut],
+      ['voix-recruteur', recruiterOut],
     ];
-    for (const [name, stream, mimeType, bits] of tracks) {
-      const recorder = new MediaRecorder(stream, { mimeType, ...(bits ? { videoBitsPerSecond: bits } : {}), audioBitsPerSecond: 128_000 });
+    for (const [name, stream] of tracks) {
+      const recorder = new MediaRecorder(stream, { mimeType: audio, audioBitsPerSecond: 128_000 });
       const entry = { name, recorder, chunks: [] as Blob[] };
       recorder.addEventListener('dataavailable', (event) => event.data.size && entry.chunks.push(event.data));
       this.recorders.push(entry);
     }
     window.addEventListener('message', this.onMessage);
     this.startedAt = Date.now();
+    this.startedPerf = performance.now();
     for (const { recorder } of this.recorders) recorder.start(1000);
-    log(`prise démarrée : ${this.recorders.map((entry) => entry.name).join(', ')} (${video}, ${audio})`);
+    log(`prise démarrée : ${this.recorders.map((entry) => entry.name).join(', ')} (${audio}) et journal du rendu ; vidéos rendues après la prise`);
   }
 
   /** Réplique du recruteur jouée (heures réelles). */
   recruiterLine(text: string, start: number, end: number) {
     this.cues.push({ speaker: this.sources.recruiterName, start, end, text });
+    this.recruiterLines.push({ start, end, text });
   }
 
   /** Voix de l'avatar : texte (speak, vers la page) puis heures de lecture (playback-chunk, vers l'extension). */
@@ -161,7 +153,10 @@ export class Recording {
     const envelope = event.data as Partial<PageEnvelope> | null;
     const message = envelope?.message;
     if (!message) return;
-    if (envelope[PAGE_TAG] === 'to-page' && message.type === 'speak') this.pendingTexts.push(message.filler ? `[phrase d'attente] ${message.text ?? ''}` : (message.text ?? ''));
+    if (envelope[PAGE_TAG] === 'to-page' && message.type === 'speak') {
+      this.pendingTexts.push(message.filler ? `[phrase d'attente] ${message.text ?? ''}` : (message.text ?? ''));
+      if (message.filler) this.fillers.push({ at: Date.now(), text: message.text ?? '' });
+    }
     else if (envelope[PAGE_TAG] === 'to-page' && message.type === 'stop') {
       // Voix coupée : le sous-titre en cours s'arrête maintenant, les textes en attente ne seront pas dits.
       const now = Date.now();
@@ -173,10 +168,31 @@ export class Recording {
     }
   }
 
+  /**
+   * Journal du rendu (page render, scripts/render-prise.ts) : temps en ms depuis le début de la prise, négatifs avant
+   * (l'avatar est créé à l'activation : ses tirages commencent là). perfStart : performance.now() du début de la prise,
+   * horloge absolue du rendu (respiration, dérive de la tête, pulsation du voyant en dépendent).
+   */
+  private journal(durationMs: number) {
+    const fromDate = (at: number) => +(at - this.startedAt).toFixed(1);
+    return {
+      version: 1,
+      fps: 30,
+      durationMs,
+      perfStart: this.startedPerf,
+      startedAt: new Date(this.startedAt).toISOString(),
+      avatarName: this.sources.avatarName,
+      recruiterName: this.sources.recruiterName,
+      renderEvents: this.sources.renderEvents.map((event) => ({ ...event, at: +(event.at - this.startedPerf).toFixed(1) })),
+      recruiterLines: this.recruiterLines.map((line) => ({ ...line, start: fromDate(line.start), end: fromDate(line.end) })),
+      fillers: this.fillers.map((filler) => ({ ...filler, at: fromDate(filler.at) })),
+      cues: [...this.cues].sort((a, b) => a.start - b.start).map((cue) => ({ ...cue, start: fromDate(cue.start), end: fromDate(cue.end) })),
+    };
+  }
+
   /** Arrête toutes les pistes et range les fichiers ; renvoie leurs emplacements. */
   async stop(): Promise<string[]> {
     window.removeEventListener('message', this.onMessage);
-    clearInterval(this.composing);
     this.floor?.stop();
     const durationMs = Date.now() - this.startedAt;
     const blobs = await Promise.all(
@@ -193,6 +209,7 @@ export class Recording {
     saved.push(await save(`${this.prefix}.srt`, new Blob([toSrt(this.cues, this.startedAt)], { type: 'application/x-subrip' })));
     const info = { ...this.info, startedAt: new Date(this.startedAt).toISOString(), durationMs, cues: this.cues.length, files: blobs.map(([name, blob]) => ({ name, bytes: blob.size, type: blob.type })) };
     saved.push(await save(`${this.prefix}-infos.json`, new Blob([JSON.stringify(info, null, 2)], { type: 'application/json' })));
+    saved.push(await save(`${this.prefix}-journal.json`, new Blob([JSON.stringify(this.journal(durationMs))], { type: 'application/json' })));
     log(`prise enregistrée (${(durationMs / 1000).toFixed(1)} s, ${this.cues.length} sous-titres) : ${saved.join(', ')}`);
     return saved;
   }

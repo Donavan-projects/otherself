@@ -20,6 +20,9 @@ import { PiperVoice } from '@/lib/tts';
 import { loadDemoConfig } from '@/lib/config';
 import { configureOnnxRuntime } from '@/lib/vad';
 import { chooseFolder, Recording } from './recording';
+import { drawRecruiterFrame } from './visual';
+import { onRenderEvent } from '@/lib/render-random';
+import type { RenderJournalEvent } from './recording';
 import script from '@/recruteur/entretien.json';
 
 const log = createLogger('recruteur');
@@ -179,57 +182,12 @@ function speak(index: number): Promise<{ startedAt: number; endedAt: number }> {
   });
 }
 
-// ——— Visuel abstrait : onde du recruteur, sans visage ———
+// ——— Visuel abstrait : onde du recruteur, sans visage (visual.ts, partagé avec le rendu après coup) ———
 
+const recruiterBins = new Uint8Array(512);
 function drawRecruiter(now: number) {
-  const ctx = canvas.getContext('2d')!;
-  const { width, height } = canvas;
-  const gradient = ctx.createLinearGradient(0, 0, width, height);
-  gradient.addColorStop(0, '#0b1222');
-  gradient.addColorStop(1, '#1a1433');
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, width, height);
-  // Niveau du son du recruteur.
-  const data = new Uint8Array(recruiterAnalyser?.frequencyBinCount ?? 512);
-  recruiterAnalyser?.getByteFrequencyData(data);
-  const cx = width / 2;
-  const cy = height / 2 - 20;
-  const bars = 72;
-  const base = 150 + 6 * Math.sin(now / 900);
-  ctx.save();
-  ctx.translate(cx, cy);
-  // Couronne de barres qui tourne lentement ; chaque barre suit une bande de fréquences de la voix.
-  ctx.rotate(now / 6000);
-  for (let i = 0; i < bars; i += 1) {
-    const value = (data[Math.floor((i / bars) * data.length * 0.45)] ?? 0) / 255;
-    ctx.rotate((Math.PI * 2) / bars);
-    ctx.fillStyle = `hsla(${200 + value * 80}, 85%, ${55 + value * 20}%, ${0.55 + value * 0.45})`;
-    ctx.fillRect(base, -3, 8 + value * 120, 6);
-  }
-  ctx.restore();
-  ctx.beginPath();
-  ctx.arc(cx, cy, base - 18, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(140, 170, 255, 0.35)';
-  ctx.lineWidth = 3;
-  ctx.stroke();
-  ctx.fillStyle = '#e6e8ee';
-  ctx.font = '600 44px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('AI Recruiter', cx, cy + 14);
-  ctx.font = '500 26px system-ui, sans-serif';
-  ctx.fillStyle = '#9fb0d8';
-  ctx.fillText(recruiterSpeaking ? 'speaking' : 'listening', cx, cy + 56);
-  ctx.textAlign = 'left';
-  ctx.font = '700 34px system-ui, sans-serif';
-  ctx.fillStyle = '#e6e8ee';
-  ctx.fillText(script.name, 40, 64);
-  ctx.font = '400 22px system-ui, sans-serif';
-  ctx.fillStyle = '#9aa3b2';
-  ctx.fillText(`AI Recruiter · ${script.role} interview`, 40, 98);
-  ctx.textAlign = 'center';
-  ctx.font = '500 22px system-ui, sans-serif';
-  ctx.fillStyle = '#c9d2e8';
-  ctx.fillText('This interviewer is an AI. Fictional, for demonstration only.', cx, height - 40);
+  recruiterAnalyser?.getByteFrequencyData(recruiterBins);
+  drawRecruiterFrame(canvas.getContext('2d')!, recruiterBins, recruiterSpeaking, now);
 }
 // Minuterie régulière plutôt que requestAnimationFrame, que Chromium ralentit sous charge (mesuré : vidéo du recruteur
 // enregistrée à 11,6 images/s, trous jusqu'à 1,5 s) ; 30 images/s comme la caméra de l'avatar.
@@ -238,6 +196,12 @@ setInterval(() => drawRecruiter(performance.now()), 1000 / 30);
 // ——— L'avatar : injecté dans cette page, écouté sur la piste du micro injecté ———
 
 let avatarAnalyser: AnalyserNode | null = null;
+/**
+ * Journal du rendu de l'avatar, dès sa création (graine, états, hochements, clignements, saccades, pause) : le rendu
+ * après coup d'une prise refait les mêmes images (entrypoints/render). L'avatar est injecté dans cette page, même module.
+ */
+const renderEvents: RenderJournalEvent[] = [];
+onRenderEvent((kind, at, detail) => renderEvents.push({ kind, at, ...detail }));
 let avatarState: AvatarState = 'inactif';
 /** Pipeline de l'avatar préchauffé (ouverture, rappel, phrases d'attente synthétisés) : signal 'warm' de l'offscreen. */
 let pipelineWarm = false;
@@ -348,12 +312,10 @@ async function start(patience: Patience, options: { record?: boolean } = {}): Pr
     const stamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-');
     recording = new Recording(
       {
-        avatarVideo: avatarTracks.video,
         avatarVoice: avatarTracks.voice,
-        recruiterCanvas: canvas,
         recruiterVoice: recruiterOut!,
         context: audioContext(),
-        avatarElement: video,
+        renderEvents,
         recruiterName: script.name,
         avatarName: config.avatarName || 'AI avatar',
       },

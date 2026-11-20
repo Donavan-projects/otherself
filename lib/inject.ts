@@ -2,11 +2,11 @@
 // le canvas de l'avatar comme caméra et la piste audio fournie comme micro, sous le nom
 // « Avatar IA – OtherSelf ». Sans API d'extension : tourne dans le monde MAIN d'un onglet.
 
-import { AvatarRenderer, type AvatarAssets, type MouthShape } from './avatar';
-import { createVrmRenderer, type FrameRenderer, type VrmSources } from './avatar-vrm';
+import type { AvatarAssets, MouthShape } from './avatar';
+import { createAvatarFrames } from './avatar-frames';
+import type { VrmSources } from './avatar-vrm';
 import type { AvatarState } from './avatar-states';
-import { AiMarking } from './badge';
-import { createPauseFrame } from './pause-frame';
+import { renderClock } from './render-random';
 import { startFrameClock } from './frame-clock';
 import { trustedTypesEnforcement } from './trusted-types';
 import { createLogger } from './log';
@@ -243,49 +243,14 @@ async function createVideoTrack(
     maxLevel = Math.max(maxLevel, value);
     return value;
   };
-  // Avatar 3D ou secours, dessinés dans le même canvas : la piste capturée ne change pas en cas de repli.
-  const canvas = document.createElement('canvas');
-  const fallback = (): FrameRenderer => new AvatarRenderer(canvas, sources.avatar, measured);
-  let renderer: FrameRenderer;
-  if (sources.vrm) {
-    try {
-      renderer = await createVrmRenderer(canvas, sources.vrm, measured, log);
-      log('rendu : avatar 3D (VRM)');
-    } catch (error) {
-      log(`avatar 3D indisponible (${errorMessage(error)}) : avatar de secours utilisé`);
-      renderer = fallback();
-    }
-  } else {
-    renderer = fallback();
-  }
-  /** État courant, redonné au secours en cas de repli. */
-  let avatarState: AvatarState = sources.initialState ?? 'inactif';
-  renderer.setState?.(avatarState);
-  /** Image suivante ; si l'avatar 3D tombe en panne (contexte WebGL perdu…), repli définitif sur le secours. */
-  const draw = (now: number): MouthShape => {
-    try {
-      return renderer.draw(now);
-    } catch (error) {
-      if (renderer instanceof AvatarRenderer) throw error;
-      log(`avatar 3D en panne (${errorMessage(error)}) : repli sur l'avatar de secours`);
-      renderer.dispose?.();
-      renderer = fallback();
-      renderer.setState?.(avatarState);
-      return renderer.draw(now);
-    }
-  };
-  draw(performance.now());
+  // Avatar 3D ou secours, marqueur IA et image de pause, dessinés dans le même canvas (lib/avatar-frames.ts) : la piste
+  // capturée ne change pas en cas de repli.
+  const frames = await createAvatarFrames(sources, measured, log);
+  const { canvas } = frames;
+  frames.draw(renderClock.now());
   const track = canvas.captureStream(FPS).getVideoTracks()[0];
   if (!track) throw new Error('captureStream n\'a fourni aucune piste vidéo');
-
-  // Image de pause, préparée une fois : sans avatar, ni marquage ni voyant ; son texte l'identifie (règle 1).
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('contexte 2D indisponible');
-  const pauseFrame = createPauseFrame(sources.pauseText);
   let paused = false;
-  // Marqueur IA (règle 1) : peint en dernier sur chaque image où l'avatar est visible, voyant à la couleur de l'état.
-  const marking = new AiMarking(sources.marking);
-  marking.setState(avatarState);
   /** Clic de pause ou de reprise pas encore suivi d'une image : délai logué à la première image dessinée. */
   let pendingClick: { at: number; label: string } | null = null;
 
@@ -293,21 +258,21 @@ async function createVideoTrack(
   // Redessin continu : un canvas figé peut ne produire aucune image dans le flux. Le rythme
   // vient d'une horloge que Chrome ne ralentit pas en arrière-plan (lib/frame-clock.ts) ;
   // requestAnimationFrame s'arrêterait dès que l'onglet est masqué.
-  let frames = 0;
+  let drawn = 0;
   let drawTime = 0;
   let maxDrawTime = 0;
   const shapes = new Map<MouthShape, number>();
-  let last = performance.now();
+  let last = renderClock.now();
   let lastFps: number | null = null;
   const report = (now: number) => {
-    lastFps = (frames * 1000) / (now - last);
+    lastFps = (drawn * 1000) / (now - last);
     const mouth = [...shapes].map(([shape, count]) => `${shape} ${count}`).join(', ');
     log(
       `vidéo : ${lastFps.toFixed(1)} images/s (horloge ${clock.kind()}, onglet ${document.visibilityState === 'visible' ? 'visible' : 'masqué'}), ` +
-        `dessin ${(drawTime / Math.max(1, frames)).toFixed(2)} ms en moyenne (max ${maxDrawTime.toFixed(1)} ms), ` +
+        `dessin ${(drawTime / Math.max(1, drawn)).toFixed(2)} ms en moyenne (max ${maxDrawTime.toFixed(1)} ms), ` +
         (paused ? 'image « Avatar en pause »' : `bouche : ${mouth} (niveau max ${maxLevel.toFixed(3)})`),
     );
-    frames = 0;
+    drawn = 0;
     drawTime = 0;
     maxDrawTime = 0;
     maxLevel = 0;
@@ -317,17 +282,11 @@ async function createVideoTrack(
   const clock = startFrameClock(
     FPS,
     () => {
-      const start = performance.now();
-      if (paused) {
-        ctx.drawImage(pauseFrame, 0, 0);
-      } else {
-        const shape = draw(start);
-        shapes.set(shape, (shapes.get(shape) ?? 0) + 1);
-        const anchors = renderer.markingAnchors?.();
-        if (anchors) marking.draw(ctx, anchors, start);
-      }
-      const spent = performance.now() - start;
-      frames += 1;
+      const start = renderClock.now();
+      const shape = frames.draw(start);
+      if (shape !== 'pause') shapes.set(shape, (shapes.get(shape) ?? 0) + 1);
+      const spent = renderClock.now() - start;
+      drawn += 1;
       drawTime += spent;
       maxDrawTime = Math.max(maxDrawTime, spent);
       if (pendingClick) {
@@ -349,24 +308,15 @@ async function createVideoTrack(
     setPaused(value, clickAt) {
       if (value === paused) return;
       paused = value;
-      // L'avatar de secours ne redessine que la zone du visage : il repart d'une image entière.
-      if (!value) renderer.invalidate?.();
+      frames.setPaused(value);
       if (clickAt !== undefined) pendingClick = { at: clickAt, label: value ? 'pause' : 'reprise' };
       log(value ? 'pause : image « Avatar en pause » à la place de l’avatar (pistes de la plateforme inchangées)' : 'reprise : avatar de nouveau dessiné');
     },
-    setAvatarState(state) {
-      avatarState = state;
-      renderer.setState?.(state);
-      marking.setState(state);
-    },
-    nod: () => renderer.nod?.(),
+    setAvatarState: (state) => frames.setState(state),
+    nod: () => frames.nod(),
     stop() {
       clock.stop();
-      renderer.dispose?.();
+      frames.dispose();
     },
   };
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
