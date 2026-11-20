@@ -62,11 +62,14 @@ try {
 }
 
 // Synthèse : réponses coupées, silences, attentes avant de jouer, phrases d'attente, délais.
-const holds = browser.logs.flatMap((line) => [...line.matchAll(/attente de (\d+) ms avant de jouer/g)].map((match) => Number(match[1])));
-const fillers = browser.logs.filter((line) => /phrase d.attente jouée/.test(line)).length;
-const summary = [...browser.logs].reverse().find((line) => line.includes("silences de l'entretien"));
+// Les logs de l'offscreen arrivent deux fois (sa propre console, et la page par le pont) : lignes identiques,
+// horodatage compris, comptées une seule fois.
+const logs = [...new Set(browser.logs)];
+const holds = logs.flatMap((line) => [...line.matchAll(/attente de (\d+) ms avant de jouer/g)].map((match) => Number(match[1])));
+const fillers = logs.filter((line) => /phrase d.attente jouée/.test(line)).length;
+const summary = [...logs].reverse().find((line) => line.includes("silences de l'entretien"));
 const delays = results.map((result) => result.answerDelayMs).filter((delay): delay is number => delay !== null);
-const realStarts = browser.logs.flatMap((line) => [...line.matchAll(/vraie réponse : début prévu (\d+) ms/g)].map((match) => Number(match[1]))).sort((a, b) => a - b);
+const realStarts = logs.flatMap((line) => [...line.matchAll(/vraie réponse : début prévu (\d+) ms/g)].map((match) => Number(match[1]))).sort((a, b) => a - b);
 const range = (values: number[]) => (values.length ? `${(Math.min(...values) / 1000).toFixed(1)}-${(Math.max(...values) / 1000).toFixed(1)} s (médiane ${(values[Math.floor(values.length / 2)]! / 1000).toFixed(1)} s)` : '-');
 console.log(
   `\n== ${patience}${args.get('charge') ? `, charge ${args.get('charge')}` : ''} : réponses coupées ${results.filter((result) => result.cutOff).length}/${results.length}, ` +

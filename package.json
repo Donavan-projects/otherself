@@ -17,7 +17,8 @@
     "vrm": "node --experimental-strip-types scripts/optimize-vrm.ts",
     "bench:prompt": "node --experimental-strip-types scripts/bench-prompt.ts",
     "bench:recruteur": "node --experimental-strip-types scripts/bench-recruiter.ts",
-    "bench:silences": "node --experimental-strip-types scripts/bench-silences.ts"
+    "bench:silences": "node --experimental-strip-types scripts/bench-silences.ts",
+    "check:prise": "node --experimental-strip-types scripts/check-prise.ts"
   },
   "devDependencies": {
     "@diffusionstudio/piper-wasm": "^1.0.0",

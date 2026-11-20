@@ -230,9 +230,10 @@ function drawRecruiter(now: number) {
   ctx.font = '500 22px system-ui, sans-serif';
   ctx.fillStyle = '#c9d2e8';
   ctx.fillText('This interviewer is an AI. Fictional, for demonstration only.', cx, height - 40);
-  requestAnimationFrame(drawRecruiter);
 }
-requestAnimationFrame(drawRecruiter);
+// Minuterie régulière plutôt que requestAnimationFrame, que Chromium ralentit sous charge (mesuré : vidéo du recruteur
+// enregistrée à 11,6 images/s, trous jusqu'à 1,5 s) ; 30 images/s comme la caméra de l'avatar.
+setInterval(() => drawRecruiter(performance.now()), 1000 / 30);
 
 // ——— L'avatar : injecté dans cette page, écouté sur la piste du micro injecté ———
 

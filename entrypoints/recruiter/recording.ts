@@ -127,8 +127,9 @@ export class Recording {
       ctx.fillRect(0, 0, PREVIEW_WIDTH, PREVIEW_HEIGHT);
       ctx.drawImage(recruiterCanvas, 0, 0, PREVIEW_WIDTH / 2, PREVIEW_HEIGHT);
       ctx.drawImage(this.sources.avatarElement, PREVIEW_WIDTH / 2, 0, PREVIEW_WIDTH / 2, PREVIEW_HEIGHT);
-      this.composing = requestAnimationFrame(draw);
     };
+    // Minuterie régulière (pas requestAnimationFrame, ralenti sous charge) : 30 images/s.
+    this.composing = window.setInterval(draw, 1000 / 30);
     draw();
     const tracks: [string, MediaStream, string, number][] = [
       ['avatar', new MediaStream([avatarVideo]), video, 8_000_000],
@@ -175,7 +176,7 @@ export class Recording {
   /** Arrête toutes les pistes et range les fichiers ; renvoie leurs emplacements. */
   async stop(): Promise<string[]> {
     window.removeEventListener('message', this.onMessage);
-    cancelAnimationFrame(this.composing);
+    clearInterval(this.composing);
     this.floor?.stop();
     const durationMs = Date.now() - this.startedAt;
     const blobs = await Promise.all(
