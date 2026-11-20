@@ -4,6 +4,8 @@
 
 import { loadDemoConfig } from '@/lib/config';
 import { candidateLabel, openingText } from '@/lib/disclosure';
+import { distortedFillers, fillerTexts } from '@/lib/fillers';
+import { paceSpeech } from '@/lib/speech-pacing';
 import { createPronouncer } from '@/lib/pronunciation';
 import { createLogger } from '@/lib/log';
 import { encodeWav, floatToInt16 } from '@/lib/pcm';
@@ -211,13 +213,17 @@ async function runVoiceBench() {
   );
   // Le jeu « entretien » et les phrases libres passent par le dictionnaire, comme dans l'entretien réel.
   const pronounce = createPronouncer(config.pronunciations);
+  // &jeu=attente : les phrases d'attente (lib/fillers.ts), à valider à l'oreille, voix et réglages de l'entretien.
+  const fillerSet = params.get('jeu') === 'attente';
   const SENTENCES = toCompare
     ? pronunciationSet
-    : (params.get('jeu') === 'entretien'
+    : fillerSet
+      ? fillerTexts(config).map(pronounce)
+      : (params.get('jeu') === 'entretien'
         ? interviewSet
         : (params.get('phrases')?.split('|').map((item) => item.trim()).filter(Boolean) ?? DEFAULT_SENTENCES)
       ).map(pronounce);
-  if (toCompare && !params.has('voix')) {
+  if ((toCompare || fillerSet) && !params.has('voix')) {
     piperVoices.splice(0, piperVoices.length, {
       label: `${config.voice}${config.pitchSemitones ? ` ${config.pitchSemitones > 0 ? '+' : ''}${config.pitchSemitones} demi-ton(s)` : ''}`,
       voiceId: config.voice,
@@ -243,13 +249,26 @@ async function runVoiceBench() {
       const label = `${scales.lengthScale} / ${scales.noiseScale} / ${scales.noiseW}`;
       for (const [index, sentence] of SENTENCES.entries()) {
         status(`${item.label}, ${label}, phrase ${index + 1}`);
-        await measure(`Piper ${item.label}`, label, index + 1, sentence, async (onAudio) =>
-          onAudio(await voice.synthesize(sentence, scales, item.speaker, item.pitchSemitones)),
-        );
+        await measure(`Piper ${item.label}`, label, index + 1, sentence, async (onAudio) => {
+          const audio = await voice.synthesize(sentence, scales, item.speaker, item.pitchSemitones);
+          // Phrases d'attente : telles que jouées en entretien (silences du début et de la fin retirés, sans la pause).
+          onAudio(fillerSet ? { ...paceSpeech(audio, 0), phonemes: audio.phonemes } : audio);
+        });
       }
     }
   }
   loaded?.voice.dispose();
+  if (fillerSet) {
+    // Même contrôle qu'au démarrage du pipeline : durée par lettre comparée aux autres (déformation de la synthèse).
+    const checked = distortedFillers(results.map(({ text, audioMs }) => ({ text, ms: audioMs })));
+    status(
+      `phrases d'attente : ${checked.map(({ text, ratio, distorted }) => `« ${text} » ×${ratio.toFixed(2)}${distorted ? ' ÉCARTÉE' : ''}`).join(', ')} ` +
+        '(×1,5 par lettre au-delà de la médiane : écartée au démarrage du pipeline)',
+    );
+    for (const [index, row] of [...tbody.rows].entries()) if (checked[index]?.distorted) row.style.color = '#ffb347';
+    window.__bench!.done = true;
+    return;
+  }
   for (const voiceName of openaiVoices) {
     if (!config.openaiApiKey) break;
     const voice = new OpenAiVoice({ apiKey: config.openaiApiKey, model: config.openaiTtsModel, voice: voiceName });

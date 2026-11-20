@@ -9,7 +9,7 @@ import type { AvatarState } from './avatar-states';
 import type { DemoConfig } from './config';
 import { takeChunks } from './chunks';
 import { disclosureText, openingText, shortDisclosureText } from './disclosure';
-import { fillerTexts, isRealQuestion } from './fillers';
+import { distortedFillers, fillerTexts, isRealQuestion } from './fillers';
 import type { ConversationEngine, RenderLink } from './engine';
 import { isGreetingOnly } from './greeting';
 import { clock, createLogger } from './log';
@@ -54,15 +54,13 @@ const PLAYBACK_START_TIMEOUT_MS = 4000;
 const NOD_MIN_GAP_MS = 1500;
 /**
  * Phrases d'attente (rares) : seulement après une vraie question dont le délai prévu avant la réponse atteint
- * FILLER_MIN_DELAY_MS (une réflexion de 2 à 3 s est naturelle : regard de côté et voyant ambre la montrent déjà).
- * Phrase longue seulement à partir de FILLER_LONG_DELAY_MS ; deux réponses de suite avec une phrase d'attente seulement
- * à partir de FILLER_REPEAT_DELAY_MS. Délai prévu : moyenne glissante des délais mesurés (fin de question → début de
+ * FILLER_MIN_DELAY_MS (une réflexion de 2 à 3 s est naturelle : regard de côté et voyant ambre la montrent déjà) ;
+ * deux réponses de suite avec une phrase d'attente seulement à partir de FILLER_REPEAT_DELAY_MS. Délai prévu : moyenne glissante des délais mesurés (fin de question → début de
  * la vraie réponse). La phrase est calée pour finir (pause comprise, ≈ 300 ms) au début prévu de la réponse, jamais
  * avant FILLER_EARLIEST_MS ; si la réponse est prête avant, elle n'est pas jouée.
  */
-const FILLER_MIN_DELAY_MS = 3000;
-const FILLER_LONG_DELAY_MS = 4500;
-const FILLER_REPEAT_DELAY_MS = 5000;
+const FILLER_MIN_DELAY_MS = 4000;
+const FILLER_REPEAT_DELAY_MS = 6000;
 const FILLER_EARLIEST_MS = 900;
 const ANSWER_DELAY_START_MS = 3500;
 const ANSWER_DELAY_EWMA = 0.3;
@@ -70,7 +68,6 @@ const ANSWER_DELAY_EWMA = 0.3;
 interface Filler {
   text: string;
   audio: SpeechAudio;
-  long: boolean;
 }
 const audioMs = (audio: SpeechAudio) => (audio.samples.length / audio.sampleRate) * 1000;
 
@@ -212,12 +209,13 @@ export class Conversation {
     this.warm = this.shortDisclosureAudio
       .then(async () => {
         const ready: Filler[] = [];
-        const texts = fillerTexts(config);
-        for (const [long, list] of [[false, texts.short], [true, texts.long]] as const) {
-          for (const text of list) ready.push({ text, long, audio: paceSpeech(await voice.synthesize(text), SENTENCE_PAUSE_MS) });
-        }
-        this.fillers = ready;
-        logTts(`phrases d'attente prêtes : ${ready.map(({ text, audio }) => `« ${text} » ${Math.round(audioMs(audio))} ms`).join(', ')}`);
+        for (const text of fillerTexts(config)) ready.push({ text, audio: paceSpeech(await voice.synthesize(text), SENTENCE_PAUSE_MS) });
+        // Durée qui trahit une déformation de la synthèse (comparée aux autres, par lettre) : phrase écartée.
+        const checked = distortedFillers(ready.map(({ text, audio }) => ({ text, ms: audioMs(audio) - SENTENCE_PAUSE_MS })));
+        this.fillers = ready.filter((_, index) => !checked[index]!.distorted);
+        logTts(
+          `phrases d'attente prêtes : ${ready.map(({ text, audio }, index) => `« ${text} » ${Math.round(audioMs(audio))} ms${checked[index]!.distorted ? ` (ÉCARTÉE : durée ×${checked[index]!.ratio.toFixed(2)} par lettre)` : ''}`).join(', ')}`,
+        );
       })
       .catch((error: unknown) => logTts(`phrases d'attente indisponibles : ${error instanceof Error ? error.message : String(error)}`));
   }
@@ -500,12 +498,10 @@ export class Conversation {
       logTts(`pas de phrase d'attente : ${why}`);
       return;
     }
-    // Tirage sans remise parmi les phrases permises (longues : grosses attentes seulement) ; retirée de la réserve
-    // seulement si elle est jouée. Heure de départ calée plus tard, sur le début prévu de la réponse (scheduleFiller).
-    const allowed = (filler: Filler) => !filler.long || predicted >= FILLER_LONG_DELAY_MS;
-    if (!this.fillerBag.some(allowed)) this.fillerBag = this.fillers.filter((filler) => !this.fillerBag.includes(filler)).concat(this.fillerBag);
-    const choices = this.fillerBag.filter(allowed);
-    response.filler = choices[Math.floor(Math.random() * choices.length)];
+    // Tirage sans remise : retirée de la réserve seulement si elle est jouée, réserve remplie quand elle est vide.
+    // Heure de départ calée plus tard, sur le début prévu de la réponse (scheduleFiller).
+    if (this.fillerBag.length === 0) this.fillerBag = [...this.fillers];
+    response.filler = this.fillerBag[Math.floor(Math.random() * this.fillerBag.length)];
   }
 
   /**

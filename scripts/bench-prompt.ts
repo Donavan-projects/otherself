@@ -11,7 +11,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const API = 'https://api.openai.com/v1/chat/completions';
@@ -203,6 +203,10 @@ async function main() {
   // Copie de l'ancien prompt hors du dépôt (tsc vérifie local/).
   const oldFile = join(mkdtempSync(join(tmpdir(), 'otherself-prompt-')), `prompt-${ref.replace(/\W/g, '_')}.ts`);
   writeFileSync(oldFile, execFileSync('git', ['show', `${ref}:lib/prompt.ts`], { encoding: 'utf8' }));
+  // Modules locaux importés par le prompt (./disclosure.ts…), de la même version.
+  for (const [, module] of execFileSync('git', ['show', `${ref}:lib/prompt.ts`], { encoding: 'utf8' }).matchAll(/from '\.\/([\w-]+\.ts)'/g)) {
+    writeFileSync(join(dirname(oldFile), module!), execFileSync('git', ['show', `${ref}:lib/${module}`], { encoding: 'utf8' }));
+  }
   const workingTree = (await import(pathToFileURL(resolve("lib/prompt.ts")).href)) as PromptModule;
   const versions: { label: string; module: PromptModule; model: string }[] = models.length
     ? models.map((name) => ({ label: name, module: workingTree, model: name }))
@@ -252,6 +256,8 @@ async function main() {
       'mots (comportementales)': mean(behavioral.map((a) => words(a.text))),
       'durée parlée estimée, comportementales (s)': mean(behavioral.map((a) => words(a.text) / WORDS_PER_SECOND)),
       'mots de la première phrase': mean(flat.map((a) => words(sentences(a.text)[0] ?? ''))),
+      'premières phrases de plus de 8 mots': flat.filter((a) => words(sentences(a.text)[0] ?? '') > 8).length,
+      'première phrase la plus longue (mots)': Math.max(0, ...flat.map((a) => words(sentences(a.text)[0] ?? ''))),
       'phrases de plus de 20 mots': flat.flatMap((a) => sentences(a.text)).filter((s) => words(s) > 20).length,
       'réponses coupées (limite de tokens)': flat.filter((a) => a.finish === 'length').length,
       ...(judgeEnabled
