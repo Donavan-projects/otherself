@@ -78,7 +78,8 @@ const DEFAULTS: DemoConfig = {
   monitorVolume: 0.8,
   previewWindow: true,
   sttModel: 'gpt-live-transcribe',
-  llmModel: 'gpt-5.6-luna',
+  // Depuis le 20/11 : premier mot 0,6 à 2,0 s en entretien réel (médiane 0,9 s), qualité égale, prix plus bas.
+  llmModel: 'gpt-6-luna',
 };
 
 // Fichiers ajoutés au build (local/, vendor/) : absents des chemins typés par WXT.
