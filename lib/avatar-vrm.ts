@@ -585,7 +585,7 @@ class VrmMotion {
         };
       }
       const { saccadeMinMs, saccadeMaxMs } = STATE_STYLES[this.state];
-      this.nextSaccade = Math.max(now, planned + randomBetween(saccadeMinMs, saccadeMaxMs));
+      this.nextSaccade = planned + randomBetween(saccadeMinMs, saccadeMaxMs);
       renderEvent('saccade', planned, { yaw: +(this.gazeWanted.yaw / DEG).toFixed(2), pitch: +(this.gazeWanted.pitch / DEG).toFixed(2) });
     }
   }

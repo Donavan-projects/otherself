@@ -87,6 +87,12 @@ function readSrt(path: string): Cue[] {
     });
 }
 
+/**
+ * Silence qui sépare deux prises de parole, dans le son comme dans les sous-titres : au-dessus des pauses voulues entre
+ * phrases (≈ 320 ms), au-dessous des pauses entre une phrase d'attente et la réponse (≈ 0,9 à 2 s).
+ */
+const SPEECH_GAP_MS = 600;
+
 const prefix = process.argv[2];
 if (!prefix || !existsSync(`${prefix}-avatar.webm`)) {
   console.error('usage : npm run check:prise -- local/prises/prise-AAAAMMJJ-HHMMSS');
@@ -120,19 +126,19 @@ for (const [name, speaker] of [['voix-avatar', info.avatarName || 'AI avatar'], 
   let lastLoud = -Infinity;
   for (const block of blocks) {
     if (!loud(block)) continue;
-    if (block.time - lastLoud > 1000) onsets.push(block.time);
+    if (block.time - lastLoud > SPEECH_GAP_MS) onsets.push(block.time);
     lastLoud = block.time;
   }
   const maxGap = Math.max(0, ...blocks.slice(1).map((block, i) => block.time - blocks[i]!.time));
-  // Premier sous-titre de chaque prise de parole (plus d'1 s après le précédent du même interlocuteur).
-  const starts = cues.filter((cue, i) => cue.speaker.startsWith(speaker) && !cues.slice(0, i).some((other) => other.speaker.startsWith(speaker) && cue.start - other.end < 1000)).map((cue) => cue.start);
-  const offsets = starts.map((start) => {
-    const nearest = onsets.reduce((best, onset) => (Math.abs(onset - start) < Math.abs(best - start) ? onset : best), Infinity);
-    return nearest - start;
-  });
+  // Premier sous-titre de chaque prise de parole (plus de SPEECH_GAP_MS après le précédent du même interlocuteur).
+  const starts = cues.filter((cue, i) => cue.speaker.startsWith(speaker) && !cues.slice(0, i).some((other) => other.speaker.startsWith(speaker) && cue.start - other.end < SPEECH_GAP_MS)).map((cue) => cue.start);
+  // Début de parole apparié au début de sous-titre le plus proche, et réciproquement : une phrase d'attente suivie de
+  // sa réponse moins d'1 s plus tard peut ne former qu'un seul début dans le son (sous-titre alors non apparié).
+  const nearest = (value: number, list: number[]) => list.reduce((best, item) => (Math.abs(item - value) < Math.abs(best - value) ? item : best), Infinity);
+  const offsets = starts.filter((start) => nearest(nearest(start, onsets), starts) === start).map((start) => nearest(start, onsets) - start);
   const absolute = offsets.map(Math.abs).sort((a, b) => a - b);
   console.log(
     `  voix ${name} : ${((blocks.at(-1)?.time ?? 0) / 1000).toFixed(1)} s (vidéo ${(videoEnd / 1000).toFixed(1)} s), plus grand écart entre paquets ${maxGap} ms ; ` +
-      `${starts.length} prises de parole dans le SRT, décalage avec le son : médiane ${absolute[Math.floor(absolute.length / 2)] ?? '-'} ms, max ${absolute.at(-1) ?? '-'} ms`,
+      `${starts.length} prises de parole dans le SRT (${offsets.length} retrouvées dans le son), décalage avec le son : médiane ${absolute[Math.floor(absolute.length / 2)] ?? '-'} ms, max ${absolute.at(-1) ?? '-'} ms`,
   );
 }

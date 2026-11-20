@@ -115,6 +115,8 @@ export class BlinkAnimator {
   private max = BLINK_MAX_MS;
 
   constructor(now: number) {
+    // Heure de départ des tirages (avant l'événement « create », après le chargement du modèle) : notée pour le rendu après coup.
+    renderEvent('animator', now);
     this.next = now + randomBetween(BLINK_MIN_MS, BLINK_MAX_MS);
   }
 
@@ -135,7 +137,7 @@ export class BlinkAnimator {
   /**
    * Clignements prévus jusqu'à `now`, dans l'ordre. Suivant compté depuis l'heure prévue, pas depuis l'image qui le
    * dessine : le calendrier ne dépend que de la graine et des changements d'état (rendu après coup d'une prise
-   * identique), sauf retard de plusieurs secondes.
+   * identique).
    */
   private advance(now: number) {
     while (now >= this.next) {
@@ -143,7 +145,8 @@ export class BlinkAnimator {
       this.closedUntil = now + BLINK_CLOSED_MS;
       const double = renderRandom('blink') < DOUBLE_BLINK_CHANCE;
       const next = double ? planned + BLINK_CLOSED_MS + DOUBLE_BLINK_GAP_MS : planned + randomBetween(this.min, this.max);
-      this.next = Math.max(next, now + BLINK_CLOSED_MS + DOUBLE_BLINK_GAP_MS);
+      // Toujours après l'heure prévue : la boucle rattrape un retard (onglet ralenti) sans compter depuis l'image.
+      this.next = next;
       renderEvent('blink', planned);
     }
   }

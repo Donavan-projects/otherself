@@ -68,6 +68,7 @@ export interface RenderStats {
   nods: number;
   fillers: number;
   files: { name: string; bytes: number }[];
+  replayed: { blink: number[]; saccade: number[] };
 }
 
 const statusEl = document.querySelector<HTMLParagraphElement>('#status')!;
@@ -231,7 +232,9 @@ export async function render(input: RenderInput, save: (name: string, blob: Blob
   const { levels, bins, binCount } = await analyse(avatarVoice, recruiterVoice, frameCount);
 
   // Horloge virtuelle du rendu : celle de la page pendant la prise (performance.now), image par image.
-  let virtual = journal.perfStart + created.at;
+  // Les animations lisent l'horloge à leur construction (événement 'animator', un peu avant 'create') : même heure ici.
+  const animator = journal.renderEvents.find((event) => event.kind === 'animator');
+  let virtual = journal.perfStart + (animator ?? created).at;
   renderClock.now = () => virtual;
   const replayed = { blink: [] as number[], saccade: [] as number[] };
   onRenderEvent((kind, at) => {
@@ -259,7 +262,9 @@ export async function render(input: RenderInput, save: (name: string, blob: Blob
   // Avant la prise (depuis l'activation) : mêmes images, non encodées, pour que les tirages et la physique en soient
   // au même point qu'en direct au début de la prise.
   let preRollFrames = 0;
-  for (let t = created.at; t < 0; t += 1000 / FPS) {
+  virtual = journal.perfStart + created.at;
+  frames.draw(virtual);
+  for (let t = created.at + 1000 / FPS; t < 0; t += 1000 / FPS) {
     apply(t);
     virtual = journal.perfStart + t;
     frames.draw(virtual);
@@ -330,6 +335,7 @@ export async function render(input: RenderInput, save: (name: string, blob: Blob
     nods: events.filter((event) => event.kind === 'nod').length,
     fillers: journal.fillers.length,
     files,
+    replayed: { blink: replayed.blink.map((at) => +at.toFixed(1)), saccade: replayed.saccade.map((at) => +at.toFixed(1)) },
   };
   status(`rendu terminé en ${(stats.elapsedMs / 1000).toFixed(0)} s : ${frameCount} images par vidéo, ${files.map((file) => file.name).join(', ')}`);
   return stats;
