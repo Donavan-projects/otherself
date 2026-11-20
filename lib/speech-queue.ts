@@ -1,5 +1,6 @@
 // File des morceaux d'une réponse, entre le texte du moteur (découpé en phrases, lib/chunks.ts) et la page :
-// - chaque morceau part en synthèse dès que son texte est écrit (voix en parallèle, lib/voice-pool.ts) ;
+// - le premier morceau part en synthèse dès que son texte est écrit, seul ; les suivants dès qu'il est synthétisé (voix
+//   en parallèle, lib/voice-pool.ts) ;
 // - ses silences extrêmes sont retirés et une pause régulière ajoutée (lib/speech-pacing.ts) ;
 // - les morceaux sont envoyés dans l'ordre ;
 // - attente avant de jouer : avant le premier morceau de la réponse seulement, si les morceaux suivants déjà écrits
@@ -65,8 +66,13 @@ export class SpeechQueue {
   /** Morceau écrit par le moteur : sa synthèse commence tout de suite, s'il y a une voix libre. */
   push(text: string, readyAt = Date.now()) {
     const job: Job = { text, words: wordCount(text), readyAt, settled: Promise.resolve() };
-    job.settled = this.options.pool
-      .synthesize(text, this.options.signal, (at) => (job.startedAt = at))
+    // Premier morceau prioritaire : les suivants attendent la fin de sa synthèse. En parallèle, les deux voix se
+    // partagent le processeur et le premier sort ≈ 1,7 fois plus lentement (mesuré le 20/11 : 0,41 contre 0,23 × temps
+    // réel), ce qui retarde le début de la réponse ; les suivants ont toute la durée du premier pour être prêts.
+    const first = this.jobs[0];
+    const turn = first ? first.settled : Promise.resolve();
+    job.settled = turn
+      .then(() => (this.options.signal.aborted ? Promise.reject(new Error('réponse interrompue')) : this.options.pool.synthesize(text, this.options.signal, (at) => (job.startedAt = at))))
       .then(
         (audio) => {
           job.endedAt = Date.now();

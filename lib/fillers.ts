@@ -1,15 +1,29 @@
-// Phrases d'attente de l'avatar, jouées quand la réponse est prête mais doit encore attendre avant de commencer
-// (lib/speech-queue.ts, attente avant de jouer) : courtes, neutres, sans rien affirmer sur le candidat. Textes fixes,
-// gardés par l'extension comme la révélation (lib/disclosure.ts) : ils ne vont ni au moteur ni dans son historique.
-// Pas de « Good question » : le prompt interdit de flatter la question. Sans dépendance : chargé aussi par Node.
+// Phrases d'attente de l'avatar, jouées rarement quand la réponse tarde (lib/conversation.ts, maybeFiller) : surtout
+// des interjections brèves, et quelques phrases un peu plus longues réservées aux grosses attentes. Neutres, sans rien
+// affirmer sur le candidat. Textes fixes, gardés par l'extension comme la révélation (lib/disclosure.ts) : ils ne vont
+// ni au moteur ni dans son historique. Pas de « Good question » : le prompt interdit de flatter la question.
+// Sans dépendance : chargé aussi par Node.
 
 import { candidateLabel, possessive, type Persona } from './disclosure.ts';
 
-export function fillerTexts(persona: Persona): string[] {
+export interface FillerTexts {
+  /** Interjections brèves : la réserve courante. */
+  short: string[];
+  /** Phrases un peu plus longues : grosses attentes seulement. */
+  long: string[];
+}
+
+export function fillerTexts(persona: Persona): FillerTexts {
   const name = candidateLabel(persona.language, persona.candidateName);
   return persona.language === 'fr'
-    ? ['Laissez-moi y réfléchir.', 'Un instant.', `Je regarde dans les notes de ${name}.`, 'Je vérifie cela.']
-    : ['Let me think about that.', 'One moment.', `Let me check ${possessive(name)} notes.`, 'Let me look at that.'];
+    ? {
+        short: ['Hmm.', 'Bien.', 'Voyons.', 'Alors.', 'D’accord.'],
+        long: ['Laissez-moi y réfléchir.', `Je regarde dans les notes de ${name}.`, 'Un instant, je vérifie.'],
+      }
+    : {
+        short: ['Hmm.', 'Right.', 'Let me see.', 'Okay.', 'Well.'],
+        long: ['Let me think about that.', `Let me check ${possessive(name)} notes.`, 'One moment, let me check.'],
+      };
 }
 
 const QUESTION_STARTS: Record<Persona['language'], RegExp> = {
