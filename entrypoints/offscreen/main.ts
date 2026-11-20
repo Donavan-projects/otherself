@@ -10,13 +10,11 @@ import { PORT_NAME, type FromOffscreen, type FromPage } from '@/lib/bridge-messa
 import { loadDemoConfig } from '@/lib/config';
 import { llmEngine } from '@/lib/llm-engine';
 import { localFileProfile } from '@/lib/profile';
-import { withPronunciations } from '@/lib/pronunciation';
+import { createAvatarVoice } from '@/lib/avatar-voice';
 import { Conversation } from '@/lib/conversation';
 import { createLogger } from '@/lib/log';
 import { AvatarMonitor } from '@/lib/monitor';
 import { base64ToBuffer, bufferToBase64 } from '@/lib/pcm';
-import { DEFAULT_PIPER_SCALES, PiperVoice, type TtsEngine } from '@/lib/tts';
-import { OpenAiVoice } from '@/lib/tts-openai';
 import { configureOnnxRuntime } from '@/lib/vad';
 
 let port: Browser.runtime.Port | null = null;
@@ -65,6 +63,8 @@ function measureBridgeAudio(samples: Int16Array) {
 let conversation: Conversation | null = null;
 let warnedNotReady = false;
 let micReady = false;
+/** Pipeline préchauffé (Conversation.warm) : renvoyé à chaque connexion du pont. */
+let warm = false;
 /** Pause reçue avant que le pipeline soit prêt : appliquée à sa création. */
 let pausedAt: number | null = null;
 let connectionCount = 0;
@@ -90,6 +90,7 @@ browser.runtime.onConnect.addListener((connected) => {
   conversation?.setMicReady(false);
   // La page (nouvelle ou rechargée) apprend l'état courant de l'avatar.
   if (conversation) post({ type: 'state', state: conversation.state, previous: conversation.state, at: Date.now(), reason: 'pont relié' });
+  if (warm) post({ type: 'warm', at: Date.now() });
   if (!samePage) {
     conversation?.reset('nouvelle page de la plateforme');
     // Nouvelle page : elle part sans pause (la page renvoie son état à chaque connexion du pont).
@@ -114,6 +115,9 @@ browser.runtime.onConnect.addListener((connected) => {
         break;
       case 'playback-idle':
         conversation?.onPlaybackIdle(message.responseId);
+        break;
+      case 'playback-chunk':
+        conversation?.onPlaybackChunk(message.responseId, message.startAt, message.endAt);
         break;
       case 'pause':
         pausedAt = message.at;
@@ -153,23 +157,17 @@ async function start() {
   const engine = await llmEngine({ apiKey: config.openaiApiKey, model: config.llmModel })(localFileProfile(config), config);
   log(`moteur conversationnel : ${engine.description}`);
   configureOnnxRuntime();
-  // Voix : champs voice / openaiVoice / pitchSemitones de config.local.json, sinon celles de l'avatar (lib/config.ts).
-  let voice: TtsEngine;
-  if (config.ttsProvider === 'openai') {
-    voice = new OpenAiVoice({ apiKey: config.openaiApiKey, model: config.openaiTtsModel, voice: config.openaiVoice });
-  } else {
-    voice = await PiperVoice.load(config.voice, { ...DEFAULT_PIPER_SCALES, ...config.piperScales }, config.pitchSemitones);
-  }
-  // Prononciation (Piper) : seulement le texte envoyé à la voix (ni le LLM, ni la transcription « Avatar : … »).
-  if (config.ttsProvider === 'piper') voice = withPronunciations(voice, config.pronunciations);
+  // Voix : champs voice / openaiVoice / pitchSemitones de config.local.json, sinon celles de l'avatar (lib/config.ts) ;
+  // deux synthèses en parallèle si la machine le permet (lib/voice-pool.ts).
+  const voice = await createAvatarVoice(config);
   const spellings = Object.entries(config.pronunciations).map(([word, said]) => `${word} → ${said}`).join(', ');
-  log(`synthèse vocale : ${voice.description}${config.ttsProvider === 'piper' && spellings ? ` (${spellings})` : ''}`);
+  log(`synthèse vocale : ${voice.description}${config.ttsProvider === 'piper' && spellings ? ` (${spellings})` : ''} ; ${navigator.hardwareConcurrency} fils d'exécution`);
   // Retour pour l'utilisateur : joué ici, jamais dans l'onglet capturé.
   const monitor = config.monitorAvatar ? new AvatarMonitor(config.monitorVolume) : null;
   if (!monitor) log('retour audio de la voix de l’avatar désactivé (monitorAvatar: false)');
   conversation = await Conversation.create(config, voice, engine, {
-    speak: (responseId, audio) => {
-      post({ type: 'speak', responseId, pcm: bufferToBase64(audio.samples.buffer), sampleRate: audio.sampleRate });
+    speak: (responseId, audio, text, filler) => {
+      post({ type: 'speak', responseId, pcm: bufferToBase64(audio.samples.buffer), sampleRate: audio.sampleRate, text, filler });
       monitor?.play(audio);
     },
     stop: () => {
@@ -180,6 +178,11 @@ async function start() {
     nod: () => post({ type: 'nod', at: Date.now() }),
   });
   conversation.setMicReady(micReady);
+  // Préchauffage terminé : la page recruteur peut démarrer l'entretien et la prise sans saccade.
+  void conversation.warm.then(() => {
+    warm = true;
+    post({ type: 'warm', at: Date.now() });
+  });
   if (pausedAt !== null) conversation.pause(pausedAt);
   log('pipeline voix prêt : en attente du recruteur');
 }

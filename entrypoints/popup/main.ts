@@ -2,12 +2,9 @@
 // (Inactif, Actif, En pause), les boutons utiles dans cet état, et au plus une phrase courte
 // (consigne ou erreur). Les détails techniques vont dans les logs [inject] de la console du popup.
 
-import { mapAssets } from '@/lib/avatar';
-import { renderMarkingText } from '@/lib/avatar-assets';
-import { buildFallbackAssets } from '@/lib/fallback-assets';
-import { buildVrmAssets, mapVrmAssets } from '@/lib/vrm-assets';
 import { loadDemoConfig } from '@/lib/config';
-import { blobToFile, type SerializedSources } from '@/lib/injection-sources';
+import { ensureOffscreen, loadSources } from '@/lib/activation';
+import type { SerializedSources } from '@/lib/injection-sources';
 import { createLogger } from '@/lib/log';
 import { setupPreviewButton, type PreviewStatus } from '@/lib/preview-popup';
 
@@ -181,44 +178,6 @@ pauseButton.addEventListener('click', () => {
     return null;
   });
 });
-
-/** Avatar préparé ici (page de l'extension), puis remis à la page sous forme d'images seulement. */
-async function loadSources(): Promise<SerializedSources> {
-  const config = await loadDemoConfig();
-  // Secours (images rendues depuis le modèle 3D) : toujours préparé, il prend le relais dans la page si le 3D échoue.
-  const assets = await buildFallbackAssets(config);
-  let vrm: SerializedSources['vrm'];
-  if (config.avatarRenderer === 'vrm') {
-    try {
-      vrm = await mapVrmAssets(await buildVrmAssets(config), blobToFile);
-    } catch (error) {
-      log(`avatar 3D indisponible (${error instanceof Error ? error.message : String(error)}) : avatar de secours utilisé`);
-    }
-  }
-  return {
-    avatar: await mapAssets(assets, blobToFile),
-    vrm,
-    marking: await blobToFile(await renderMarkingText(config.badgeText)),
-    language: config.language,
-  };
-}
-
-/** Pipeline voix (VAD, transcription, LLM, Piper) : document offscreen, un seul à la fois. */
-async function ensureOffscreen() {
-  if (await browser.offscreen.hasDocument()) return 'déjà actif (pipeline unique, relié à cet onglet)';
-  try {
-    await browser.offscreen.createDocument({
-      url: 'offscreen.html',
-      reasons: [browser.offscreen.Reason.WORKERS],
-      justification: "Pipeline voix local de l'avatar : détection de parole, transcription, synthèse Piper en WebAssembly.",
-    });
-  } catch (error) {
-    // Chrome refuse un second document offscreen : celui qui existe sert.
-    if (await browser.offscreen.hasDocument()) return 'déjà actif (pipeline unique, relié à cet onglet)';
-    throw error;
-  }
-  return 'démarré';
-}
 
 activateButton.addEventListener('click', () => {
   run(async () => {

@@ -93,6 +93,7 @@ export default defineContentScript({
             voice = createVoiceOutput(
               (responseId, at) => sendToExtension({ type: 'playback-started', responseId, at }),
               (responseId) => sendToExtension({ type: 'playback-idle', responseId }),
+              (responseId, startAt, endAt) => sendToExtension({ type: 'playback-chunk', responseId, startAt, endAt }),
             );
             log('micro demandé par la plateforme : la voix de l’avatar peut partir');
             sendToExtension({ type: 'mic-ready' });

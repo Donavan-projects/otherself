@@ -7,6 +7,7 @@
 // transitions lissées), clignements, regard vers la caméra avec petites saccades, respiration, mouvements de tête au
 // repos et en parlant, physique des cheveux (spring bones du modèle).
 
+import { renderBetween, renderClock, renderEvent, renderRandom } from './render-random';
 import * as THREE from 'three';
 import { GLTFLoader, type GLTFLoaderPlugin, type GLTFParser } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils, type VRM, type VRMExpressionPresetName, type VRMHumanBoneName } from '@pixiv/three-vrm';
@@ -223,7 +224,7 @@ export class VrmAvatarRenderer implements FrameRenderer {
   }
 
   /** Une image entière : fond, personnage ; le marqueur IA (lib/badge.ts) est peint ensuite par l'appelant. */
-  draw(now = performance.now()): MouthShape {
+  draw(now = renderClock.now()): MouthShape {
     if (this.lost) throw new Error('contexte WebGL perdu');
     const dt = this.previous === null ? 1 / 30 : Math.min(0.1, Math.max(0, (now - this.previous) / 1000));
     this.previous = now;
@@ -399,7 +400,7 @@ function drift(t: number, phase: number, ...frequencies: number[]): number {
 const approach = (current: number, target: number, dt: number, timeConstant: number) =>
   current + (target - current) * (1 - Math.exp(-dt / timeConstant));
 
-const randomBetween = (min: number, max: number) => min + Math.random() * (max - min);
+const randomBetween = (min: number, max: number) => renderBetween('gaze', min, max);
 
 /** Mouvements du personnage, image par image, selon l'état de l'avatar (lib/avatar-states.ts). */
 class VrmMotion {
@@ -434,7 +435,7 @@ class VrmMotion {
     this.camera = camera;
     this.state = preview.state ?? 'inactif';
     this.style = { ...this.target() };
-    const now = performance.now();
+    const now = renderClock.now();
     this.blink = new BlinkAnimator(now);
     this.blink.setRange(this.style.blinkMinMs, this.style.blinkMaxMs, now);
     this.nextSaccade = now + randomBetween(800, 2500);
@@ -460,9 +461,11 @@ class VrmMotion {
   setState(state: AvatarState) {
     // Page de test : état imposé par l'adresse.
     if (this.preview.state || state === this.state) return;
+    const now = renderClock.now();
+    // Regard prévu avant le changement d'état d'abord (ordre des tirages selon l'heure).
+    if (this.preview.still !== true) this.advanceGaze(now);
     this.state = state;
-    const now = performance.now();
-    if (state === 'reflexion') this.asideSign = Math.random() < 0.5 ? -1 : 1;
+    if (state === 'reflexion') this.asideSign = renderRandom('gaze') < 0.5 ? -1 : 1;
     // La bouche ne vit qu'en parlant : hors de cet état, elle repart du repos (pas de reste après une reprise).
     if (state !== 'parole') this.mouth.reset();
     const style = STATE_STYLES[state];
@@ -473,7 +476,7 @@ class VrmMotion {
   }
 
   nod() {
-    if (STATE_STYLES[this.state].nod > 0) this.nodStart = performance.now();
+    if (STATE_STYLES[this.state].nod > 0) this.nodStart = renderClock.now();
   }
 
   update(now: number, dt: number, level: number): MouthShape {
@@ -502,23 +505,7 @@ class VrmMotion {
 
     // Regard : direction de l'état (caméra, ou de côté et vers le haut en réflexion), petites saccades autour.
     if (!still) {
-      if (now >= this.gazeReturn) {
-        this.gazeWanted = { yaw: randomBetween(-1, 1) * DEG, pitch: randomBetween(-0.7, 0.7) * DEG };
-        this.gazeReturn = Infinity;
-      }
-      if (now >= this.nextSaccade) {
-        if (Math.random() < STATE_STYLES[this.state].glanceChance) {
-          this.gazeWanted = { yaw: (Math.random() < 0.5 ? -1 : 1) * randomBetween(5, 9) * DEG, pitch: randomBetween(1, 5) * DEG };
-          this.gazeReturn = now + randomBetween(500, 1100);
-        } else {
-          this.gazeWanted = {
-            yaw: randomBetween(-style.gazeJitterYaw, style.gazeJitterYaw) * DEG,
-            pitch: randomBetween(-style.gazeJitterPitch, style.gazeJitterPitch) * DEG,
-          };
-        }
-        const { saccadeMinMs, saccadeMaxMs } = STATE_STYLES[this.state];
-        this.nextSaccade = now + randomBetween(saccadeMinMs, saccadeMaxMs);
-      }
+      this.advanceGaze(now);
       this.gaze.yaw = approach(this.gaze.yaw, this.gazeWanted.yaw, dt, 0.03);
       this.gaze.pitch = approach(this.gaze.pitch, this.gazeWanted.pitch, dt, 0.03);
     }
@@ -572,6 +559,35 @@ class VrmMotion {
     // Balancement du buste, très léger.
     this.turn('spine', 0, 0.8 * DEG * drift(t, 5.1, 0.03, 0.08), 0.6 * DEG * drift(t, 2.7, 0.04, 0.09));
     return shape;
+  }
+
+  /**
+   * Saccades et retours du regard prévus jusqu'à `now`, dans l'ordre de leurs heures (pas dans l'ordre des images) ;
+   * heures comptées depuis l'heure prévue, comme les clignements : calendrier reproductible à partir de la graine.
+   */
+  private advanceGaze(now: number) {
+    for (;;) {
+      const due = Math.min(this.gazeReturn, this.nextSaccade);
+      if (now < due) return;
+      if (this.gazeReturn <= this.nextSaccade) {
+        this.gazeWanted = { yaw: randomBetween(-1, 1) * DEG, pitch: randomBetween(-0.7, 0.7) * DEG };
+        this.gazeReturn = Infinity;
+        continue;
+      }
+      const planned = this.nextSaccade;
+      if (renderRandom('gaze') < STATE_STYLES[this.state].glanceChance) {
+        this.gazeWanted = { yaw: (renderRandom('gaze') < 0.5 ? -1 : 1) * randomBetween(5, 9) * DEG, pitch: randomBetween(1, 5) * DEG };
+        this.gazeReturn = planned + randomBetween(500, 1100);
+      } else {
+        this.gazeWanted = {
+          yaw: randomBetween(-this.style.gazeJitterYaw, this.style.gazeJitterYaw) * DEG,
+          pitch: randomBetween(-this.style.gazeJitterPitch, this.style.gazeJitterPitch) * DEG,
+        };
+      }
+      const { saccadeMinMs, saccadeMaxMs } = STATE_STYLES[this.state];
+      this.nextSaccade = planned + randomBetween(saccadeMinMs, saccadeMaxMs);
+      renderEvent('saccade', planned, { yaw: +(this.gazeWanted.yaw / DEG).toFixed(2), pitch: +(this.gazeWanted.pitch / DEG).toFixed(2) });
+    }
   }
 
   private setExpression(name: VRMExpressionPresetName, value: number) {

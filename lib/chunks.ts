@@ -1,18 +1,14 @@
-// Découpe du texte du LLM en morceaux à synthétiser au fil du streaming, uniquement à la
-// ponctuation : fin de phrase (. ! ? …), ou virgule, point-virgule, deux-points pour scinder une
-// phrase longue. Jamais devant une conjonction ou une préposition (« … pipelines, | and … » ou
-// « … | for a logistics company » coupent l'intonation). Le premier morceau reste court : sa
-// synthèse retarde le début de la voix.
+// Découpe du texte du LLM en morceaux à synthétiser au fil du streaming : une phrase entière par morceau (. ! ? …).
+// Plus de coupure aux virgules (mesuré : « His experience spans operations, | products, and automation. » coupait
+// l'intonation et ajoutait une pause au milieu d'une énumération), sauf pour une phrase de plus de 30 mots (rare, le
+// prompt en demande 20 au plus), coupée à sa dernière virgule possible ; jamais devant une conjonction ou une
+// préposition. Le premier morceau reste court sans règle particulière : le prompt demande une première phrase de 3 à
+// 8 mots. Les synthèses en parallèle et l'attente avant de jouer (lib/speech-queue.ts) évitent les trous.
 
-/** Début de réponse : coupé à la première ponctuation après au moins 3 mots (fin de phrase : 1 mot). */
-const FIRST_SOFT_MIN_WORDS = 3;
-/** Tant que la réponse a moins de mots que cela, on est encore « au début ». */
-const FIRST_PART_WORDS = 4;
-/** Ensuite : phrases entières jusqu'à 22 mots ; au-delà, coupe à la dernière virgule possible. */
-const MAX_WORDS = 22;
-const NEXT_SOFT_MIN_WORDS = 5;
-/** Garde-fou : aucune ponctuation pendant 40 mots (rare, le prompt demande des phrases courtes). */
-const SAFETY_WORDS = 40;
+/** Au-delà, une phrase sans point est coupée à sa dernière virgule possible. */
+const MAX_SENTENCE_WORDS = 30;
+/** Garde-fou : aucune ponctuation pendant 45 mots. */
+const SAFETY_WORDS = 45;
 
 /** Mots devant lesquels on ne coupe jamais. */
 const NO_CUT_BEFORE = new Set([
@@ -26,22 +22,18 @@ const NO_CUT_BEFORE = new Set([
 const SENTENCE_END = /[.!?…]["')\]»]*$/;
 const SOFT_END = /[,;:]["')\]»]*$/;
 
-const wordCount = (text: string) => text.split(/\s+/).filter(Boolean).length;
-
 /**
- * Sépare les morceaux prêts à dire du texte encore en cours d'écriture. `wordsSoFar` : mots de
- * la réponse déjà découpés. À la fin du flux, passer `final` pour tout rendre.
+ * Sépare les morceaux prêts à dire du texte encore en cours d'écriture. `_wordsSoFar` (mots déjà découpés) n'est plus
+ * utilisé depuis la fin de la règle du premier morceau court. À la fin du flux, passer `final` pour tout rendre.
  */
-export function takeChunks(text: string, wordsSoFar: number, final = false): [string[], string] {
+export function takeChunks(text: string, _wordsSoFar: number, final = false): [string[], string] {
   const chunks: string[] = [];
   let rest = text.trimStart();
-  let words = wordsSoFar;
   for (;;) {
-    const chunk = nextChunk(final ? `${rest} ` : rest, words < FIRST_PART_WORDS);
+    const chunk = nextChunk(final ? `${rest} ` : rest);
     if (chunk === null) break;
     const trimmed = chunk.trim();
     if (trimmed) chunks.push(trimmed);
-    words += wordCount(trimmed);
     rest = rest.slice(chunk.length).trimStart();
   }
   if (final && rest.trim()) {
@@ -52,7 +44,7 @@ export function takeChunks(text: string, wordsSoFar: number, final = false): [st
 }
 
 /** Début de `text` à dire maintenant, ou null s'il faut attendre la suite du flux. */
-function nextChunk(text: string, first: boolean): string | null {
+function nextChunk(text: string): string | null {
   const words = [...text.matchAll(/\S+/g)];
   // Le dernier mot n'est complet que si un blanc le suit.
   const complete = /\s$/.test(text) ? words.length : words.length - 1;
@@ -67,12 +59,9 @@ function nextChunk(text: string, first: boolean): string | null {
   for (let i = 0; i < complete; i += 1) {
     const word = words[i]![0];
     const count = i + 1;
-    if (SENTENCE_END.test(word)) return count <= MAX_WORDS || lastSoft < 0 ? until(i) : until(lastSoft);
-    if (SOFT_END.test(word) && canCutAfter(i)) {
-      if (first && count >= FIRST_SOFT_MIN_WORDS) return until(i);
-      if (count >= NEXT_SOFT_MIN_WORDS && count <= MAX_WORDS) lastSoft = i;
-    }
-    if (count > MAX_WORDS && lastSoft >= 0) return until(lastSoft);
+    if (SENTENCE_END.test(word)) return until(i);
+    if (SOFT_END.test(word) && canCutAfter(i)) lastSoft = i;
+    if (count > MAX_SENTENCE_WORDS && lastSoft >= 0) return until(lastSoft);
     if (count >= SAFETY_WORDS && canCutAfter(i)) return until(i);
   }
   return null;

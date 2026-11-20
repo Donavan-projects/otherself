@@ -29,7 +29,7 @@ Téléchargées depuis Hugging Face ([rhasspy/piper-voices](https://huggingface.
 | Voix | Jeu de données | Licence du jeu de données (fiche du modèle) | Remarque |
 | --- | --- | --- | --- |
 | `en_US-norman-medium` (voix par défaut) | [LibriVox](https://librivox.org) | domaine public | entraînée de zéro ; jouée par OtherSelf 1,5 demi-ton plus haut (réglage `pitchSemitones`), sans changer le débit : modification faite à la lecture, le modèle téléchargé n'est pas modifié |
-| `en_US-ljspeech-medium` | [LJ Speech](https://keithito.com/LJ-Speech-Dataset/) | domaine public | entraînée de zéro sur LJ Speech (Bryce Beattie) ; voix féminine |
+| `en_US-ljspeech-medium` (voix du recruteur IA fictif, page `recruiter.html`) | [LJ Speech](https://keithito.com/LJ-Speech-Dataset/) | domaine public | fiche du modèle : « Trained from scratch for 1000 epochs […] using the LJ Speech dataset » (Bryce Beattie), sans affinage depuis une autre voix ; voix féminine |
 | `en_US-joe-medium` | [OHF-Voice voice-datasets](https://github.com/OHF-Voice/voice-datasets) | CC0 | **affinée à partir de la voix `lessac`**, elle-même entraînée sur le jeu Lessac (licence Blizzard 2013, recherche) : statut incertain : **à éviter pour toute publication** (vidéo, démo enregistrée) |
 
 ## Images

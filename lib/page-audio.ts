@@ -36,6 +36,8 @@ export interface VoiceOutput {
 export function createVoiceOutput(
   onStarted: (responseId: number, at: number) => void,
   onIdle: (responseId: number) => void,
+  /** Chaque morceau programmé : début et fin de sa lecture (Date.now), pour la mesure des silences (lib/silences.ts). */
+  onScheduled?: (responseId: number, startAt: number, endAt: number) => void,
 ): VoiceOutput {
   const ctx = audioContext();
   const destination = ctx.createMediaStreamDestination();
@@ -60,6 +62,8 @@ export function createVoiceOutput(
       const startAt = Math.max(ctx.currentTime + 0.02, nextStart);
       nextStart = startAt + buffer.duration;
       source.start(startAt);
+      const wallStart = Date.now() + (startAt - ctx.currentTime) * 1000;
+      onScheduled?.(responseId, wallStart, wallStart + buffer.duration * 1000);
       // Reprise après un silence (début de réponse, ou phrase suivante arrivée en retard) :
       // le document offscreen sait que l'avatar parle de nouveau (garde-fou d'écho).
       const resumed = sources.length === 0;

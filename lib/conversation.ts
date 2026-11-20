@@ -9,12 +9,17 @@ import type { AvatarState } from './avatar-states';
 import type { DemoConfig } from './config';
 import { takeChunks } from './chunks';
 import { disclosureText, openingText, shortDisclosureText } from './disclosure';
+import { distortedFillers, fillerTexts, isRealQuestion } from './fillers';
 import type { ConversationEngine, RenderLink } from './engine';
 import { isGreetingOnly } from './greeting';
 import { clock, createLogger } from './log';
 import { int16ToFloat, resample } from './pcm';
+import { analyzePieces, describeResponse, measureSilence, SilenceSummary, type PieceKind, type VoicePiece } from './silences';
 import { createTranscriber, STT_SAMPLE_RATE, type Transcriber } from './stt';
-import type { SpeechAudio, TtsEngine } from './tts';
+import { paceSpeech, pauseAfter, SENTENCE_PAUSE_MS } from './speech-pacing';
+import { SpeechQueue } from './speech-queue';
+import type { SpeechAudio } from './tts';
+import type { VoicePool } from './voice-pool';
 import { Vad, VAD_SAMPLE_RATE } from './vad';
 
 const log = createLogger('llm');
@@ -47,6 +52,26 @@ const HEARD_MARGIN_MS = 300;
 const PLAYBACK_START_TIMEOUT_MS = 4000;
 /** Écart minimal entre deux hochements de l'avatar à l'écoute. */
 const NOD_MIN_GAP_MS = 1500;
+/**
+ * Phrases d'attente (rares) : seulement après une vraie question dont le délai prévu avant la réponse atteint
+ * FILLER_MIN_DELAY_MS (une réflexion de 2 à 3 s est naturelle : regard de côté et voyant ambre la montrent déjà) ;
+ * deux réponses de suite avec une phrase d'attente seulement à partir de FILLER_REPEAT_DELAY_MS. Délai prévu : moyenne glissante des délais mesurés (fin de question → début de
+ * la vraie réponse). La phrase est calée pour finir (pause comprise, ≈ 300 ms) au début prévu de la réponse, jamais
+ * avant FILLER_EARLIEST_MS ; si la réponse est prête avant, elle n'est pas jouée.
+ */
+const FILLER_MIN_DELAY_MS = 4000;
+const FILLER_REPEAT_DELAY_MS = 6000;
+const FILLER_EARLIEST_MS = 900;
+/** Dépassement toléré de la fin d'une phrase d'attente sur le début prévu de la réponse. */
+const FILLER_OVERRUN_MS = 150;
+const ANSWER_DELAY_START_MS = 3500;
+const ANSWER_DELAY_EWMA = 0.3;
+
+interface Filler {
+  text: string;
+  audio: SpeechAudio;
+}
+const audioMs = (audio: SpeechAudio) => (audio.samples.length / audio.sampleRate) * 1000;
 
 /** Vers la page : voix (micro injecté), états et hochements (lib/engine.ts). */
 export type PageLink = RenderLink;
@@ -75,7 +100,27 @@ interface Response {
   sentAt?: number;
   /** La voix envoyée n'a jamais commencé à jouer dans le délai prévu : la réponse ne compte plus pour l'état. */
   playbackTimedOut?: boolean;
+  /** Phrase d'attente choisie pour ce tour (lib/fillers.ts), partie ou non, et minuterie de son départ. */
+  filler?: Filler | undefined;
+  fillerSent?: boolean;
+  fillerTimer?: number;
+  /** Morceaux de voix envoyés, dans l'ordre, avec leurs heures (mesure des silences, lib/silences.ts). */
+  pieces: VoicePiece[];
+  /** Morceaux dont la page a déjà renvoyé l'heure de lecture. */
+  scheduled: number;
+  silencesLogged: boolean;
 }
+
+/** Ce que l'on sait d'un morceau avant de l'envoyer : son texte et ses heures de préparation. */
+interface PieceInfo {
+  kind: PieceKind;
+  text: string;
+  textReadyAt: number;
+  synthStartAt: number;
+  synthEndAt: number;
+}
+
+
 
 export class Conversation {
   private transcriber: Transcriber | null = null;
@@ -110,6 +155,22 @@ export class Conversation {
   private carried = '';
   private readonly opening: string;
   private openingAudio: Promise<SpeechAudio[]>;
+  /** Texte de chaque morceau de l'ouverture, dans l'ordre de openingAudio. */
+  private readonly openingTexts: string[];
+  /** Fin prévue (Date.now) de la voix déjà envoyée à la page ; corrigée par les heures de lecture qu'elle renvoie. */
+  private playhead = 0;
+  /** Ouverture, rappel et phrases d'attente synthétisés : plus aucune synthèse d'avance en cours. */
+  readonly warm: Promise<void>;
+  /** Phrases d'attente synthétisées d'avance (lib/fillers.ts), rythmées ; vides tant qu'elles ne sont pas prêtes. */
+  private fillers: Filler[] = [];
+  /** Phrases d'attente pas encore jouées dans cet entretien (tirage sans remise, réserve remplie quand elle est vide). */
+  private fillerBag: Filler[] = [];
+  /** La réponse précédente a eu une phrase d'attente. */
+  private previousHadFiller = false;
+  /** Délai prévu entre la fin d'une question et le début de la vraie réponse (moyenne glissante des mesures). */
+  private answerDelay = ANSWER_DELAY_START_MS;
+  /** Silences de la voix dans cet entretien (résumé logué après chaque réponse). */
+  private readonly silences = new SilenceSummary();
   /** Durée de la révélation seule (début de l'ouverture), en ms d'audio. */
   private disclosureMs = Infinity;
   private vad!: Vad;
@@ -119,13 +180,14 @@ export class Conversation {
 
   private constructor(
     private readonly config: DemoConfig,
-    private readonly voice: TtsEngine,
+    private readonly voice: VoicePool,
     private readonly engine: ConversationEngine,
     private readonly link: PageLink,
   ) {
     // Le texte de l'ouverture n'est jamais donné au moteur : le LLM le recopiait mot pour mot.
     const opening = openingText(config, config.messageText);
     this.opening = opening;
+    this.openingTexts = [...splitSentences(disclosureText(config)), ...splitSentences(config.messageText.trim())];
     // Ouverture synthétisée d'avance, phrase après phrase ; elle n'est jouée qu'une fois le
     // recruteur présent (fin de sa première prise de parole).
     // Révélation et message synthétisés à part : on sait ainsi quand la révélation a été entendue.
@@ -145,9 +207,22 @@ export class Conversation {
         this.shortDisclosureMs = (audio.samples.length / audio.sampleRate) * 1000;
         return audio;
       });
+    // Phrases d'attente : synthétisées une seule fois, après l'ouverture et le rappel (pas en concurrence avec eux).
+    this.warm = this.shortDisclosureAudio
+      .then(async () => {
+        const ready: Filler[] = [];
+        for (const text of fillerTexts(config)) ready.push({ text, audio: paceSpeech(await voice.synthesize(text), SENTENCE_PAUSE_MS) });
+        // Durée qui trahit une déformation de la synthèse (comparée aux autres, par lettre) : phrase écartée.
+        const checked = distortedFillers(ready.map(({ text, audio }) => ({ text, ms: audioMs(audio) - SENTENCE_PAUSE_MS })));
+        this.fillers = ready.filter((_, index) => !checked[index]!.distorted);
+        logTts(
+          `phrases d'attente prêtes : ${ready.map(({ text, audio }, index) => `« ${text} » ${Math.round(audioMs(audio))} ms${checked[index]!.distorted ? ` (ÉCARTÉE : durée ×${checked[index]!.ratio.toFixed(2)} par lettre)` : ''}`).join(', ')}`,
+        );
+      })
+      .catch((error: unknown) => logTts(`phrases d'attente indisponibles : ${error instanceof Error ? error.message : String(error)}`));
   }
 
-  static async create(config: DemoConfig, voice: TtsEngine, engine: ConversationEngine, link: PageLink): Promise<Conversation> {
+  static async create(config: DemoConfig, voice: VoicePool, engine: ConversationEngine, link: PageLink): Promise<Conversation> {
     const conversation = new Conversation(config, voice, engine, link);
     conversation.vad = await Vad.create(config.silenceMs, {
       onSpeechStart: (startedAt) => conversation.onSpeechStart(startedAt),
@@ -169,6 +244,9 @@ export class Conversation {
   reset(reason: string) {
     this.interrupt(reason);
     this.engine.notify({ type: 'reset', reason });
+    this.silences.reset();
+    this.fillerBag = [];
+    this.previousHadFiller = false;
     this.carried = '';
     this.preroll = [];
     this.prerollSamples = 0;
@@ -193,6 +271,7 @@ export class Conversation {
     this.interrupt('pause demandée par l’utilisateur');
     // Même sans réponse en cours : coupe le retour audio et ce que la page jouerait encore.
     this.link.stop();
+    this.playhead = 0;
     this.paused = true;
     if (this.bargeIn) clearInterval(this.bargeIn.timer);
     this.bargeIn = null;
@@ -393,7 +472,76 @@ export class Conversation {
       this.updateState('salutation : ouverture seule');
       return;
     }
+    this.maybeFiller(response, question, lastVoiceAt);
     await this.answer(response, question, opening);
+  }
+
+  /**
+   * Phrase d'attente (lib/fillers.ts), rare : après une vraie question seulement, si le délai prévu avant la réponse est
+   * long ; jamais pendant l'ouverture (donc jamais avant la révélation), jamais pendant que le recruteur parle, pas deux
+   * réponses de suite (sauf très longue attente), tirée sans remise dans l'entretien. Calée pour finir, pause comprise
+   * (≈ 300 ms), au début prévu de la réponse : pas de trou après elle. Réponse prête avant : pas de phrase d'attente ;
+   * prête pendant : elle attend la fin de la phrase et sa pause. Hors du moteur : ni au LLM ni dans l'historique.
+   */
+  private maybeFiller(response: Response, question: string, questionEndAt: number) {
+    const followsFiller = this.previousHadFiller;
+    this.previousHadFiller = false;
+    if (response.includesOpening || !this.revealed || this.fillers.length === 0) return;
+    const predicted = this.answerDelay;
+    const why =
+      !isRealQuestion(question, this.config.language)
+        ? `pas une vraie question (« ${question.slice(0, 60)} »)`
+        : predicted < FILLER_MIN_DELAY_MS
+          ? `délai prévu ${Math.round(predicted)} ms < ${FILLER_MIN_DELAY_MS} ms`
+          : followsFiller && predicted < FILLER_REPEAT_DELAY_MS
+            ? `la réponse précédente en avait une (délai prévu ${Math.round(predicted)} ms < ${FILLER_REPEAT_DELAY_MS} ms)`
+            : null;
+    if (why) {
+      logTts(`pas de phrase d'attente : ${why}`);
+      return;
+    }
+    // Tirage sans remise : retirée de la réserve seulement si elle est jouée, réserve remplie quand elle est vide.
+    // Heure de départ calée plus tard, sur le début prévu de la réponse (scheduleFiller).
+    if (this.fillerBag.length === 0) this.fillerBag = [...this.fillers];
+    response.filler = this.fillerBag[Math.floor(Math.random() * this.fillerBag.length)];
+  }
+
+  /**
+   * Phrase d'attente choisie (maybeFiller) calée pour finir, pause comprise (≈ 300 ms), au début prévu de la réponse
+   * d'après la file (synthèse du premier morceau et attente avant de jouer comprises) : pas de trou après elle. Recalée
+   * à chaque nouveau morceau écrit, tant qu'elle n'est pas partie ; jamais avant FILLER_EARLIEST_MS. Réponse prête
+   * avant : pas de phrase d'attente ; prête pendant : elle attend la fin de la phrase et sa pause.
+   */
+  private scheduleFiller(response: Response, queue: SpeechQueue) {
+    const filler = response.filler;
+    if (!filler || response.fillerSent || response.answerSent) return;
+    const start = queue.predictedStart();
+    if (start === null) return;
+    const at = Math.max(response.questionEndAt + FILLER_EARLIEST_MS, start - audioMs(filler.audio));
+    clearTimeout(response.fillerTimer);
+    // Elle finirait après le début prévu de la réponse : elle la retarderait, pas jouée (pour l'instant).
+    if (at + audioMs(filler.audio) > start + FILLER_OVERRUN_MS) return;
+    const play = () => {
+      if (response.controller.signal.aborted || this.current !== response || response.fillerSent) return;
+      if (response.answerSent) return logTts(`phrase d'attente « ${filler.text} » pas jouée : réponse prête avant`);
+      if (this.vad.isSpeaking) return logTts(`phrase d'attente « ${filler.text} » pas jouée : le recruteur parle`);
+      const now = Date.now();
+      const latest = queue.predictedStart(now);
+      if (latest !== null && now + audioMs(filler.audio) > latest + FILLER_OVERRUN_MS) {
+        response.filler = undefined;
+        return logTts(`phrase d'attente « ${filler.text} » pas jouée : elle finirait ${Math.round(now + audioMs(filler.audio) - latest)} ms après le début prévu de la réponse`);
+      }
+      if (!this.send(response, filler.audio, { kind: 'attente', text: filler.text, textReadyAt: now, synthStartAt: now, synthEndAt: now })) return;
+      response.fillerSent = true;
+      this.previousHadFiller = true;
+      this.fillerBag = this.fillerBag.filter((item) => item !== filler);
+      this.remember(filler.text);
+      logTts(
+        `phrase d'attente jouée « ${filler.text} » ${now - response.questionEndAt} ms après la fin de la question, ` +
+          `fin ${Math.round(now - response.questionEndAt + audioMs(filler.audio))} ms, réponse prévue à ${start - response.questionEndAt} ms`,
+      );
+    };
+    response.fillerTimer = window.setTimeout(play, Math.max(0, at - Date.now()));
   }
 
   private interrupt(reason: string) {
@@ -417,6 +565,7 @@ export class Conversation {
     }
     response.controller.abort();
     this.link.stop();
+    this.playhead = 0;
     this.avatarSpeakingSince = null;
     this.current = null;
     this.updateState(`réponse interrompue : ${reason}`);
@@ -424,6 +573,7 @@ export class Conversation {
     if (!response.answerSent) this.carried = join(response.question, this.carried);
     log(`réponse ${response.id} interrompue : ${reason}`);
     this.logAnswer(response, true);
+    this.logSilences(response, true);
   }
 
   /** Vrai si la plupart des mots transcrits viennent d'être prononcés par l'avatar. */
@@ -454,6 +604,9 @@ export class Conversation {
       spoken: [],
       transcriptLogged: false,
       timings: {},
+      pieces: [],
+      scheduled: 0,
+      silencesLogged: false,
     };
     this.current = response;
     return response;
@@ -467,15 +620,18 @@ export class Conversation {
   private async sendOpening(response: Response) {
     let audio: SpeechAudio[];
     let text: string;
+    let texts: string[];
     if (this.revealed) {
       // Reprise après une pause : la révélation complète a déjà été entendue, le rappel court suffit.
       audio = [await this.shortDisclosureAudio];
       text = shortDisclosureText(this.config);
+      texts = [text];
       this.remember(text);
       log(`reprise après une pause : rappel court de la révélation (réponse ${response.id})`);
     } else if (this.openingPlays < MAX_OPENING_PLAYS) {
       audio = await this.openingAudio;
       text = this.opening;
+      texts = this.openingTexts;
       this.openingPlays += 1;
       this.remember(this.opening);
       log(
@@ -485,12 +641,17 @@ export class Conversation {
     } else {
       audio = [await this.shortDisclosureAudio];
       text = shortDisclosureText(this.config);
+      texts = [text];
       this.remember(text);
       log(`ouverture déjà coupée ${MAX_OPENING_PLAYS} fois : rappel court de la révélation (réponse ${response.id})`);
     }
-    for (const chunk of audio) {
+    // Ouverture préparée d'avance : texte et audio prêts dès maintenant.
+    const readyAt = Date.now();
+    for (const [index, chunk] of audio.entries()) {
       if (response.controller.signal.aborted) return;
-      this.send(response, chunk);
+      const pieceText = texts[index] ?? text;
+      // Mêmes pauses régulières que les réponses (lib/speech-pacing.ts).
+      this.send(response, paceSpeech(chunk, pauseAfter(pieceText)), { kind: 'ouverture', text: pieceText, textReadyAt: readyAt, synthStartAt: readyAt, synthEndAt: readyAt });
     }
     response.openingSent = true;
     transcriptLine('Avatar', text);
@@ -500,12 +661,30 @@ export class Conversation {
     const { signal } = response.controller;
     const { questionEndAt } = response;
     transcriptLine('Recruteur', question, this.speechStartedAt);
-    const sentences: string[] = [];
-    const queue: { wake: (() => void) | null; done: boolean } = { wake: null, done: false };
-    // La réponse ne part qu'après l'ouverture ; le LLM, lui, n'attend pas.
-    const speaker = opening.then(() =>
-      this.speakSentences(response, sentences, () => queue.done, (resolve) => (queue.wake = resolve)),
-    );
+    // Morceaux de la réponse : synthèse dès que le texte est écrit, envoi dans l'ordre après l'ouverture, attente avant
+    // de jouer si les suivants risquent d'arriver en retard (lib/speech-queue.ts).
+    const queue = new SpeechQueue({
+      pool: this.voice,
+      signal,
+      playhead: () => this.playhead,
+      log: (line) => logTts(line),
+      send: (audio, piece) => {
+        if (!response.answerSent) {
+          // Début prévu de la vraie réponse (après une éventuelle phrase d'attente), comme la page le programmera.
+          const start = Math.max(Date.now() + 100, this.playhead);
+          logTts(`vraie réponse : début prévu ${start - questionEndAt} ms après la fin de la question`);
+          // Délai appris : réponse prête (morceau envoyé), pas son début, que la phrase d'attente peut repousser.
+          if (!response.includesOpening) this.answerDelay += ANSWER_DELAY_EWMA * (Date.now() + 100 - questionEndAt - this.answerDelay);
+        }
+        if (!this.send(response, audio, { kind: 'réponse', ...piece })) return false;
+        response.answerSent = true;
+        response.answerStartedAt ??= Date.now();
+        response.spoken.push(piece.text);
+        this.remember(piece.text);
+        return true;
+      },
+    });
+    const speaker = queue.play(opening);
 
     let buffer = '';
     let words = 0;
@@ -524,18 +703,15 @@ export class Conversation {
           log(`premier mot reçu ${response.timings.firstToken} ms après la fin de la question`);
         }
         buffer += fragment;
-        const ready = take(false);
-        if (ready.length) {
-          sentences.push(...ready);
-          queue.wake?.();
-        }
+        for (const text of take(false)) queue.push(text);
+        this.scheduleFiller(response, queue);
       }
-      if (!signal.aborted) sentences.push(...take(true));
+      if (!signal.aborted) for (const text of take(true)) queue.push(text);
+      this.scheduleFiller(response, queue);
     } catch (error) {
       if (!signal.aborted) log(`erreur : ${error instanceof Error ? error.message : String(error)} (moteur ${this.engine.description})`);
     } finally {
-      queue.done = true;
-      queue.wake?.();
+      queue.end();
     }
     await speaker;
     response.finished = true;
@@ -550,50 +726,7 @@ export class Conversation {
     transcriptLine('Avatar', response.spoken.join(' ') + (interrupted ? ' […] (interrompu)' : ''), response.answerStartedAt);
   }
 
-  /** Synthétise et envoie les phrases dans l'ordre, au fur et à mesure qu'elles arrivent. */
-  private async speakSentences(
-    response: Response,
-    sentences: string[],
-    isDone: () => boolean,
-    setWake: (resolve: () => void) => void,
-  ) {
-    const { signal } = response.controller;
-    for (;;) {
-      const sentence = sentences.shift();
-      if (sentence === undefined) {
-        if (isDone()) return;
-        await new Promise<void>((resolve) => setWake(resolve));
-        continue;
-      }
-      // Piper rend la phrase d'un bloc ; OpenAI la rend par morceaux, envoyés dès qu'ils arrivent.
-      let started = false;
-      let refused = false;
-      try {
-        await this.voice.stream(
-          sentence,
-          (audio) => {
-            if (signal.aborted || refused) return;
-            if (!this.send(response, audio)) {
-              refused = true;
-              return;
-            }
-            if (started) return;
-            started = true;
-            response.answerSent = true;
-            response.answerStartedAt ??= Date.now();
-            response.spoken.push(sentence);
-            this.remember(sentence);
-          },
-          signal,
-        );
-      } catch (error) {
-        if (!signal.aborted) log(`synthèse impossible : ${error instanceof Error ? error.message : String(error)} (« ${sentence} »)`);
-      }
-      if (signal.aborted) return;
-    }
-  }
-
-  private send(response: Response, audio: SpeechAudio): boolean {
+  private send(response: Response, audio: SpeechAudio, info: PieceInfo): boolean {
     // Pendant le seuil d'interruption, l'avatar continue : la parole entendue peut être un écho.
     if (this.vad.isSpeaking && !this.bargeIn) {
       this.interrupt('le recruteur parle');
@@ -608,8 +741,38 @@ export class Conversation {
         this.updateState(`voix envoyée à la page mais jamais jouée après ${PLAYBACK_START_TIMEOUT_MS} ms (réponse ${response.id})`);
       }, PLAYBACK_START_TIMEOUT_MS);
     }
-    this.link.speak(response.id, audio);
+    this.link.speak(response.id, audio, info.text, info.kind === 'attente');
+    const duration = (audio.samples.length / audio.sampleRate) * 1000;
+    // Comme la page : à la suite de la voix en cours, sinon dès l'arrivée (pont et avance de lecture : ≈ 100 ms).
+    this.playhead = Math.max(Date.now() + 100, this.playhead) + duration;
+    response.pieces.push({
+      ...info,
+      sentAt: Date.now(),
+      durationMs: (audio.samples.length / audio.sampleRate) * 1000,
+      ...measureSilence(audio.samples, audio.sampleRate),
+    });
     return true;
+  }
+
+  /** La page a programmé un morceau de voix : heures réelles de sa lecture, dans l'ordre d'envoi. */
+  onPlaybackChunk(responseId: number, startAt: number, endAt: number) {
+    const response = this.current?.id === responseId ? this.current : null;
+    const piece = response?.pieces[response.scheduled];
+    if (!response || !piece) return;
+    response.scheduled += 1;
+    piece.playStartAt = startAt;
+    piece.playEndAt = endAt;
+    this.playhead = Math.max(this.playhead, endAt);
+  }
+
+  /** Silences de la réponse (plus long, cause) et résumé de l'entretien, une fois par réponse. */
+  private logSilences(response: Response, interrupted: boolean) {
+    if (response.silencesLogged || response.scheduled === 0) return;
+    response.silencesLogged = true;
+    const junctions = analyzePieces(response.pieces);
+    this.silences.add(junctions);
+    logTts(describeResponse(`la réponse ${response.id}`, response.pieces, junctions, interrupted));
+    logTts(this.silences.describe());
   }
 
   /** État courant de l'avatar (renvoyé à la page à chaque connexion du pont). */
@@ -683,7 +846,10 @@ export class Conversation {
       );
       this.markRevealed();
     }
-    if (response.finished) this.current = null;
+    if (response.finished) {
+      this.current = null;
+      this.logSilences(response, false);
+    }
     this.updateState('fin de la lecture de la voix');
   }
 }

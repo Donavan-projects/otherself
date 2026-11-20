@@ -4,6 +4,7 @@
 // l'onglet (voie A) comme dans les pages de l'extension (aperçu, banc d'essai). Formes de bouche et clignements
 // (MouthAnimator, BlinkAnimator) sont partagés avec l'avatar 3D.
 
+import { renderBetween, renderClock, renderEvent, renderRandom } from './render-random';
 import { MARKING, STATE_STYLES, type AvatarState } from './avatar-states';
 import type { MarkingAnchors } from './badge';
 
@@ -114,28 +115,45 @@ export class BlinkAnimator {
   private max = BLINK_MAX_MS;
 
   constructor(now: number) {
+    // Heure de départ des tirages (avant l'événement « create », après le chargement du modèle) : notée pour le rendu après coup.
+    renderEvent('animator', now);
     this.next = now + randomBetween(BLINK_MIN_MS, BLINK_MAX_MS);
   }
 
   /** Intervalle entre deux clignements (état de l'avatar) ; le prochain clignement est retiré dans ce nouvel intervalle. */
   setRange(min: number, max: number, now: number) {
+    // Clignements prévus avant ce changement d'état tirés d'abord : l'ordre des tirages suit l'heure, pas les images.
+    this.advance(now);
     this.min = min;
     this.max = max;
     this.next = Math.min(this.next, now + randomBetween(min, max));
   }
 
   closed(now: number): boolean {
-    if (now >= this.next) {
-      this.closedUntil = now + BLINK_CLOSED_MS;
-      const double = Math.random() < DOUBLE_BLINK_CHANCE;
-      this.next = double ? this.closedUntil + DOUBLE_BLINK_GAP_MS : now + randomBetween(this.min, this.max);
-    }
+    this.advance(now);
     return now < this.closedUntil;
+  }
+
+  /**
+   * Clignements prévus jusqu'à `now`, dans l'ordre. Suivant compté depuis l'heure prévue, pas depuis l'image qui le
+   * dessine : le calendrier ne dépend que de la graine et des changements d'état (rendu après coup d'une prise
+   * identique).
+   */
+  private advance(now: number) {
+    while (now >= this.next) {
+      const planned = this.next;
+      this.closedUntil = now + BLINK_CLOSED_MS;
+      const double = renderRandom('blink') < DOUBLE_BLINK_CHANCE;
+      const next = double ? planned + BLINK_CLOSED_MS + DOUBLE_BLINK_GAP_MS : planned + randomBetween(this.min, this.max);
+      // Toujours après l'heure prévue : la boucle rattrape un retard (onglet ralenti) sans compter depuis l'image.
+      this.next = next;
+      renderEvent('blink', planned);
+    }
   }
 }
 
 function randomBetween(min: number, max: number) {
-  return min + Math.random() * (max - min);
+  return renderBetween('blink', min, max);
 }
 
 export class AvatarRenderer {
@@ -163,9 +181,10 @@ export class AvatarRenderer {
     this.ctx = ctx;
     this.assets = assets;
     this.level = level;
-    this.blink = new BlinkAnimator(performance.now());
+    const now = renderClock.now();
+    this.blink = new BlinkAnimator(now);
     this.state = state;
-    this.blink.setRange(STATE_STYLES[state].blinkMinMs, STATE_STYLES[state].blinkMaxMs, performance.now());
+    this.blink.setRange(STATE_STYLES[state].blinkMinMs, STATE_STYLES[state].blinkMaxMs, now);
   }
 
   /** Marqueur IA : position relevée sur le modèle 3D au repos (secours.json), fixe. */
@@ -177,7 +196,7 @@ export class AvatarRenderer {
     if (state === this.state) return;
     this.state = state;
     if (state !== 'parole') this.mouth.reset();
-    this.blink.setRange(STATE_STYLES[state].blinkMinMs, STATE_STYLES[state].blinkMaxMs, performance.now());
+    this.blink.setRange(STATE_STYLES[state].blinkMinMs, STATE_STYLES[state].blinkMaxMs, renderClock.now());
   }
 
   /** La prochaine image sera entière (le canvas a reçu autre chose entre-temps, l'image de pause par exemple). */
@@ -189,7 +208,7 @@ export class AvatarRenderer {
    * Dessine une image : le cadre entier la première fois, ensuite seulement la zone des yeux
    * et de la bouche (le reste ne bouge pas), et la zone du marqueur IA, que l'appelant peint ensuite par-dessus.
    */
-  draw(now = performance.now()): MouthShape {
+  draw(now = renderClock.now()): MouthShape {
     const { ctx, assets } = this;
     const region = assets.region;
     if (this.complete) {

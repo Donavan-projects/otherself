@@ -20,7 +20,16 @@
       (length_scale / noise_scale / noise_w), <code>&amp;phrases=Phrase un|Phrase deux</code> (texte à synthétiser), <code>&amp;jeu=entretien</code> (ouverture, réponse type, noms de projets ; dictionnaire de prononciation appliqué), <code>?prononcer=Nova:Nohvuh,Nohvaa,Noh-vah</code> (comparer des graphies d'un même mot, l'orthographe d'origine en premier, avec la voix et la hauteur de <code>config.local.json</code> ; colonne Phonèmes : transcription d'eSpeak NG reçue par le modèle). Voix : <code>voix:locuteur</code> pour une voix à plusieurs locuteurs (ex. <code>en_US-libritts-high:p3922</code>), <code>voix@0.85/0.8/1</code> pour des réglages propres à une voix, <code>voix~1.5</code> pour la monter de 1,5 demi-ton sans changer son débit.
     </p>
     <p id="status"></p>
-    <table>
+    <p>
+      <code>?silences</code> : banc des silences dans la voix de l'avatar. De vraies questions (ou <code>&amp;questions=Question un|Question deux</code>) passent par le moteur (LLM, profil de <code>config.local.json</code>, appels facturés), la découpe en morceaux et la voix, comme en entretien ; la lecture est programmée comme dans la page. Pour chaque réponse : plus long silence entre deux morceaux et sa cause, et nombre de silences d'au moins 700 ms (seuil d'un recruteur « impatient »). Détail dans la console (<code>[tts] silences de…</code>).
+    </p>
+    <table id="silences" hidden>
+      <thead>
+        <tr><th>Question</th><th>Morceaux</th><th>Voix</th><th>Plus long silence</th><th>Cause</th><th>Détail</th><th>≥ 700 ms</th><th>Attente avant de jouer</th></tr>
+      </thead>
+      <tbody id="silence-results"></tbody>
+    </table>
+    <table id="voices">
       <thead>
         <tr><th>Moteur et voix</th><th>Réglages</th><th>Texte envoyé à la voix</th><th>Phonèmes</th><th>Premier son</th><th>Fin</th><th>Audio</th><th>× temps réel</th><th>Hauteur médiane</th><th>Variation (demi-tons)</th><th>Écoute</th></tr>
       </thead>
