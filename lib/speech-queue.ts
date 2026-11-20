@@ -26,8 +26,6 @@ const MARGIN_MS = 350;
 /** Attente plus courte ignorée ; attente maximale avant de jouer. */
 const MIN_HOLD_MS = 50;
 const MAX_HOLD_MS = 4000;
-/** Morceau synthétisé en même temps que le premier (au lieu d'après lui) s'il a plus de mots que ce multiple. */
-const PARALLEL_WORDS_RATIO = 2.5;
 
 /** Ce que la file sait d'un morceau au moment de l'envoyer. */
 export interface QueuedPiece {
@@ -74,11 +72,11 @@ export class SpeechQueue {
     const job: Job = { text, words: wordCount(text), readyAt, settled: Promise.resolve() };
     // Premier morceau prioritaire : les suivants attendent la fin de sa synthèse. En parallèle, les deux voix se
     // partagent le processeur et le premier sort ≈ 1,7 fois plus lentement (mesuré le 20/11 : 0,41 contre 0,23 × temps
-    // réel), ce qui retarde le début de la réponse ; les suivants ont toute la durée du premier pour être prêts. Sauf
-    // morceau bien plus long que le premier : attendu, il ne serait pas prêt à la fin du premier et imposerait une
-    // attente avant de jouer (mesuré : 1,5 s, prise pour la fin de la réponse par un recruteur impatient).
+    // réel), ce qui retarde le début de la réponse. Sauf morceau qui, synthétisé après le premier, ne serait pas prêt
+    // avant la fin de la voix qui le précède (premier morceau court, suivant long) : il imposerait une attente avant de
+    // jouer plus longue que le temps gagné (mesuré : jusqu'à 2,1 s avec une première phrase de 3 à 8 mots).
     const first = this.jobs[0];
-    const turn = first && job.words <= PARALLEL_WORDS_RATIO * first.words ? first.settled : Promise.resolve();
+    const turn = first && !this.needsParallel(first, job) ? first.settled : Promise.resolve();
     job.settled = turn
       .then(() => (this.options.signal.aborted ? Promise.reject(new Error('réponse interrompue')) : this.options.pool.synthesize(text, this.options.signal, (at) => (job.startedAt = at))))
       .then(
@@ -93,6 +91,17 @@ export class SpeechQueue {
       .finally(() => this.wake?.());
     this.jobs.push(job);
     this.wake?.();
+  }
+
+  /**
+   * Vrai si `job`, synthétisé seulement après le premier morceau, serait prêt trop tard : sa synthèse prévue (et la
+   * marge) dépasse la voix qui le précède (premier morceau, morceaux intermédiaires et leurs pauses).
+   */
+  private needsParallel(first: Job, job: Job): boolean {
+    if (first.audio || first.failed) return false;
+    const { model } = this.options.pool;
+    const covered = [first, ...this.jobs.slice(1)].reduce((sum, item) => sum + model.predict(item.words).audioMs + SENTENCE_PAUSE_MS, 0);
+    return model.predict(job.words).synthMs + TRANSPORT_MS + MARGIN_MS > covered;
   }
 
   /** Plus de texte à venir pour cette réponse. */

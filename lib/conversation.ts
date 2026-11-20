@@ -62,6 +62,8 @@ const NOD_MIN_GAP_MS = 1500;
 const FILLER_MIN_DELAY_MS = 4000;
 const FILLER_REPEAT_DELAY_MS = 6000;
 const FILLER_EARLIEST_MS = 900;
+/** Dépassement toléré de la fin d'une phrase d'attente sur le début prévu de la réponse. */
+const FILLER_OVERRUN_MS = 150;
 const ANSWER_DELAY_START_MS = 3500;
 const ANSWER_DELAY_EWMA = 0.3;
 
@@ -517,11 +519,17 @@ export class Conversation {
     if (start === null) return;
     const at = Math.max(response.questionEndAt + FILLER_EARLIEST_MS, start - audioMs(filler.audio));
     clearTimeout(response.fillerTimer);
+    // Elle finirait après le début prévu de la réponse : elle la retarderait, pas jouée (pour l'instant).
+    if (at + audioMs(filler.audio) > start + FILLER_OVERRUN_MS) return;
     const play = () => {
       if (response.controller.signal.aborted || this.current !== response || response.fillerSent) return;
       if (response.answerSent) return logTts(`phrase d'attente « ${filler.text} » pas jouée : réponse prête avant`);
       if (this.vad.isSpeaking) return logTts(`phrase d'attente « ${filler.text} » pas jouée : le recruteur parle`);
       const now = Date.now();
+      const latest = queue.predictedStart(now);
+      if (latest !== null && now + audioMs(filler.audio) > latest + FILLER_OVERRUN_MS) {
+        return logTts(`phrase d'attente « ${filler.text} » pas jouée : elle finirait ${Math.round(now + audioMs(filler.audio) - latest)} ms après le début prévu de la réponse`);
+      }
       if (!this.send(response, filler.audio, { kind: 'attente', text: filler.text, textReadyAt: now, synthStartAt: now, synthEndAt: now })) return;
       response.fillerSent = true;
       this.previousHadFiller = true;
