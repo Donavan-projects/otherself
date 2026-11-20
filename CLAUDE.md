@@ -210,6 +210,10 @@ Ne pas commencer une étape avant que la précédente fonctionne.
   - **WebGPU** : non fiable sous Linux avec un GPU ancien ; on ne peut pas compter dessus pour les utilisateurs.
   - **LibriTTS** (Piper) : `libritts_r-medium` affiné à partir de `lessac` (à éviter pour une publication) ; `libritts-high` trop lent.
 - **Cadrage automatique des plateformes** (Framing sur Meet) : avec l'ancien plan large, il détectait le visage cartoon, zoomait et coupait le bandeau (y compris avec un fond virtuel de Meet). Depuis le plan serré (3b), Meet ne recadre plus, avec ou sans cadrage automatique ni fond virtuel ; le marqueur IA est près du visage, au-dessus de la limite y ≈ 536. Reste à vérifier sur d'autres plateformes, et une consigne dans le guide utilisateur.
+- **Compatibilité Zoom et Teams** (tests rapides du 20/11, rien de développé) :
+  - **Teams** : fonctionne si OtherSelf est activé dans l'écran d'avant-réunion, pas pendant la réunion. Hypothèse : Teams ouvre ses périphériques avant d'entrer et ne les redemande plus. À tester : changement de caméra et de micro dans Teams après l'activation.
+  - **Zoom (navigateur)** : fonctionne de façon aléatoire. Hypothèses : caméra ouverte depuis un cadre intégré ou un worker, liste des périphériques gardée en mémoire, ou course entre l'injection et le premier appel de la page. À tester avec les logs `[inject]` et l'activation à différents moments.
+  - Consigne du guide utilisateur : activer OtherSelf avant d'entrer en réunion.
 - Créateur d'avatar (si l'avatar 3D est retenu) : uniquement des pièces qui ne viennent pas de VRoid Studio (pixiv exige une licence séparée pour une application qui génère des avatars à partir de ses pièces, voir la décision « Avatar 3D »).
 - Publication sur le Chrome Web Store, version Firefox, i18n complète, export intégré (enregistrement avec sous-titres).
 - Lien vers une explication des droits des candidats face aux décisions automatisées (RGPD, AI Act), à faire vérifier juridiquement.
