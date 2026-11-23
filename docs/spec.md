@@ -2,7 +2,7 @@
 
 # Contre-Recruteur — pitch & specs
 
-Oct 8, 2026 · @Donavan
+Oct 8, 2026
 
 ## Le pitch
 

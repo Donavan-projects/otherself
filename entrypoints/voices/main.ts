@@ -18,7 +18,7 @@ const log = createLogger('tts');
 const DEFAULT_SENTENCES = [
   // Premier morceau typique d'une réponse : c'est lui qui fixe le délai avant que l'avatar parle.
   "That's a good question:",
-  'Donavan led a team of four engineers on a logistics platform.',
+  'Alex led a team of four engineers on a logistics platform.',
   "He's comfortable with TypeScript, and he enjoys explaining technical choices to non-technical people.",
 ];
 
@@ -197,8 +197,9 @@ async function runVoiceBench() {
   // parcours du candidat et la phrase des noms de projets. &phrases=… : phrases libres, séparées par « | ».
   const interviewSet = [
     openingText(config, config.messageText),
-    "Donavan has fourteen years of operational experience. He now builds AI products and automation workflows.",
-    'His recent projects include ADELIN, Curator Agent, IntelAgent, Familiar.dev, and Loupe.',
+    `${candidateLabel(config.language, config.candidateName)} has ten years of operational experience. He now builds AI products and automation workflows.`,
+    // Noms de projets inventés : la phrase sert à écouter des noms propres et des sigles enchaînés.
+    'His recent projects include ARGOS, Signal Desk, TaskForge, Nimbus.io, and Lantern.',
   ];
   // ?prononcer=Nova:Nohvah,Nowvah,Noh-vah : chaque graphie dans une phrase de révélation et seule, l'orthographe d'origine
   // en premier, sans dictionnaire ; voix, hauteur et réglages de config.local.json (sauf &voix=…).
