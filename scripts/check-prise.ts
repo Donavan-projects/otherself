@@ -3,7 +3,9 @@
 // - fluidité de chaque vidéo : images par seconde et écarts anormaux entre images (> 60 ms), par tranche de 10 s ;
 // - calage de chaque voix : piste continue (écarts entre paquets), durée comparée à la vidéo, et débuts de parole
 //   (paquets Opus plus gros que ceux du fond quasi silencieux) comparés aux débuts des sous-titres du même
-//   interlocuteur.
+//   interlocuteur ;
+// - prise sans le nom du candidat : occurrences de son prénom (candidateName de config.local.json) et de son nom de
+//   famille (lu dans ses notes, après le prénom et d'éventuelles initiales) dans le SRT, objectif zéro.
 // Lecteur EBML minimal : Segment, Cluster (taille connue ou non), Timecode, SimpleBlock et BlockGroup/Block, pistes.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -140,5 +142,22 @@ for (const [name, speaker] of [['voix-avatar', info.avatarName || 'AI avatar'], 
   console.log(
     `  voix ${name} : ${((blocks.at(-1)?.time ?? 0) / 1000).toFixed(1)} s (vidéo ${(videoEnd / 1000).toFixed(1)} s), plus grand écart entre paquets ${maxGap} ms ; ` +
       `${starts.length} prises de parole dans le SRT (${offsets.length} retrouvées dans le son), décalage avec le son : médiane ${absolute[Math.floor(absolute.length / 2)] ?? '-'} ms, max ${absolute.at(-1) ?? '-'} ms`,
+  );
+}
+
+// Nom du candidat dans les sous-titres (prise sans le nom : objectif zéro). Les noms ne sont pas affichés.
+if (existsSync('config.local.json')) {
+  const config = JSON.parse(readFileSync('config.local.json', 'utf8')) as { candidateName?: string; cv?: string };
+  const first = config.candidateName?.trim() ?? '';
+  const notes = config.cv && existsSync(config.cv) ? readFileSync(config.cv, 'utf8') : '';
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const last = first ? (notes.match(new RegExp(`${escape(first)}(?:\\s+\\p{Lu}\\.)*\\s+(\\p{Lu}[\\p{L}'-]+)`, 'u'))?.[1] ?? '') : '';
+  const srt = readFileSync(`${prefix}.srt`, 'utf8');
+  const count = (word: string) => (word ? (srt.match(new RegExp(`(?<!\\p{L})${escape(word)}(?!\\p{L})`, 'giu')) ?? []).length : null);
+  const firstCount = count(first);
+  const lastCount = count(last);
+  console.log(
+    `  nom du candidat dans le SRT : prénom ${firstCount ?? '- (candidateName vide)'}, nom de famille ${lastCount ?? '- (introuvable dans les notes)'}` +
+      ((firstCount ?? 0) + (lastCount ?? 0) > 0 ? ' : À CORRIGER pour une prise sans le nom' : ''),
   );
 }

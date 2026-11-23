@@ -89,6 +89,8 @@ const judgeEnabled = !args.includes('--no-judge');
 const models = option('modeles', '').split(',').map((name) => name.trim()).filter(Boolean);
 
 const config = JSON.parse(readFileSync('config.local.json', 'utf8')) as Record<string, unknown>;
+// Mêmes surcharges qu'au build (OTHERSELF_CONFIG=config.tournage.local.json : par exemple candidateName vide).
+if (process.env.OTHERSELF_CONFIG) Object.assign(config, JSON.parse(readFileSync(process.env.OTHERSELF_CONFIG, 'utf8')) as Record<string, unknown>);
 const apiKey = String(config.openaiApiKey ?? '');
 if (!apiKey) throw new Error('openaiApiKey absent de config.local.json');
 const model = String(config.llmModel ?? 'gpt-5.6-luna');

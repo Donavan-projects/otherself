@@ -55,3 +55,9 @@ Licences vérifiées pour une vidéo publiée. Vitesse mesurée en WebAssembly s
 À éviter pour une vidéo publiée : `en_US-ryan-*` et `en_US-hfc_*` (CC BY-NC-SA, usage non commercial), `en_US-lessac-*` (licence Blizzard 2013, recherche).
 
 Depuis l'étape 4, `testAudio` ne sert plus sur la plateforme : le micro injecté porte la voix générée.
+
+## Surcharges (tournage)
+
+`OTHERSELF_CONFIG=config.tournage.local.json npm run build` : les champs de ce fichier (ignoré par git, motif
+`config.*.local.json`) remplacent ceux de `config.local.json` dans le build, sans le modifier. Exemple : prise sans le
+nom du candidat (`candidateName` vide, `messageText` sans le nom) ; voir `docs/tournage.md`.

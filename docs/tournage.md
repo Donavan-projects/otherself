@@ -16,6 +16,21 @@ Page `chrome-extension://<identifiant>/recruiter.html` (identifiant de l'extensi
 `npm run build` après modification ; les répliques modifiées sont resynthétisées au premier chargement). `?tours=n` :
 entretien court (n − 1 premières répliques, puis la clôture), pour un essai.
 
+**Prise sans le nom du candidat** : surcharges de tournage dans un fichier ignoré par git, appliquées au build
+par-dessus `config.local.json`, qui reste intact :
+
+```sh
+# config.tournage.local.json (exemple) :
+# { "candidateName": "", "messageText": "The candidate would prefer to be interviewed by a human, ..." }
+OTHERSELF_CONFIG=config.tournage.local.json npm run build
+```
+
+Prénom vide : l'avatar dit « the candidate » (révélation, rappel court, « Let me check the notes. »), et le prompt lui
+interdit de nommer la personne, même si le CV et les notes contiennent son nom. Remplacer aussi `messageText` s'il
+contient le nom. `npm run check:prise` compte le prénom (`candidateName` de `config.local.json`) et le nom de famille
+(lu dans les notes) dans le SRT : objectif zéro. Après le tournage, `npm run build` sans `OTHERSELF_CONFIG` revient à
+la configuration habituelle. Même variable pour le banc du prompt (`OTHERSELF_CONFIG=… npm run bench:prompt`).
+
 Avant : mêmes réglages que ci-dessous (« Avant la prise ») ; casque ou haut-parleurs bas (la voix de l'avatar est
 jouée pour vous par le retour audio de l'extension, jamais dans l'onglet) ; garder l'onglet au premier plan pendant
 toute la prise.
