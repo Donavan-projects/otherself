@@ -240,3 +240,4 @@ Les règles non négociables s'appliquent dès maintenant, y compris pour la dé
 - Interface et textes utilisateur en français et anglais (i18n de WXT), après la démo.
 - README : mission, statut de prototype, règles ci-dessus présentées comme des choix de conception, avertissement sur la candidature, pas de support garanti.
 - Données personnelles et de travail jamais commitées : `config.local.json`, `local/`, `design/references/`, `CLAUDE.local.md`.
+- Aucun contenu tiré du CV ou des notes de l'utilisateur (nom, employeurs, projets, faits, chiffres) dans un fichier suivi par git, ni dans le code, les tests, la documentation ou les scripts de banc. Les bancs et tests utilisent le profil fictif de `docs/profil.md` (« Exemple (fictif) »), le nom lu à l'exécution dans la configuration, ou des fichiers de questions personnels rangés dans `local/` (ignoré par git).

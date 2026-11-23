@@ -56,7 +56,18 @@ function readLocalConfig(root: string, warn: Warn): Record<string, unknown> | nu
     warn(`${LOCAL_CONFIG} absent : copier config.example.json`);
     return null;
   }
-  return JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+  const config = JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+  // Surcharges d'un tournage (OTHERSELF_CONFIG=config.tournage.local.json npm run build) : champs remplacés par-dessus
+  // config.local.json, qui reste intact (par exemple candidateName vide pour une prise sans le prénom du candidat).
+  const overlay = process.env.OTHERSELF_CONFIG;
+  if (overlay) {
+    const overlayPath = resolve(root, overlay);
+    if (!existsSync(overlayPath)) throw new Error(`OTHERSELF_CONFIG : ${overlay} introuvable`);
+    const fields = JSON.parse(readFileSync(overlayPath, 'utf8')) as Record<string, unknown>;
+    Object.assign(config, fields);
+    warn(`configuration : ${LOCAL_CONFIG} + ${overlay} (${Object.keys(fields).join(', ')})`);
+  }
+  return config;
 }
 
 // Démo : les fichiers déclarés dans config.local.json (jamais commité) sont copiés dans

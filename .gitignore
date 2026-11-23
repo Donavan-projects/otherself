@@ -6,6 +6,8 @@ web-ext.config.ts
 
 # Données personnelles de la démo : jamais commitées.
 config.local.json
+# Surcharges locales (tournage : OTHERSELF_CONFIG=config.tournage.local.json npm run build).
+config.*.local.json
 local/
 
 # Références visuelles d'autres œuvres (droits d'auteur) : jamais commitées.

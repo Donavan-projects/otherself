@@ -21,7 +21,7 @@ Les chemins sont relatifs à la racine du projet. Les fichiers sont copiés dans
 | `language` | `en`, `fr` | Langue de l'entretien : transcription, réponses du LLM, phrase de révélation | `en` |
 | `candidateName` | texte | Prénom ou nom du candidat : l'avatar parle de lui à la troisième personne (« Alex a travaillé… »), et se présente comme « l'avatar IA qui représente Alex » | « the candidate » / « le candidat » |
 | `avatarName` | texte | Nom de l'avatar, dit dans la révélation et le rappel court (« I'm Nova, an AI avatar representing Alex… ») et quand on lui demande s'il est humain ; lettres, espaces, apostrophes et tirets, 30 caractères au plus. `""` : avatar sans nom (« I am an AI avatar representing Alex… »). Jamais le nom du candidat : l'avatar ne se fait pas passer pour lui ; dans ce cas, avertissement au build et nom par défaut | `Nova` |
-| `pronunciations` | objet | Prononciation pour la voix Piper seulement : mot → graphie phonétique, remplacé dans le texte envoyé à la synthèse (mots entiers, sans tenir compte de la casse), jamais dans le texte du LLM ni dans la transcription. Complète les défauts ; une graphie vide retire un défaut. Lettres, chiffres, espaces, apostrophes, points et tirets, 40 caractères au plus. Exemple : `{ "Donavan": "Donnavan", "Loupe": "Loop" }`. Comparer des graphies à l'oreille : page `voices.html?prononcer=Nova:Nohvuh,Nohvaa,Noh-vah` (colonne Phonèmes : transcription d'eSpeak NG reçue par la voix ; deux graphies qui donnent les mêmes phonèmes sonnent pareil). La voix OpenAI lit l'orthographe elle-même : le dictionnaire ne lui est pas appliqué | `{ "Nova": "Nohvuh" }` |
+| `pronunciations` | objet | Prononciation pour la voix Piper seulement : mot → graphie phonétique, remplacé dans le texte envoyé à la synthèse (mots entiers, sans tenir compte de la casse), jamais dans le texte du LLM ni dans la transcription. Complète les défauts ; une graphie vide retire un défaut. Lettres, chiffres, espaces, apostrophes, points et tirets, 40 caractères au plus. Exemple : `{ "Nova": "Nohvuh", "Lantern": "Lan-tern" }`. Comparer des graphies à l'oreille : page `voices.html?prononcer=Nova:Nohvuh,Nohvaa,Noh-vah` (colonne Phonèmes : transcription d'eSpeak NG reçue par la voix ; deux graphies qui donnent les mêmes phonèmes sonnent pareil). La voix OpenAI lit l'orthographe elle-même : le dictionnaire ne lui est pas appliqué | `{ "Nova": "Nohvuh" }` |
 | `messageText` | texte | Mode « message » : déclaration prononcée juste après la révélation, avant de répondre aux questions | Révélation seule |
 | `cv` | md, txt | CV et notes du candidat, seule source des réponses (règle 5) ; modèle conseillé : [profil.md](profil.md) (une histoire par expérience clé : contexte, rôle, actions, résultat chiffré) | Avertissement au build ; l'avatar dit ne pas pouvoir répondre |
 | `openaiApiKey` | `sk-…` | Clé OpenAI (transcription et LLM) | Pipeline voix inactif, avertissement au build |
@@ -55,3 +55,9 @@ Licences vérifiées pour une vidéo publiée. Vitesse mesurée en WebAssembly s
 À éviter pour une vidéo publiée : `en_US-ryan-*` et `en_US-hfc_*` (CC BY-NC-SA, usage non commercial), `en_US-lessac-*` (licence Blizzard 2013, recherche).
 
 Depuis l'étape 4, `testAudio` ne sert plus sur la plateforme : le micro injecté porte la voix générée.
+
+## Surcharges (tournage)
+
+`OTHERSELF_CONFIG=config.tournage.local.json npm run build` : les champs de ce fichier (ignoré par git, motif
+`config.*.local.json`) remplacent ceux de `config.local.json` dans le build, sans le modifier. Exemple : prise sans le
+nom du candidat (`candidateName` vide, `messageText` sans le nom) ; voir `docs/tournage.md`.

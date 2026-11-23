@@ -5,13 +5,15 @@
 // prompt interdit de flatter la question. Toutes à valider à l'oreille (page voices, ?jeu=attente) ; celles dont la
 // durée trahit une déformation sont écartées au démarrage (distortedFillers). Sans dépendance : chargé aussi par Node.
 
-import { candidateLabel, possessive, type Persona } from './disclosure.ts';
+import { possessive, type Persona } from './disclosure.ts';
 
 export function fillerTexts(persona: Persona): string[] {
-  const name = candidateLabel(persona.language, persona.candidateName);
+  const name = persona.candidateName.trim();
+  // Prénom vide : « the notes » plutôt que « the candidate's notes ».
+  const notes = persona.language === 'fr' ? (name ? `Je regarde les notes de ${name}.` : 'Je regarde les notes.') : name ? `Let me check ${possessive(name)} notes.` : 'Let me check the notes.';
   return persona.language === 'fr'
-    ? ['Laissez-moi voir.', 'Laissez-moi y réfléchir.', 'Une petite seconde.', `Je regarde les notes de ${name}.`, 'Un instant, je vérifie.', 'Je regarde cela.']
-    : ['Let me see.', 'Let me think about that.', 'Give me a second.', `Let me check ${possessive(name)} notes.`, 'One moment, please.', 'Let me look at that.'];
+    ? ['Laissez-moi voir.', 'Laissez-moi y réfléchir.', 'Une petite seconde.', notes, 'Un instant, je vérifie.', 'Je regarde cela.']
+    : ['Let me see.', 'Let me think about that.', 'Give me a second.', notes, 'One moment, please.', 'Let me look at that.'];
 }
 
 /** Durée d'une phrase anormale si elle dépasse de plus de 50 % la durée attendue d'après son nombre de lettres. */
