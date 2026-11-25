@@ -4,11 +4,13 @@
 
 A clearly artificial presence that represents you in video calls. This prototype embodies it with Nova, an AI android, and demonstrates it on one specific case: the automated job interview.
 
-![OtherSelf avatar: a cartoon-style 3D android with silver hair, white skin, one blue eye and one yellow eye, and a white high-collared jacket; on the chest, the letters "AI" printed in grey, and on the collar tab a lit blue status light. Blurred background: a futuristic atrium at night, with plants and glowing architecture.](docs/images/otherself-apercu.png)
+[![Presentation video on Vimeo (click to play). Image: the OtherSelf avatar, a cartoon-style 3D android with silver hair, white skin, one blue eye and one yellow eye, and a white high-collared jacket; on the chest, the letters "AI" printed in grey, and on the collar tab a lit blue status light. Blurred background: a futuristic atrium at night, with plants and glowing architecture.](docs/images/otherself-apercu.png)](https://vimeo.com/1250034206)
 
-*Video frame sent by the extension (1280 × 720): Nova, a 3D avatar made with VRoid Studio, rendered in the browser. The "AI" marking ("IA" in French) and the status light on the collar (blue: waiting or listening; amber: thinking; green: speaking) are drawn by the code into every frame: the platform cannot hide them. See [License and credits](#license-and-credits).*
+**[▶ Watch the presentation video](https://vimeo.com/1250034206)**
 
-> **Status: demo prototype.** This repository accompanies a demo video. A complete project, usable by anyone without technical skills, will only be developed if the topic draws interest. No support is guaranteed.
+*The image links to the presentation video (Vimeo), edited from excerpts of a real interview between the prototype and a fictional AI recruiter. The image itself is a video frame sent by the extension (1280 × 720): Nova, a 3D avatar made with VRoid Studio, rendered in the browser. The "AI" marking ("IA" in French) and the status light on the collar (blue: waiting or listening; amber: thinking; green: speaking) are drawn by the code into every frame: the platform cannot hide them. See [License and credits](#license-and-credits).*
+
+> **Status: demo prototype.** This repository accompanies a presentation video. A complete project, usable by anyone without technical skills, will only be developed if the topic draws interest. No support is guaranteed.
 
 > **Warning.** Using OtherSelf in a real job application probably means giving up on the position. Interview platforms may also forbid automated tools in their terms of use.
 
@@ -98,12 +100,21 @@ Load `.output/chrome-mv3` in `chrome://extensions` (developer mode, "Load unpack
 
 The configuration guide ([docs/config.md](docs/config.md)) and the developer documentation are in French.
 
+## Compatibility
+
+- **Google Meet**: tested and validated.
+- **Microsoft Teams**: works if OtherSelf is enabled before joining the meeting (pre-join screen), not during it.
+- **Zoom (browser)**: works intermittently.
+- **Other platforms**: not tested.
+
+OtherSelf is a demo prototype: it is not guaranteed to work on any given platform.
+
 ## Progress
 
 - Done: rehearsal page, camera and microphone injection, voice pipeline (listening, transcription, answer, speech synthesis, disclosure and configurable statement), embedded AI marker (marking on the jacket and status light on the collar tab), instant pause and resume. Tested on Google Meet.
 - Done: Nova in 3D (VRoid model rendered with three.js): lip sync on the voice, blinking, gaze, head movements depending on the state, breathing, hair physics, close-up framing (head and shoulders); automatic fallback avatar, pre-rendered from the same model. Tested on Google Meet.
 - Done: personality and answer structure (concrete examples, no invention, direct and warm tone), checked with a text-only question bench.
-- In progress: filming the demo.
+- Done: presentation video made, from an interview with a fictional AI recruiter page; the videos are re-rendered afterwards from the take's log and recorded voices (a new rendering, using the same drawing code as the extension).
 
 ## License and credits
 
