@@ -6,7 +6,7 @@ Une présence clairement artificielle qui vous représente en visioconférence. 
 
 [![Vidéo de présentation sur Vimeo (cliquer pour la lire). Image : avatar OtherSelf, androïde 3D en style dessin animé, cheveux argentés, peau blanche, un œil bleu et un œil jaune, veste blanche à col montant ; sur la poitrine, les lettres « AI » imprimées en gris, et sur la languette du col un voyant bleu allumé. Fond flou : atrium futuriste de nuit, plantes et architecture lumineuse.](docs/images/otherself-apercu.png)](https://vimeo.com/1250034206)
 
-**[▶ Voir la vidéo de présentation](https://vimeo.com/1250034206)**
+**[Voir la vidéo de présentation](https://vimeo.com/1250034206)**
 
 *L'image mène à la vidéo de présentation (Vimeo), montée à partir d'extraits d'un entretien réel entre le prototype et un recruteur IA fictif. L'image elle-même est une image envoyée par l'extension (1280 × 720) : Nova, avatar 3D créé avec VRoid Studio, rendu dans le navigateur. Le marquage « AI » (« IA » en français) et le voyant d'état du col (bleu : en attente ou à l'écoute ; ambre : réflexion ; vert : parole) sont dessinés par le code dans chaque image : la plateforme ne peut pas les masquer. Voir [Licence et crédits](#licence-et-crédits).*
 

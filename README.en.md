@@ -6,7 +6,7 @@ A clearly artificial presence that represents you in video calls. This prototype
 
 [![Presentation video on Vimeo (click to play). Image: the OtherSelf avatar, a cartoon-style 3D android with silver hair, white skin, one blue eye and one yellow eye, and a white high-collared jacket; on the chest, the letters "AI" printed in grey, and on the collar tab a lit blue status light. Blurred background: a futuristic atrium at night, with plants and glowing architecture.](docs/images/otherself-apercu.png)](https://vimeo.com/1250034206)
 
-**[▶ Watch the presentation video](https://vimeo.com/1250034206)**
+**[Watch the presentation video](https://vimeo.com/1250034206)**
 
 *The image links to the presentation video (Vimeo), edited from excerpts of a real interview between the prototype and a fictional AI recruiter. The image itself is a video frame sent by the extension (1280 × 720): Nova, a 3D avatar made with VRoid Studio, rendered in the browser. The "AI" marking ("IA" in French) and the status light on the collar (blue: waiting or listening; amber: thinking; green: speaking) are drawn by the code into every frame: the platform cannot hide them. See [License and credits](#license-and-credits).*
 
