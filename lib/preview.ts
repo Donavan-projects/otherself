@@ -1,5 +1,5 @@
 // Aperçu de l'avatar en Picture-in-Picture, pour le tournage : certaines plateformes
-// (InterviewCoach) n'affichent l'avatar qu'en petite vignette en miroir. La fenêtre montre une
+// (une plateforme d'évaluation d'entretiens, par exemple) n'affichent l'avatar qu'en petite vignette en miroir. La fenêtre montre une
 // copie de la piste vidéo remise à la plateforme (même canvas : animation, bouche, marqueur
 // IA), à l'endroit, sans son (la voix passe déjà par le retour audio du document
 // offscreen). Ouverte depuis le popup ; fermée à la désactivation, l'onglet fermé la ferme aussi.

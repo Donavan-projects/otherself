@@ -186,7 +186,7 @@ export function offerTabShare(onChunk: (pcm: string, at: number) => void, sendin
         video: true,
         // Son brut, à ne jamais réactiver : l'annulation d'écho prend la sortie de l'onglet comme
         // référence, donc le son à capter lui-même, et le détruisait (VAD muet sur Meet et
-        // InterviewCoach) ; réduction de bruit et gain auto restent coupés aussi.
+        // sur une plateforme d'évaluation d'entretiens) ; réduction de bruit et gain auto restent coupés aussi.
         audio: {
           suppressLocalAudioPlayback: false,
           echoCancellation: false,

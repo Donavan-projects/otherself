@@ -1,5 +1,5 @@
 // Silences dans la voix de l'avatar : un recruteur automatisé prend un silence trop long au milieu d'une réponse pour
-// la fin de celle-ci (InterviewCoach : « sentence fragmentation and transcription cut-offs »). Pour chaque morceau de
+// la fin de celle-ci (retour d'une plateforme d'évaluation d'entretiens : phrases fragmentées, transcription coupée). Pour chaque morceau de
 // voix envoyé, on garde l'heure où son texte était prêt (sorti du LLM), la synthèse, l'envoi et la lecture réelle
 // dans la page ; entre deux morceaux, le silence entendu = fin silencieuse du premier + trou de lecture + début
 // silencieux du second. Le trou est attribué à sa cause : attente du LLM (texte pas encore écrit), synthèse en retard
