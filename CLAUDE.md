@@ -13,7 +13,7 @@ Trois niveaux, du plus large au plus précis. Ne pas les confondre : OtherSelf n
 
 L'humour satirique du pitch initial n'est plus le cœur du projet ; Nova garde seulement un ton direct et chaleureux, avec un peu d'esprit.
 
-`docs/spec.md` (pitch initial, Contre-Recruteur, satirique) et `docs/visuel-otherself.md` (ancien personnage SVG) sont des traces historiques, dépassées : ce fichier fait foi. Le projet s'appelle OtherSelf depuis le 24/10/2026 ; le dossier garde son ancien nom pour ne pas changer l'identifiant de l'extension.
+`docs/visuel-otherself.md` (ancien personnage SVG) est une trace historique, dépassée : ce fichier fait foi. L'ancien pitch satirique (Contre-Recruteur, `docs/spec.md`) n'est plus suivi par git (gardé en local, ignoré). Le projet s'appelle OtherSelf depuis le 24/10/2026 ; le dossier garde son ancien nom pour ne pas changer l'identifiant de l'extension.
 
 ## Deux temps distincts
 
@@ -134,7 +134,7 @@ avatar/
   fonds/               # fonds (SVG contenant une image WebP)
 public/fonts/          # DejaVu Sans Mono Bold (licence Bitstream Vera), police du marquage « IA »
 docs/
-  spec.md  config.md  profil.md  moteur.md  visuel-otherself.md  tournage.md  feuille-de-route.md  architecture.md
+  config.md  profil.md  moteur.md  visuel-otherself.md  tournage.md  feuille-de-route.md  architecture.md
 ```
 
 ## Décisions techniques (à connaître avant de modifier)

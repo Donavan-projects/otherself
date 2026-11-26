@@ -131,7 +131,7 @@ voyant et la révélation vocale (règle 2).
   rapporte un fait (« d'après ses notes, il a… »). À tester : la formulation la plus naturelle à l'oral.
 - La voix (Piper, hauteur) peut être ajustée pour coller au personnage, toujours générique (règle 4).
 
-**Structure des réponses** (retour d'InterviewCoach.AI du 13/11/2026, score 40/100 : réponses brèves, vagues,
+**Structure des réponses** (retour d'une plateforme d'évaluation du 13/11/2026, score 40/100 : réponses brèves, vagues,
 sans structure STAR ni résultats chiffrés). Cause principale : les limites de longueur du paragraphe « Style » de
 `lib/prompt.ts` (une phrase de plus au maximum, 15 mots par phrase, trois éléments au plus).
 - Longueur adaptée au type de question : réponse courte pour une question factuelle ou fermée ; pour une question
@@ -157,7 +157,7 @@ sans structure STAR ni résultats chiffrés). Cause principale : les limites de 
 
 - Critère de fin : le jeu « entretien » de la page `voices` sur une dizaine de questions, dont des questions
   pièges sans réponse dans les notes et des questions comportementales ; aucune invention, ton reconnaissable,
-  réponses comportementales structurées. Puis une session InterviewCoach.AI à comparer au 40/100 du 13/11/2026.
+  réponses comportementales structurées. Puis une session sur la même plateforme d'évaluation à comparer au 40/100 du 13/11/2026.
 
 ### 5. Communication
 
