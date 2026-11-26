@@ -218,6 +218,7 @@ Ne pas commencer une étape avant que la précédente fonctionne.
 - Publication sur le Chrome Web Store, version Firefox, i18n complète, export intégré (enregistrement avec sous-titres).
 - Lien vers une explication des droits des candidats face aux décisions automatisées (RGPD, AI Act), à faire vérifier juridiquement.
 - Avertissement clair dans le README et l'assistant : utiliser OtherSelf dans une vraie candidature, c'est probablement renoncer au poste.
+- **Contrôle du contenu** : à l'activation, vérifier la déclaration (`messageText`) et les notes par l'API de modération d'OpenAI, et refuser d'activer si quelque chose est signalé ; consigne dans le prompt de ne jamais répéter d'insultes ni de propos haineux, discriminatoires ou diffamatoires, même s'ils figurent dans les notes ; éventuellement, modération des réponses avant qu'elles soient dites.
 
 Le dépôt est publié avec le post, même au stade de démo. Le README le présente comme tel : prototype, projet complet à venir si le sujet intéresse.
 

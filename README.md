@@ -86,6 +86,8 @@ Ces règles font partie du projet et ne sont pas désactivables :
 - **Pas d'invention** : l'avatar ne répond qu'à partir de votre CV et de vos notes, sans inventer d'expérience, de diplôme ou de chiffre ; quand l'information manque, il le dit. Aucune consigne de ton ne passe avant cette règle.
 - **Permissions minimales** : l'extension n'agit que sur l'onglet où vous l'activez (`activeTab` + `scripting`, et `offscreen` pour le pipeline voix), jamais sur tous les sites. Pour entendre le recruteur, elle vous demande de partager cet onglet, son compris, par la fenêtre standard de Chrome : aucune permission en plus.
 
+**Responsabilité du contenu** : vous êtes responsable de ce que vous fournissez à OtherSelf (CV, notes, déclaration lue à l'ouverture). OtherSelf ne fait que le restituer, et la déclaration est lue telle quelle, sans modification.
+
 ## Essayer le prototype (développeurs)
 
 Prérequis : Node.js 22, Chrome, une clé API OpenAI (transcription et réponses) et, pour l'avatar 3D, WebGL avec accélération graphique (`chrome://gpu` : « WebGL: Hardware accelerated »). Sans accélération, l'extension passe automatiquement à l'avatar de secours : images du même personnage rendues à l'avance, plus légères (bouche, yeux et marqueur animés, sans mouvement de tête).

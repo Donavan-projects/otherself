@@ -86,6 +86,8 @@ These rules are part of the project and cannot be turned off:
 - **No invention**: the avatar answers only from your CV and notes, without inventing experience, degrees or figures; when the information is missing, it says so. No tone instruction overrides this rule.
 - **Minimal permissions**: the extension acts only on the tab where you activate it (`activeTab` + `scripting`, and `offscreen` for the voice pipeline), never on all sites. To hear the recruiter, it asks you to share that tab, sound included, through Chrome's standard sharing window: no extra permission.
 
+**Responsibility for content**: you are responsible for what you provide to OtherSelf (CV, notes, statement read at the start). OtherSelf only conveys it, and the statement is read as is, without changes.
+
 ## Try the prototype (developers)
 
 Requirements: Node.js 22, Chrome, an OpenAI API key (transcription and answers) and, for the 3D avatar, WebGL with graphics acceleration (`chrome://gpu`: "WebGL: Hardware accelerated"). Without acceleration, the extension switches automatically to the fallback avatar: pre-rendered images of the same character, lighter (mouth, eyes and marker animated, no head movement).
