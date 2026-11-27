@@ -1,19 +1,15 @@
 // Bouton « Pause / Reprendre » dans la page de la plateforme, pour couper l'avatar sans ouvrir
 // le popup. Visible seulement par l'utilisateur (élément DOM, jamais dans le flux vidéo).
-// Monde MAIN, cadre principal.
+// Monde MAIN, cadre principal. Textes traduits par le popup (public/_locales), langue du navigateur.
 
-const LABELS = {
-  fr: { pause: 'OtherSelf : mettre l’avatar en pause', resume: 'OtherSelf : reprendre (l’avatar se présentera de nouveau)' },
-  en: { pause: 'OtherSelf: pause the avatar', resume: 'OtherSelf: resume (the avatar will introduce itself again)' },
-} as const;
+import type { PageLabels } from './injection-sources';
 
 export interface PageControls {
   update(paused: boolean): void;
   remove(): void;
 }
 
-export function createPageControls(language: 'fr' | 'en', onToggle: (clickAt: number) => void): PageControls {
-  const labels = LABELS[language];
+export function createPageControls(labels: Pick<PageLabels, 'pause' | 'resume'>, onToggle: (clickAt: number) => void): PageControls {
   // Shadow DOM : le style de la page ne touche pas le bouton.
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:2147483647;';

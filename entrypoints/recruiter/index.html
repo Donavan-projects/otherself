@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="fr">
+<html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OtherSelf · Recruteur IA (fictif)</title>
+    <title>OtherSelf</title>
     <style>
       :root { color-scheme: dark; }
       body { margin: 0; padding: 20px; background: #0e1117; color: #e6e8ee; font: 14px/1.45 system-ui, sans-serif; }
@@ -25,33 +25,30 @@
     </style>
   </head>
   <body>
-    <h1>Recruteur IA fictif</h1>
-    <p class="note">
-      Page de démonstration : un recruteur automatisé inventé (Maren, personnage fictif, voix de synthèse), qui annonce lui-même être une IA, face à
-      l'avatar injecté dans cette page comme sur une plateforme. Son de l'onglet partagé : bouton OtherSelf, puis « Démarrer ».
-    </p>
+    <h1 data-i18n="recruiterHeading"></h1>
+    <p class="note" data-i18n="recruiterNote"></p>
     <div class="stage">
       <div class="tile"><canvas id="recruiter" width="1280" height="720"></canvas><span class="name" id="recruiter-name">AI Recruiter</span></div>
-      <div class="tile"><video id="candidate" autoplay muted playsinline></video><span class="name">Candidat (avatar IA)</span></div>
+      <div class="tile"><video id="candidate" autoplay muted playsinline></video><span class="name" data-i18n="recruiterCandidate"></span></div>
     </div>
     <div class="controls">
-      <button id="prepare">1. Préparer les répliques</button>
-      <button id="activate" disabled>2. Activer l'avatar</button>
-      <label>Recruteur
+      <button id="prepare" data-i18n="recruiterPrepare"></button>
+      <button id="activate" disabled data-i18n="recruiterActivate"></button>
+      <label><span data-i18n="recruiterPatience"></span>
         <select id="patience">
-          <option value="impatient">impatient (700 ms de silence)</option>
-          <option value="patient">patient (2,5 s de silence)</option>
+          <option value="impatient" data-i18n="recruiterImpatient"></option>
+          <option value="patient" data-i18n="recruiterPatient"></option>
         </select>
       </label>
-      <label><input type="checkbox" id="record" checked /> Enregistrer la prise</label>
-      <button id="folder">Dossier des prises…</button>
-      <button id="start" disabled>3. Démarrer l'entretien</button>
-      <button id="stop" disabled>Arrêter</button>
+      <label><input type="checkbox" id="record" checked /> <span data-i18n="recruiterRecord"></span></label>
+      <button id="folder" data-i18n="recruiterFolder"></button>
+      <button id="start" disabled data-i18n="recruiterStart"></button>
+      <button id="stop" disabled data-i18n="recruiterStop"></button>
       <span id="status"></span>
     </div>
     <table>
       <thead>
-        <tr><th>#</th><th>Réplique du recruteur</th><th>Début de la réponse</th><th>Voix de l'avatar</th><th>Plus long silence entendu</th><th>Enchaînement</th></tr>
+        <tr><th>#</th><th data-i18n="recruiterColLine"></th><th data-i18n="recruiterColAnswer"></th><th data-i18n="recruiterColVoice"></th><th data-i18n="recruiterColSilence"></th><th data-i18n="recruiterColFlow"></th></tr>
       </thead>
       <tbody id="turns"></tbody>
     </table>

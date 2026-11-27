@@ -115,7 +115,6 @@ async function trackProcessorSource(track: MediaStreamTrack, onBlock: (block: Fl
   return { kind: 'MediaStreamTrackProcessor', stop: () => void reader.cancel() };
 }
 
-const BUTTON_TEXT = 'Autoriser OtherSelf à écouter le recruteur : Chrome va vous demander de partager cet onglet, son compris.';
 
 type GetDisplayMedia = (this: MediaDevices, options?: DisplayMediaStreamOptions) => Promise<MediaStream>;
 
@@ -153,7 +152,7 @@ export interface TabShare {
  * Affiche le bouton ; au clic, partage de l'onglet et envoi de son son. Tant que sending()
  * est faux (pause), le partage reste ouvert mais aucun son ne part.
  */
-export function offerTabShare(onChunk: (pcm: string, at: number) => void, sending: () => boolean = () => true): TabShare {
+export function offerTabShare(label: string, onChunk: (pcm: string, at: number) => void, sending: () => boolean = () => true): TabShare {
   const getDisplayMedia = pristineGetDisplayMedia();
   let stopListening: (() => void) | null = null;
   let stopped = false;
@@ -164,7 +163,7 @@ export function offerTabShare(onChunk: (pcm: string, at: number) => void, sendin
   host.style.cssText = 'position:fixed;left:16px;bottom:64px;z-index:2147483647;';
   const shadow = host.attachShadow({ mode: 'closed' });
   const button = document.createElement('button');
-  button.textContent = BUTTON_TEXT;
+  button.textContent = label;
   button.style.cssText =
     'max-width:360px;padding:12px 16px;border:0;border-radius:10px;background:#1a56db;color:#fff;' +
     'font:500 14px/1.4 system-ui,sans-serif;text-align:left;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.3);';

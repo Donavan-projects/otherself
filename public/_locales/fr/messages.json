@@ -118,5 +118,113 @@
   },
   "popupPreviewHintClose": {
     "message": "Ferme la fenêtre d'aperçu."
+  },
+  "pageShareButton": {
+    "message": "Autoriser OtherSelf à écouter le recruteur : Chrome va vous demander de partager cet onglet, son compris.",
+    "description": "Bouton injecté dans la page de la plateforme (visible par l'utilisateur seulement)"
+  },
+  "pagePause": {
+    "message": "OtherSelf : mettre l’avatar en pause",
+    "description": "Bouton Pause injecté dans la page"
+  },
+  "pageResume": {
+    "message": "OtherSelf : reprendre (l’avatar se présentera de nouveau)",
+    "description": "Bouton Reprendre injecté dans la page"
+  },
+  "recruiterTitle": {
+    "message": "OtherSelf · Recruteur IA (fictif)"
+  },
+  "recruiterHeading": {
+    "message": "Recruteur IA fictif"
+  },
+  "recruiterNote": {
+    "message": "Page de démonstration : un recruteur automatisé inventé (Maren, personnage fictif, voix de synthèse), qui annonce lui-même être une IA, face à l'avatar injecté dans cette page comme sur une plateforme. Son de l'onglet partagé : bouton OtherSelf, puis « Démarrer »."
+  },
+  "recruiterCandidate": {
+    "message": "Candidat (avatar IA)"
+  },
+  "recruiterPrepare": {
+    "message": "1. Préparer les répliques"
+  },
+  "recruiterActivate": {
+    "message": "2. Activer l'avatar"
+  },
+  "recruiterPatience": {
+    "message": "Recruteur"
+  },
+  "recruiterImpatient": {
+    "message": "impatient (700 ms de silence)"
+  },
+  "recruiterPatient": {
+    "message": "patient (2,5 s de silence)"
+  },
+  "recruiterRecord": {
+    "message": "Enregistrer la prise"
+  },
+  "recruiterFolder": {
+    "message": "Dossier des prises…"
+  },
+  "recruiterStart": {
+    "message": "3. Démarrer l'entretien"
+  },
+  "recruiterStop": {
+    "message": "Arrêter"
+  },
+  "recruiterColLine": {
+    "message": "Réplique du recruteur"
+  },
+  "recruiterColAnswer": {
+    "message": "Début de la réponse"
+  },
+  "recruiterColVoice": {
+    "message": "Voix de l'avatar"
+  },
+  "recruiterColSilence": {
+    "message": "Plus long silence entendu"
+  },
+  "recruiterColFlow": {
+    "message": "Enchaînement"
+  },
+  "recruiterStatusReady": {
+    "message": "prêt : préparer les répliques"
+  },
+  "recruiterStatusSynth": {
+    "message": "synthèse de la réplique $1 / $2 ($3)"
+  },
+  "recruiterStatusPrepared": {
+    "message": "$1 répliques prêtes ($2 synthétisée(s), $3 en cache), $4 s de voix, $5 ms"
+  },
+  "recruiterStatusActivated": {
+    "message": "avatar $1, pipeline $2, caméra « $3 », $4 ms"
+  },
+  "recruiterStatusLine": {
+    "message": "réplique $1 / $2"
+  },
+  "recruiterStatusDone": {
+    "message": "entretien terminé : $1 répliques, $2 réponse(s) coupée(s), plus long silence entendu $3 ms"
+  },
+  "recruiterStatusStopped": {
+    "message": "entretien arrêté"
+  },
+  "recruiterStatusError": {
+    "message": "erreur : $1"
+  },
+  "recruiterStatusNoFolder": {
+    "message": "dossier non choisi : $1"
+  },
+  "recruiterStatusFolder": {
+    "message": "dossier des prises : $1"
+  },
+  "recruiterStatusNoPicker": {
+    "message": "sélecteur de dossier indisponible : les prises iront dans les téléchargements"
+  },
+  "recruiterNoAnswer": {
+    "message": "pas de réponse"
+  },
+  "recruiterAnswerFinished": {
+    "message": "réponse finie"
+  },
+  "recruiterCutOff": {
+    "message": "coupé : l'avatar n'avait pas fini ($1)"
   }
 }
