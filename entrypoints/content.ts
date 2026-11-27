@@ -117,7 +117,7 @@ export default defineContentScript({
         // Pause : la voix se tait, le son du recruteur ne part plus (partage gardé ouvert), puis
         // l'image « Avatar en pause » remplace l'avatar. Les pistes de la plateforme restent vivantes.
         let paused = false;
-        const controls = isTop ? createPageControls(sources.language, (clickAt) => void pauseControl?.set(!paused, clickAt)) : null;
+        const controls = isTop ? createPageControls(sources.labels, (clickAt) => void pauseControl?.set(!paused, clickAt)) : null;
         uninstallers.push(() => controls?.remove());
         pauseControl = {
           get paused() {
@@ -146,7 +146,7 @@ export default defineContentScript({
           },
         };
         if (isTop) {
-          const share = offerTabShare((pcm, at) => sendToExtension({ type: 'audio', pcm, at }), () => !paused);
+          const share = offerTabShare(sources.labels.share, (pcm, at) => sendToExtension({ type: 'audio', pcm, at }), () => !paused);
           window.__otherSelf!.sharing = () => share.listening();
           uninstallers.push(() => {
             share.stop();

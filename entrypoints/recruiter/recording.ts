@@ -60,9 +60,9 @@ let folder: FileSystemDirectoryHandle | null = null;
 
 export async function chooseFolder(): Promise<string> {
   const picker = (window as unknown as { showDirectoryPicker?: (options: object) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker;
-  if (!picker) return 'sélecteur de dossier indisponible : les prises iront dans les téléchargements';
+  if (!picker) return browser.i18n.getMessage('recruiterStatusNoPicker');
   folder = await picker({ id: 'otherself-prises', mode: 'readwrite' });
-  return `dossier des prises : ${folder.name}`;
+  return browser.i18n.getMessage('recruiterStatusFolder', [folder.name]);
 }
 
 async function save(name: string, blob: Blob): Promise<string> {

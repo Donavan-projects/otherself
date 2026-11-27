@@ -30,6 +30,11 @@ export async function loadSources(): Promise<SerializedSources> {
     vrm,
     marking: await blobToFile(await renderMarkingText(config.badgeText)),
     language: config.language,
+    labels: {
+      share: browser.i18n.getMessage('pageShareButton'),
+      pause: browser.i18n.getMessage('pagePause'),
+      resume: browser.i18n.getMessage('pageResume'),
+    },
   };
 }
 

@@ -45,6 +45,12 @@ const VOICE_RMS = 0.01;
 const POLL_MS = 20;
 const CACHE_NAME = 'otherself-recruteur';
 
+// Textes de la page : public/_locales (langue du navigateur).
+type MessageKey = Parameters<typeof browser.i18n.getMessage>[0];
+const t = (key: MessageKey, ...substitutions: (string | number)[]) => browser.i18n.getMessage(key, substitutions.map(String));
+document.documentElement.lang = browser.i18n.getUILanguage();
+document.title = t('recruiterTitle');
+for (const element of document.querySelectorAll<HTMLElement>('[data-i18n]')) element.textContent = t(element.dataset.i18n as MessageKey);
 const statusEl = document.querySelector<HTMLSpanElement>('#status')!;
 const canvas = document.querySelector<HTMLCanvasElement>('#recruiter')!;
 const video = document.querySelector<HTMLVideoElement>('#candidate')!;
@@ -133,7 +139,7 @@ async function prepare(): Promise<string> {
       const key = `https://otherself.invalid/recruteur/${script.voice}/${await sha256(turn.text)}`;
       let response = await cache.match(key);
       if (!response) {
-        status(`synthèse de la réplique ${index + 1} / ${TURNS.length} (${script.voice})`);
+        status(t('recruiterStatusSynth', index + 1, TURNS.length, script.voice));
         if (!voice) {
           configureOnnxRuntime();
           // Réglages propres au modèle (pas ceux retenus pour la voix de l'avatar).
@@ -155,7 +161,7 @@ async function prepare(): Promise<string> {
     voice?.dispose();
   }
   const total = lines.reduce((sum, buffer) => sum + buffer.duration, 0);
-  return `${lines.length} répliques prêtes (${synthesized} synthétisée(s), ${lines.length - synthesized} en cache), ${total.toFixed(1)} s de voix, ${Math.round(performance.now() - started)} ms`;
+  return t('recruiterStatusPrepared', lines.length, synthesized, lines.length - synthesized, total.toFixed(1), Math.round(performance.now() - started));
 }
 
 let currentLine: AudioBufferSourceNode | null = null;
@@ -238,7 +244,7 @@ async function activate(): Promise<string> {
   avatarAnalyser = ctx.createAnalyser();
   avatarAnalyser.fftSize = 512;
   ctx.createMediaStreamSource(new MediaStream([voiceTrack])).connect(avatarAnalyser);
-  return `avatar ${installed}, pipeline ${pipeline}, caméra « ${stream.getVideoTracks()[0]?.label} », ${Math.round(performance.now() - started)} ms`;
+  return t('recruiterStatusActivated', installed, pipeline, stream.getVideoTracks()[0]?.label ?? '', Math.round(performance.now() - started));
 }
 
 function avatarLevel(): number {
@@ -286,10 +292,10 @@ function addRow(result: TurnResult) {
   const cells = [
     String(result.index + 1),
     result.text,
-    result.answerDelayMs === null ? 'pas de réponse' : `${(result.answerDelayMs / 1000).toFixed(1)} s`,
+    result.answerDelayMs === null ? t('recruiterNoAnswer') : `${(result.answerDelayMs / 1000).toFixed(1)} s`,
     `${(result.voiceMs / 1000).toFixed(1)} s`,
     `${Math.round(result.longestSilenceMs)} ms`,
-    result.cutOff ? `coupé : l'avatar n'avait pas fini (${result.stateAtNext})` : 'réponse finie',
+    result.cutOff ? t('recruiterCutOff', result.stateAtNext ?? '') : t('recruiterAnswerFinished'),
   ];
   for (const [index, text] of cells.entries()) {
     const cell = row.insertCell();
@@ -327,7 +333,7 @@ async function start(patience: Patience, options: { record?: boolean } = {}): Pr
   log(`entretien démarré : recruteur ${patience} (${patienceMs} ms de silence avant d'enchaîner), ${TURNS.length} répliques`);
   for (const [index, turn] of TURNS.entries()) {
     if (stopped) break;
-    status(`réplique ${index + 1} / ${TURNS.length}`);
+    status(t('recruiterStatusLine', index + 1, TURNS.length));
     const { startedAt, endedAt } = await speak(index);
     recording?.recruiterLine(turn.text, startedAt, endedAt);
     log(`réplique ${index + 1} dite : « ${turn.text} »`);
@@ -351,7 +357,7 @@ async function start(patience: Patience, options: { record?: boolean } = {}): Pr
   if (recording) window.__recruiter!.saved = await recording.stop();
   const cut = results.filter((result) => result.cutOff).length;
   const longest = Math.max(0, ...results.map((result) => result.longestSilenceMs));
-  status(`entretien terminé : ${results.length} répliques, ${cut} réponse(s) coupée(s), plus long silence entendu ${longest} ms`);
+  status(t('recruiterStatusDone', results.length, cut, longest));
   window.__recruiter!.done = true;
   return results;
 }
@@ -367,7 +373,7 @@ const run = (button: HTMLButtonElement, action: () => Promise<string | void>, af
         after();
       },
       (error: unknown) => {
-        status(`erreur : ${error instanceof Error ? error.message : String(error)}`);
+        status(t('recruiterStatusError', error instanceof Error ? error.message : String(error)));
         button.disabled = false;
       },
     );
@@ -389,7 +395,7 @@ run(
 buttons.stop.addEventListener('click', () => {
   stopped = true;
   currentLine?.stop();
-  status('entretien arrêté');
+  status(t('recruiterStatusStopped'));
 });
 
 window.__recruiter = {
@@ -407,6 +413,6 @@ window.__recruiter = {
   done: false,
 };
 document.querySelector('#folder')!.addEventListener('click', () => {
-  chooseFolder().then(status, (error: unknown) => status(`dossier non choisi : ${error instanceof Error ? error.message : String(error)}`));
+  chooseFolder().then(status, (error: unknown) => status(t('recruiterStatusNoFolder', error instanceof Error ? error.message : String(error))));
 });
-status('prêt : préparer les répliques');
+status(t('recruiterStatusReady'));

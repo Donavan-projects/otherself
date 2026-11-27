@@ -118,5 +118,113 @@
   },
   "popupPreviewHintClose": {
     "message": "Closes the preview window."
+  },
+  "pageShareButton": {
+    "message": "Allow OtherSelf to hear the recruiter: Chrome will ask you to share this tab, audio included.",
+    "description": "Button injected into the platform page (visible to the user only)"
+  },
+  "pagePause": {
+    "message": "OtherSelf: pause the avatar",
+    "description": "Pause button injected into the page"
+  },
+  "pageResume": {
+    "message": "OtherSelf: resume (the avatar will introduce itself again)",
+    "description": "Resume button injected into the page"
+  },
+  "recruiterTitle": {
+    "message": "OtherSelf · AI recruiter (fictional)"
+  },
+  "recruiterHeading": {
+    "message": "Fictional AI recruiter"
+  },
+  "recruiterNote": {
+    "message": "Demo page: an invented automated recruiter (Maren, a fictional character with a synthetic voice), who announces being an AI, facing the avatar injected into this page as on a platform. Tab audio sharing: OtherSelf button, then \"Start\"."
+  },
+  "recruiterCandidate": {
+    "message": "Candidate (AI avatar)"
+  },
+  "recruiterPrepare": {
+    "message": "1. Prepare the lines"
+  },
+  "recruiterActivate": {
+    "message": "2. Enable the avatar"
+  },
+  "recruiterPatience": {
+    "message": "Recruiter"
+  },
+  "recruiterImpatient": {
+    "message": "impatient (700 ms of silence)"
+  },
+  "recruiterPatient": {
+    "message": "patient (2.5 s of silence)"
+  },
+  "recruiterRecord": {
+    "message": "Record the take"
+  },
+  "recruiterFolder": {
+    "message": "Takes folder…"
+  },
+  "recruiterStart": {
+    "message": "3. Start the interview"
+  },
+  "recruiterStop": {
+    "message": "Stop"
+  },
+  "recruiterColLine": {
+    "message": "Recruiter's line"
+  },
+  "recruiterColAnswer": {
+    "message": "Answer start"
+  },
+  "recruiterColVoice": {
+    "message": "Avatar's voice"
+  },
+  "recruiterColSilence": {
+    "message": "Longest silence heard"
+  },
+  "recruiterColFlow": {
+    "message": "Flow"
+  },
+  "recruiterStatusReady": {
+    "message": "ready: prepare the lines"
+  },
+  "recruiterStatusSynth": {
+    "message": "synthesizing line $1 / $2 ($3)"
+  },
+  "recruiterStatusPrepared": {
+    "message": "$1 lines ready ($2 synthesized, $3 cached), $4 s of voice, $5 ms"
+  },
+  "recruiterStatusActivated": {
+    "message": "avatar $1, pipeline $2, camera \"$3\", $4 ms"
+  },
+  "recruiterStatusLine": {
+    "message": "line $1 / $2"
+  },
+  "recruiterStatusDone": {
+    "message": "interview finished: $1 lines, $2 answer(s) cut off, longest silence heard $3 ms"
+  },
+  "recruiterStatusStopped": {
+    "message": "interview stopped"
+  },
+  "recruiterStatusError": {
+    "message": "error: $1"
+  },
+  "recruiterStatusNoFolder": {
+    "message": "no folder chosen: $1"
+  },
+  "recruiterStatusFolder": {
+    "message": "takes folder: $1"
+  },
+  "recruiterStatusNoPicker": {
+    "message": "folder picker unavailable: takes will go to downloads"
+  },
+  "recruiterNoAnswer": {
+    "message": "no answer"
+  },
+  "recruiterAnswerFinished": {
+    "message": "answer finished"
+  },
+  "recruiterCutOff": {
+    "message": "cut off: the avatar had not finished ($1)"
   }
 }

@@ -15,8 +15,17 @@ export interface SerializedSources {
   vrm?: VrmAssets<SerializedFile> | undefined;
   /** Marquage « IA » (règle 1) déjà rendu par le popup (lib/avatar-assets.ts, renderMarkingText). */
   marking: SerializedFile;
-  /** Langue des textes affichés dans la page (bouton Pause / Reprendre, image de pause). */
+  /** Langue de l'entretien : texte de l'image de pause, vue par l'interlocuteur. */
   language: 'fr' | 'en';
+  /** Textes des boutons injectés dans la page, vus par l'utilisateur seul : langue du navigateur (public/_locales). */
+  labels: PageLabels;
+}
+
+/** Boutons injectés dans la page : traduits par le popup (la page ne peut pas lire les fichiers de l'extension). */
+export interface PageLabels {
+  share: string;
+  pause: string;
+  resume: string;
 }
 
 /** Texte de l'image affichée pendant la pause : sans avatar ni marqueur, elle l'identifie en toutes lettres (règle 1). */
