@@ -3,8 +3,11 @@
 // 1 par minute après 5 minutes masqué). Trois horloges, dans l'ordre :
 // 1. minuteur dans un worker (URL blob) : les workers ne sont pas ralentis. Jamais tenté sur une
 //    page qui impose les Trusted Types (lib/trusted-types.ts) : Chrome y logue une erreur ;
-// 2. si la page refuse le worker, horloge Web Audio (ScriptProcessorNode relié à une
-//    destination MediaStream privée, jamais à ctx.destination : rien n'est joué dans l'onglet) ;
+// 2. si la page refuse le worker, horloge Web Audio : une suite de courts ConstantSourceNode
+//    (un tiers de période d'image chacun) enchaînés sur l'horloge audio, chaque fin (onended) donnant un
+//    battement. Sans URL à charger (pas de CSP ni de Trusted Types), sans ScriptProcessorNode
+//    (déprécié). Reliés à une destination MediaStream privée, jamais à ctx.destination : rien n'est
+//    joué dans l'onglet ;
 // 3. en dernier recours, setInterval (ralenti en arrière-plan).
 // Une horloge qui ne bat pas dans la seconde est abandonnée pour la suivante. Monde MAIN.
 
@@ -12,8 +15,13 @@ import { audioContext } from './page-audio';
 
 /** Délai sans battement après lequel on passe à l'horloge suivante. */
 const WATCHDOG_MS = 1000;
-/** Taille du bloc du ScriptProcessorNode : ≈ 10,7 ms à 48 kHz. */
-const AUDIO_CLOCK_BLOCK = 512;
+/**
+ * Horloge Web Audio : chaque source dure un tiers de période d'image (≈ 11 ms, la granularité de l'ancien
+ * ScriptProcessorNode) ; des fins plus espacées arrivaient groupées en arrière-plan et la capture du canvas perdait
+ * des images (26 images/s reçues au banc). Sources programmées d'avance : absorbe un retard du fil principal.
+ */
+const AUDIO_CLOCK_STEPS = 3;
+const AUDIO_CLOCK_AHEAD = 6;
 
 const WORKER_SOURCE = `let timer = null;
 onmessage = (event) => {
@@ -135,23 +143,49 @@ function workerTicker(intervalMs: number, tick: () => void, fail: (reason: strin
 
 function audioTicker(intervalMs: number, tick: () => void): Ticker {
   const ctx = audioContext();
-  // ScriptProcessorNode : déprécié mais sans URL à charger, donc sans CSP. Il ne tourne que si
-  // le graphe est tiré par une destination : MediaStream privée, jamais lue ni remise à la page.
-  const node = ctx.createScriptProcessor(AUDIO_CLOCK_BLOCK, 1, 1);
   const sink = ctx.createMediaStreamDestination();
+  const period = intervalMs / AUDIO_CLOCK_STEPS / 1000;
+  const live = new Set<ConstantSourceNode>();
+  let stopped = false;
+  /** Fin de la dernière source programmée, en temps de l'horloge audio. */
+  let tail = ctx.currentTime;
   let next = performance.now();
-  node.onaudioprocess = () => {
-    const now = performance.now();
-    if (now < next) return;
-    // Rattrape sans rafale si le fil principal a pris du retard.
-    next = Math.max(next + intervalMs, now - intervalMs);
-    tick();
+  const schedule = () => {
+    const source = ctx.createConstantSource();
+    source.offset.value = 0;
+    source.connect(sink);
+    // Les sources se suivent sans trou sur l'horloge audio ; après un long retard, on repart de maintenant.
+    const start = Math.max(tail, ctx.currentTime);
+    tail = start + period;
+    source.onended = () => {
+      live.delete(source);
+      source.disconnect();
+      if (stopped) return;
+      schedule();
+      const now = performance.now();
+      if (now < next) return;
+      // Rattrape sans rafale si le fil principal a pris du retard.
+      next = Math.max(next + intervalMs, now - intervalMs);
+      tick();
+    };
+    source.start(start);
+    source.stop(tail);
+    live.add(source);
   };
-  node.connect(sink);
+  for (let i = 0; i < AUDIO_CLOCK_AHEAD; i += 1) schedule();
   return {
     stop() {
-      node.onaudioprocess = null;
-      node.disconnect();
+      stopped = true;
+      for (const source of live) {
+        source.onended = null;
+        try {
+          source.stop();
+        } catch {
+          // déjà arrêtée
+        }
+        source.disconnect();
+      }
+      live.clear();
       for (const track of sink.stream.getTracks()) track.stop();
     },
   };
